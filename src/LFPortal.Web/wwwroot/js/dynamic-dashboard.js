@@ -10,7 +10,9 @@
     {id:"__creator",name:"المستخدم / المنشئ",type:"list"},
     {id:"__created",name:"تاريخ الإضافة",type:"date"},
     {id:"__modified",name:"تاريخ التعديل",type:"date"},
-    {id:"__name",name:"اسم الوثيقة",type:"text"}
+    {id:"__name",name:"اسم الوثيقة",type:"text"},
+    {id:"__folder",name:"المجلد",type:"list"},
+    {id:"__pages",name:"عدد الصفحات",type:"number"}
   ];
   const palette = ["#0b1c49","#2367c6","#7f96a8","#4c8b72","#a4b5c6","#c8a55b","#64748b"];
   const defaults = [
@@ -99,6 +101,8 @@
     if (raw==="__created") return row.created ? [row.created] : [];
     if (raw==="__modified") return row.modified ? [row.modified] : [];
     if (raw==="__name") return row.name ? [row.name] : [];
+    if (raw==="__folder") return row.folder ? [row.folder] : [];
+    if (raw==="__pages") return row.pages===null||row.pages===undefined ? [] : [String(row.pages)];
     const value = row.fields && row.fields[raw];
     return Array.isArray(value) ? value.filter(v => v !== null && v !== undefined).map(String) : [];
   }
@@ -382,8 +386,8 @@
   }
   function editorOptions() {
     const all=[...BUILTIN,...fields].map(f=>({value:String(f.id),label:f.name+(f.multi?" (قيم متعددة)":"")}));
-    const numeric=fields.filter(f=>kind(f.id)==="number")
-      .map(f=>({value:String(f.id),label:f.name}));
+    const numeric=[{value:"__pages",label:"عدد الصفحات"},
+      ...fields.filter(f=>kind(f.id)==="number").map(f=>({value:String(f.id),label:f.name}))];
     selectOptions($("dd-dimension"),all,editing.dimension,null);
     selectOptions($("dd-measure"),[{value:"__count",label:"عدد الوثائق / القيم"},...numeric],editing.measure,null);
     selectOptions($("dd-localfield"),all,editing.local.field||"","بدون فلتر خاص");

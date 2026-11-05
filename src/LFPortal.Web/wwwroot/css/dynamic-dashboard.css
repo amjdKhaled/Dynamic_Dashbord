@@ -81,3 +81,14 @@
 .dd-kpi{padding-top:0;align-self:center;margin:auto;font-size:clamp(28px,4vw,52px)}
 @media(max-width:1000px){.dd-grid{grid-template-columns:1fr}.dd-card.wide{grid-column:span 1}}
 @media(max-width:520px){.dd-values-actions{flex-wrap:wrap}.dd-values-actions .dd-btn{width:100%}}
+
+
+/* Layout dimensions for drag-to-resize, scoped to dynamic Dashboard only. */
+.dd-grid{grid-template-columns:repeat(12,minmax(0,1fr));align-items:stretch}
+.dd-card{grid-column:span 6}
+.dd-card.wide{grid-column:span 12}
+.dd-resize-handle{position:absolute;bottom:0;inset-inline-end:0;z-index:5;touch-action:none;
+  border:0;border-radius:8px 0 0 0;padding:7px 10px;cursor:nesw-resize;
+  background:var(--dd-navy);color:#fff;font:inherit;font-size:15px}
+.dd-edit-mode .dd-card{position:relative}
+@media(max-width:880px){.dd-grid{grid-template-columns:repeat(12,minmax(0,1fr))}.dd-card,.dd-card.wide{grid-column:span 12!important}}

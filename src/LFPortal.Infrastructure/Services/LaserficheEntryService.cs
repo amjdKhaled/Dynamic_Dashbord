@@ -70,25 +70,11 @@ internal sealed class LaserficheEntryService : ILaserficheEntryService
         var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         var contentType = response.Content.Headers.ContentType?.ToString() ?? "(missing)";
 
-        // Keep this complete diagnostic immediately after the HTTP response and
-        // before any deserialization. The fields endpoint has multiple response
-        // shapes across Repository API v1 builds, so a DTO parse must never be
-        // allowed to hide a successful response that contains field data.
-        _logger.LogInformation(
-            "===== ENTRY FIELDS RAW RESPONSE =====\n" +
-            "Repository: {Repository}\n" +
-            "EntryId: {EntryId}\n" +
-            "URL: {Url}\n" +
-            "HTTP Status: {Status}\n" +
-            "Content-Type: {ContentType}\n" +
-            "Raw Body:\n{Body}\n" +
-            "=======================================",
-            repo.RepositoryId,
-            entryId,
-            url,
-            (int)response.StatusCode,
-            contentType,
-            body);
+        // Field values can contain personal or confidential information.
+        // Do not log response bodies during analytics scans.
+        _logger.LogDebug(
+            "Entry field response: Repository={Repository}; EntryId={EntryId}; HTTP={Status}; ContentType={ContentType}; BodyLength={BodyLength}.",
+            repo.RepositoryId, entryId, (int)response.StatusCode, contentType, body.Length);
 
         if (!response.IsSuccessStatusCode)
         {
@@ -682,6 +668,7 @@ internal sealed class LaserficheEntryService : ILaserficheEntryService
             FieldDefinitionId = definitionId ?? 0,
             Name              = inlineName ?? string.Empty,
             Value             = value,
+            Values            = ReadValues(item),
             FieldType         = fieldType,
             IsRequired         = ReadBool(item, "isRequired"),
             IsMultiValue       = ReadBool(item, "isMultiValue")
@@ -695,10 +682,35 @@ internal sealed class LaserficheEntryService : ILaserficheEntryService
         // from the repository-wide FieldDefinitions response.
         FieldName         = resource.Name,
         Value             = resource.Value,
+        Values            = resource.Values,
         FieldType         = resource.FieldType,
         IsRequired        = resource.IsRequired,
         IsMultiValue      = resource.IsMultiValue
     };
+
+    private static IReadOnlyList<string> ReadValues(JsonElement item)
+    {
+        if (TryGetPropertyIgnoreCase(item, "values", out var values) &&
+            values.ValueKind == JsonValueKind.Array)
+            return values.EnumerateArray()
+                .Select(valueItem => valueItem.ValueKind == JsonValueKind.Object &&
+                    TryGetPropertyIgnoreCase(valueItem, "value", out var nestedValue)
+                    ? JsonElementToString(nestedValue) : JsonElementToString(valueItem))
+                .Where(v => !string.IsNullOrWhiteSpace(v))
+                .Select(v => v!)
+                .ToArray();
+
+        if (TryGetPropertyIgnoreCase(item, "value", out var value))
+        {
+            if (value.ValueKind == JsonValueKind.Array)
+                return value.EnumerateArray().Select(JsonElementToString)
+                    .Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v!).ToArray();
+            var scalar = JsonElementToString(value);
+            return string.IsNullOrWhiteSpace(scalar) ? Array.Empty<string>() : new[] { scalar };
+        }
+        var text = ReadString(item, "valueText");
+        return string.IsNullOrWhiteSpace(text) ? Array.Empty<string>() : new[] { text };
+    }
 
     private static string? ReadValue(JsonElement item)
     {
@@ -933,6 +945,8 @@ internal sealed class LaserficheEntryService : ILaserficheEntryService
 
         [JsonPropertyName("value")]
         public string? Value { get; init; }
+
+        public IReadOnlyList<string> Values { get; init; } = Array.Empty<string>();
 
         [JsonPropertyName("fieldType")]
         public string? FieldType { get; init; }

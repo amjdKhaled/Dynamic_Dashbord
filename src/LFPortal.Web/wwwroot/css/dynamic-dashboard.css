@@ -1,0 +1,94 @@
+/* Additive styling: uses the existing ISB navy, white cards and restrained gray. */
+.dd-page{--dd-navy:#0b1c49;--dd-blue:#2466c5;--dd-border:#e2e5eb;--dd-muted:#718078;font-family:"IBM Plex Sans Arabic","Readex Pro",Tahoma,sans-serif;color:#18221c;direction:rtl}
+.dd-page *{box-sizing:border-box}
+.dd-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+.dd-headline h1{font-size:20px;margin:0;font-weight:700}.dd-headline h1 span{color:#49647d}
+.dd-headline p{font-size:12px;color:#65756f;margin:5px 0 0}
+.dd-head-actions,.dd-bar,.dd-bar-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.dd-btn{background:#fff;border:1px solid #d9dfe6;border-radius:6px;color:#14233f;padding:8px 12px;font:inherit;font-size:12px;cursor:pointer;text-decoration:none}
+.dd-btn:hover{background:#f4f7fb}.dd-btn-primary{background:var(--dd-navy);color:#fff;border-color:var(--dd-navy)}.dd-btn-primary:hover{background:#183169;color:#fff}
+.dd-bar{background:#fff;padding:10px 12px;border-radius:8px;border:1px solid var(--dd-border);margin-bottom:12px;min-height:50px}
+.dd-bar label{font-size:11px;color:#596b63;display:flex;align-items:center;gap:6px}
+.dd-bar select,.dd-control{background:#fff;color:#16233a;border:1px solid #dce0e5;border-radius:6px;padding:8px 10px;font:inherit;font-size:12px;width:100%;min-width:0}
+.dd-bar select{width:auto;min-width:125px}.dd-bar-right{margin-inline-start:auto;font-size:11px;color:#6b7d72}
+.dd-layout{display:grid;grid-template-columns:245px minmax(0,1fr);gap:12px;align-items:start}
+.dd-sidebar,.dd-workspace{border:1px solid var(--dd-border);border-radius:8px;background:#fff;box-shadow:0 2px 8px #13213b0c}
+.dd-sidebar{padding:16px;position:sticky;top:12px;max-height:85vh;overflow-y:auto}.dd-side-title,.dd-workspace-top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.dd-side-title strong{font-size:13px}.dd-side-help{font-size:11px;color:#74847b;line-height:1.8;margin:10px 0}
+.dd-label{display:block;color:#4f6257;font-size:12px;font-weight:600;margin:14px 0 7px}
+.dd-dates{display:grid;grid-template-columns:1fr 1fr;gap:5px}.dd-dates label{font-size:11px}.dd-dates input{font-size:11px;padding:6px 2px}
+.dd-separator{height:1px;background:#e8ebee;margin:16px 0}
+.dd-full{width:100%;margin-top:9px}
+.dd-fieldinputs{display:grid;gap:7px;margin-top:9px}.dd-fieldinputs input,.dd-fieldinputs select{width:100%}
+.dd-fieldinputs label{font-size:11px;color:#728073}
+.dd-workspace{padding:14px;min-height:520px}.dd-workspace-top{border-bottom:1px solid #eceff2;padding:2px 2px 12px;margin-bottom:12px}
+.dd-workspace-top strong{font-size:14px}.dd-workspace-top small{display:block;font-size:10px;color:#75827b;margin-top:6px}
+.dd-hint{font-size:10px;color:#7b8980}
+.dd-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-flow:row;gap:12px;align-items:start}
+.dd-card{background:#fff;border:1px solid #e0e4e9;border-radius:8px;box-shadow:0 1px 5px #0b1c490d;overflow:hidden;min-width:0}
+.dd-card.wide{grid-column:span 2}.dd-card.is-dragging{opacity:.42}.dd-card-head{border-bottom:1px solid #eceff2;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;gap:8px;min-height:43px}
+.dd-card-head strong{font-size:12px;font-weight:700}.dd-card-sub{font-size:10px;color:#7d8a83;display:block;margin-top:4px}
+.dd-card-actions{display:flex;gap:3px}.dd-icon-btn{border:0;background:transparent;color:#677a85;font-size:16px;cursor:pointer;padding:4px 6px;min-width:26px}
+.dd-icon-btn:hover{background:#eef2f7;border-radius:4px;color:#071845}
+.dd-visual{position:relative;padding:10px;height:280px;width:100%}.dd-visual canvas{width:100%!important;height:100%!important}
+.dd-kpi{font-size:52px;font-weight:700;color:var(--dd-navy);text-align:center;padding-top:60px}
+.dd-kpi small{display:block;font-size:12px;color:#718078;font-weight:400;margin-top:10px}
+.dd-warning{border:1px solid #edd5a2;border-radius:6px;background:#fff9e9;padding:10px;color:#7d5a1c;font-size:12px;margin-bottom:12px}
+.dd-empty{padding:65px 14px;text-align:center;font-size:13px;color:#728078}
+.dd-hidden{display:none!important}
+.dd-overlay{position:fixed;inset:0;background:#0d183c70;z-index:1000;display:flex;justify-content:flex-start;align-items:stretch}
+.dd-editor{width:min(440px,94vw);background:#fff;height:100%;overflow-y:auto;padding:18px;box-shadow:0 1px 18px #0002;direction:rtl}
+.dd-editor-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-bottom:12px;border-bottom:1px solid var(--dd-border)}
+.dd-editor-head h2{font-size:17px;margin:0}.dd-editor-subtitle{font-size:12px}.dd-editor-actions{display:flex;gap:10px;margin-top:20px;justify-content:flex-end}
+.dd-heightlabel{font-size:11px;color:#7d8985}.dd-editor input[type=range]{width:100%}
+.dd-table{width:100%;border-collapse:collapse;font-size:11px}.dd-table td,.dd-table th{border-bottom:1px solid #e8ecf0;text-align:right;padding:8px}
+.dd-table td a{color:#0b438a;text-decoration:none}.dd-table-wrap{height:100%;overflow:auto}
+.dd-details{width:min(680px,96vw)}.dd-details #dd-details-content{max-height:85vh;overflow:auto}
+@media(max-width:860px){.dd-layout{grid-template-columns:1fr}.dd-sidebar{position:static;max-height:unset}.dd-grid{grid-template-columns:1fr}.dd-card.wide{grid-column:span 1}.dd-hint{display:none}}
+
+
+/* Simplified per-chart editor: style additions only, preserving the ISB palette. */
+.dd-layout{display:block}
+.dd-workspace{min-width:0}
+.dd-values-help{font-size:11px;line-height:1.8;color:#718078;margin:5px 0 10px}
+.dd-values-actions{display:flex;gap:8px;align-items:center;margin:8px 0}
+.dd-values-actions .dd-control{flex:1}
+.dd-values-actions .dd-btn{white-space:nowrap}
+.dd-value-list{border:1px solid var(--dd-border);border-radius:7px;max-height:245px;overflow-y:auto;overscroll-behavior:contain;padding:5px}
+.dd-value-option{display:flex;align-items:center;gap:8px;padding:8px 7px;border-bottom:1px solid #edf0f4;cursor:pointer;font-size:12px;min-width:0}
+.dd-value-option:last-child{border-bottom:0}
+.dd-value-option input{flex:none}
+.dd-value-option span{flex:1;overflow-wrap:anywhere}
+.dd-value-option small{flex:none;color:var(--dd-muted);font-size:10px}
+.dd-value-summary{font-size:11px;line-height:1.7;color:#607382;margin:7px 0 12px}
+.dd-edit-mode .dd-card{outline:1px dashed #bccbdb;outline-offset:2px}
+.dd-card.dd-ghost{background:#eef2f7;border:1px dashed #9caec1}
+.dd-card.dd-ghost .dd-visual{opacity:.5;filter:grayscale(1)}
+.dd-ghost-note{text-align:center;font-size:12px;color:#748496;margin:auto}
+.dd-card{min-height:240px;display:flex;flex-direction:column}
+.dd-card-head{flex:none}
+.dd-visual{display:flex;flex-direction:column;flex:1;min-height:0;height:auto;overflow:hidden}
+.dd-chart-stage{position:relative;min-height:130px;flex:1 1 auto}
+.dd-circular-visual .dd-chart-stage{flex:1 1 150px;min-height:130px}
+.dd-chart-legend{flex:0 1 auto;max-height:105px;min-height:0;overflow-y:auto;overscroll-behavior:contain;border-top:1px solid #edf0f4;margin-top:7px}
+.dd-legend-row{width:100%;display:flex;align-items:center;gap:8px;text-align:right;border:0;border-bottom:1px solid #eff1f4;background:#fff;cursor:pointer;padding:6px 8px;color:#506172;font:inherit;font-size:11px}
+.dd-legend-row span:nth-child(2){overflow-wrap:anywhere;min-width:0;flex:1}
+.dd-legend-row strong{font-variant-numeric:tabular-nums;font-size:10px}
+.dd-legend-dot{height:9px;width:9px;flex:none;border-radius:2px}
+.dd-chart-note{font-size:10px;line-height:1.5;color:#647487;flex:none}
+.dd-partial-note{color:#8b6328}
+.dd-table-wrap{min-height:0;flex:1;overflow:auto;overscroll-behavior:contain}
+.dd-kpi{padding-top:0;align-self:center;margin:auto;font-size:clamp(28px,4vw,52px)}
+@media(max-width:1000px){.dd-grid{grid-template-columns:1fr}.dd-card.wide{grid-column:span 1}}
+@media(max-width:520px){.dd-values-actions{flex-wrap:wrap}.dd-values-actions .dd-btn{width:100%}}
+
+
+/* Layout dimensions for drag-to-resize, scoped to dynamic Dashboard only. */
+.dd-grid{grid-template-columns:repeat(12,minmax(0,1fr));align-items:stretch}
+.dd-card{grid-column:span 6}
+.dd-card.wide{grid-column:span 12}
+.dd-resize-handle{position:absolute;bottom:0;inset-inline-end:0;z-index:5;touch-action:none;
+  border:0;border-radius:8px 0 0 0;padding:7px 10px;cursor:nesw-resize;
+  background:var(--dd-navy);color:#fff;font:inherit;font-size:15px}
+.dd-edit-mode .dd-card{position:relative}
+@media(max-width:880px){.dd-grid{grid-template-columns:repeat(12,minmax(0,1fr))}.dd-card,.dd-card.wide{grid-column:span 12!important}}

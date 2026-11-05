@@ -1,0 +1,81 @@
+@using System.Text.Json
+@{
+    ViewData["Title"] = "لوحة المعلومات الديناميكية";
+    var scope = (string?)ViewBag.StorageScope ?? string.Empty;
+}
+@section Styles {
+    <link rel="stylesheet" href="~/css/dynamic-dashboard.css" asp-append-version="true" />
+}
+<div class="dd-page" id="dynamicDashboard" dir="rtl" data-scope="@scope">
+    @Html.AntiForgeryToken()
+    <header class="dd-header">
+        <div class="dd-headline">
+            <h1>لوحة المعلومات <span>الديناميكية</span></h1>
+            <p>أنشئ مؤشراتك وشارتاتك من بيانات وحقول Laserfiche المباشرة</p>
+        </div>
+        <div class="dd-head-actions">
+            <a class="dd-btn" href="/Dashboard"><span aria-hidden="true">↩</span> اللوحة الأصلية</a>
+            <button type="button" class="dd-btn" id="dd-refresh">⟳ تحديث البيانات</button>
+            <button type="button" class="dd-btn" id="dd-customize" aria-pressed="false">⚙ تخصيص اللوحة</button>
+            <button type="button" class="dd-btn dd-btn-primary dd-hidden" id="dd-add">＋ إضافة شارت</button>
+        </div>
+    </header>
+    <div class="dd-layout">
+        <section class="dd-workspace" aria-label="محتوى اللوحة">
+            <div class="dd-workspace-top">
+                <div><strong>التحليلات والمؤشرات</strong><small id="dd-workspace-help">اضغط «تخصيص اللوحة» لإضافة الشارتات أو تعديلها</small></div>
+                <div class="dd-hint">يُحفظ التخصيص لكل مستخدم ومستودع على خادم اللوحة</div>
+            </div>
+            <p id="dd-warning" class="dd-warning dd-hidden" role="alert"></p>
+            <div class="dd-grid" id="dd-grid"></div>
+            <div id="dd-empty" class="dd-empty dd-hidden">لا توجد شارتات ظاهرة. اضغط «إضافة شارت» لبدء إنشاء تحليلك.</div>
+        </section>
+    </div>
+    <div id="dd-editoroverlay" class="dd-overlay dd-hidden">
+        <section class="dd-editor" role="dialog" aria-modal="true" aria-labelledby="dd-editor-title">
+            <div class="dd-editor-head">
+                <h2 id="dd-editor-title">إعدادات الشارت</h2>
+                <button type="button" id="dd-closeeditor" class="dd-icon-btn" aria-label="إغلاق">✕</button>
+            </div>
+            <label class="dd-label" for="dd-title">العنوان</label>
+            <input class="dd-control" id="dd-title" maxlength="90" placeholder="مثال: المعاملات حسب الإدارة" />
+            <label class="dd-label" for="dd-type">نوع العرض</label>
+            <select class="dd-control" id="dd-type">
+                <option value="bar">أعمدة عمودية</option>
+                <option value="horizontal">أعمدة أفقية</option>
+                <option value="line">خطي</option>
+                <option value="doughnut">دائري مجوف</option>
+                <option value="pie">دائري</option>
+                <option value="table">جدول</option>
+                <option value="kpi">بطاقة رقم</option>
+            </select>
+            <label class="dd-label" for="dd-dimension">البيانات / المحور التصنيفي</label>
+            <select class="dd-control" id="dd-dimension"></select>
+            <label class="dd-label" for="dd-value-search">القيم الموجودة في الوثائق (اختياري)</label>
+            <p class="dd-values-help">القيم مأخوذة من حقول الوثائق التي يحق لك قراءتها في Laserfiche. اختر قيمة أو أكثر، أو اترك الاختيار فارغًا لعرض جميع القيم. عدد الوثائق يُحسب تلقائيًا.</p>
+            <div class="dd-values-actions">
+                <input type="search" id="dd-value-search" class="dd-control" placeholder="البحث عن قيمة..." autocomplete="off" />
+                <button type="button" id="dd-clear-values" class="dd-btn">عرض جميع القيم</button>
+            </div>
+            <div id="dd-value-list" class="dd-value-list" aria-live="polite"></div>
+            <div id="dd-value-summary" class="dd-value-summary"></div>
+            <label class="dd-label" for="dd-height">ارتفاع الكرت</label>
+            <input id="dd-height" type="range" min="280" max="620" step="20" value="340" />
+            <div class="dd-heightlabel" id="dd-heightlabel">320px</div>
+            <div class="dd-editor-actions">
+                <button type="button" id="dd-cancel" class="dd-btn">إلغاء</button>
+                <button type="button" id="dd-save" class="dd-btn dd-btn-primary">حفظ الشارت</button>
+            </div>
+        </section>
+    </div>
+    <div id="dd-details-overlay" class="dd-overlay dd-hidden">
+        <section class="dd-editor dd-details" role="dialog" aria-modal="true" aria-label="الوثائق المطابقة">
+            <div class="dd-editor-head"><h2 id="dd-details-title">الوثائق المطابقة</h2><button type="button" id="dd-close-details" class="dd-icon-btn">✕</button></div>
+            <div id="dd-details-content"></div>
+        </section>
+    </div>
+</div>
+@section Scripts {
+    <script src="~/lib/chartjs/chart.umd.min.js" asp-append-version="true"></script>
+    <script src="~/js/dynamic-dashboard.js" asp-append-version="true"></script>
+}

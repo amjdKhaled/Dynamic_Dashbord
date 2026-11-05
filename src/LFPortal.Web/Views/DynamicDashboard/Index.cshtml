@@ -16,49 +16,14 @@
         <div class="dd-head-actions">
             <a class="dd-btn" href="/Dashboard"><span aria-hidden="true">↩</span> اللوحة الأصلية</a>
             <button type="button" class="dd-btn" id="dd-refresh">⟳ تحديث البيانات</button>
-            <button type="button" class="dd-btn dd-btn-primary" id="dd-add">＋ إضافة شارت</button>
+            <button type="button" class="dd-btn" id="dd-customize" aria-pressed="false">⚙ تخصيص اللوحة</button>
+            <button type="button" class="dd-btn dd-btn-primary dd-hidden" id="dd-add">＋ إضافة شارت</button>
         </div>
     </header>
-    <div class="dd-bar" aria-label="الفلاتر الأساسية">
-        <label>السنة <select id="dd-year"><option value="">كل السنوات</option></select></label>
-        <label>المستخدم <select id="dd-creator"><option value="">كل المستخدمين</option></select></label>
-        <label>القالب <select id="dd-template"><option value="">كل القوالب</option></select></label>
-        <div class="dd-bar-right">
-            <span id="dd-resultcount">— مستند</span>
-            <button type="button" class="dd-btn" id="dd-clear">مسح الفلاتر</button>
-        </div>
-    </div>
     <div class="dd-layout">
-        <aside class="dd-sidebar" aria-label="فلاتر الحقول">
-            <div class="dd-side-title"><strong>تصفية البيانات</strong><span>☷</span></div>
-            <p class="dd-side-help">الفلاتر هنا تؤثر على جميع الكروت والشارتات.</p>
-            <label class="dd-label" for="dd-range">الفترة</label>
-            <select id="dd-range" class="dd-control">
-                <option value="all">كل الفترات</option>
-                <option value="today">اليوم</option>
-                <option value="week">هذا الأسبوع</option>
-                <option value="month">هذا الشهر</option>
-                <option value="year">هذا العام</option>
-                <option value="custom">فترة مخصصة</option>
-            </select>
-            <div class="dd-dates dd-hidden" id="dd-dates">
-                <label>من <input id="dd-datefrom" type="date" class="dd-control" /></label>
-                <label>إلى <input id="dd-dateto" type="date" class="dd-control" /></label>
-            </div>
-            <div class="dd-separator"></div>
-            <label class="dd-label" for="dd-fieldfilter">فلترة حسب حقل Laserfiche</label>
-            <select id="dd-fieldfilter" class="dd-control"><option value="">بدون فلتر حقول</option></select>
-            <div id="dd-fieldinputs" class="dd-fieldinputs"></div>
-            <div class="dd-separator"></div>
-            <p class="dd-side-help">يمكنك اختيار نوع الحقل، ثم إدخال القيمة أو المدى المناسب. التاريخ والأرقام والقوائم والقيم المتعددة مدعومة.</p>
-            <div class="dd-separator"></div>
-            <label class="dd-label" for="dd-hiddenitems">الشارتات المخفية</label>
-            <select id="dd-hiddenitems" class="dd-control"><option value="">لا توجد شارتات مخفية</option></select>
-            <button type="button" id="dd-restore" class="dd-btn dd-full">إظهار العنصر المحدد</button>
-        </aside>
         <section class="dd-workspace" aria-label="محتوى اللوحة">
             <div class="dd-workspace-top">
-                <div><strong>التحليلات والمؤشرات</strong><small>اسحب الكروت لتغيير ترتيبها، أو اضغط ⚙ لتخصيصها</small></div>
+                <div><strong>التحليلات والمؤشرات</strong><small id="dd-workspace-help">اضغط «تخصيص اللوحة» لإضافة الشارتات أو تعديلها</small></div>
                 <div class="dd-hint">يُحفظ التخصيص لكل مستخدم ومستودع على خادم اللوحة</div>
             </div>
             <p id="dd-warning" class="dd-warning dd-hidden" role="alert"></p>
@@ -86,23 +51,16 @@
             </select>
             <label class="dd-label" for="dd-dimension">البيانات / المحور التصنيفي</label>
             <select class="dd-control" id="dd-dimension"></select>
-            <label class="dd-label" for="dd-measure">القيمة المراد حسابها</label>
-            <select class="dd-control" id="dd-measure"></select>
-            <label class="dd-label" for="dd-agg">طريقة الحساب</label>
-            <select class="dd-control" id="dd-agg">
-                <option value="count">العدد</option>
-                <option value="sum">المجموع</option>
-                <option value="avg">المتوسط</option>
-                <option value="min">الأقل</option>
-                <option value="max">الأعلى</option>
-            </select>
-            <div class="dd-separator"></div>
-            <strong class="dd-editor-subtitle">فلتر خاص بهذا الشارت (اختياري)</strong>
-            <label class="dd-label" for="dd-localfield">الحقل</label>
-            <select id="dd-localfield" class="dd-control"></select>
-            <div id="dd-localinputs" class="dd-fieldinputs"></div>
+            <label class="dd-label" for="dd-value-search">القيم الموجودة في الوثائق (اختياري)</label>
+            <p class="dd-values-help">القيم مأخوذة من حقول الوثائق التي يحق لك قراءتها في Laserfiche. اختر قيمة أو أكثر، أو اترك الاختيار فارغًا لعرض جميع القيم. عدد الوثائق يُحسب تلقائيًا.</p>
+            <div class="dd-values-actions">
+                <input type="search" id="dd-value-search" class="dd-control" placeholder="البحث عن قيمة..." autocomplete="off" />
+                <button type="button" id="dd-clear-values" class="dd-btn">عرض جميع القيم</button>
+            </div>
+            <div id="dd-value-list" class="dd-value-list" aria-live="polite"></div>
+            <div id="dd-value-summary" class="dd-value-summary"></div>
             <label class="dd-label" for="dd-height">ارتفاع الكرت</label>
-            <input id="dd-height" type="range" min="240" max="520" step="20" value="320" />
+            <input id="dd-height" type="range" min="280" max="620" step="20" value="340" />
             <div class="dd-heightlabel" id="dd-heightlabel">320px</div>
             <div class="dd-editor-actions">
                 <button type="button" id="dd-cancel" class="dd-btn">إلغاء</button>

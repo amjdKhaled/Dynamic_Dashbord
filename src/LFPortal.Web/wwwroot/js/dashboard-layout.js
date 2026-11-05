@@ -20,7 +20,8 @@ document.addEventListener("DOMContentLoaded", function () {
         if (saved && typeof saved === "object") {
             state.order = Array.isArray(saved.order) ? saved.order.filter(x => typeof x === "string") : [];
             state.cards = saved.cards && typeof saved.cards === "object" ? saved.cards : {};
-            state.comparisons = Array.isArray(saved.comparisons) ? saved.comparisons.filter(x => x && typeof x.id === "string") : [];
+            // Do not persist field values: they may contain sensitive metadata.
+            state.comparisons = [];
         }
     } catch (_) { /* Storage is optional; the dashboard still works. */ }
 
@@ -46,7 +47,11 @@ document.addEventListener("DOMContentLoaded", function () {
                 height: Number(wrapper.dataset.height) || 0
             };
         }
-        try { localStorage.setItem(storageKey, JSON.stringify(state)); } catch (_) {}
+        try {
+            const persistent = { order: state.order.filter(id => !id.startsWith("comparison:")),
+                cards: Object.fromEntries(Object.entries(state.cards).filter(([id]) => !id.startsWith("comparison:"))) };
+            localStorage.setItem(storageKey, JSON.stringify(persistent));
+        } catch (_) {}
     }
     function resizeCharts(wrapper) {
         if (!window.Chart) return;

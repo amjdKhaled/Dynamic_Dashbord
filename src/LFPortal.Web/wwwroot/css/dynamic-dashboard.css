@@ -45,3 +45,39 @@
 .dd-table td a{color:#0b438a;text-decoration:none}.dd-table-wrap{height:100%;overflow:auto}
 .dd-details{width:min(680px,96vw)}.dd-details #dd-details-content{max-height:85vh;overflow:auto}
 @media(max-width:860px){.dd-layout{grid-template-columns:1fr}.dd-sidebar{position:static;max-height:unset}.dd-grid{grid-template-columns:1fr}.dd-card.wide{grid-column:span 1}.dd-hint{display:none}}
+
+
+/* Simplified per-chart editor: style additions only, preserving the ISB palette. */
+.dd-layout{display:block}
+.dd-workspace{min-width:0}
+.dd-values-help{font-size:11px;line-height:1.8;color:#718078;margin:5px 0 10px}
+.dd-values-actions{display:flex;gap:8px;align-items:center;margin:8px 0}
+.dd-values-actions .dd-control{flex:1}
+.dd-values-actions .dd-btn{white-space:nowrap}
+.dd-value-list{border:1px solid var(--dd-border);border-radius:7px;max-height:245px;overflow-y:auto;overscroll-behavior:contain;padding:5px}
+.dd-value-option{display:flex;align-items:center;gap:8px;padding:8px 7px;border-bottom:1px solid #edf0f4;cursor:pointer;font-size:12px;min-width:0}
+.dd-value-option:last-child{border-bottom:0}
+.dd-value-option input{flex:none}
+.dd-value-option span{flex:1;overflow-wrap:anywhere}
+.dd-value-option small{flex:none;color:var(--dd-muted);font-size:10px}
+.dd-value-summary{font-size:11px;line-height:1.7;color:#607382;margin:7px 0 12px}
+.dd-edit-mode .dd-card{outline:1px dashed #bccbdb;outline-offset:2px}
+.dd-card.dd-ghost{background:#eef2f7;border:1px dashed #9caec1}
+.dd-card.dd-ghost .dd-visual{opacity:.5;filter:grayscale(1)}
+.dd-ghost-note{text-align:center;font-size:12px;color:#748496;margin:auto}
+.dd-card{min-height:240px;display:flex;flex-direction:column}
+.dd-card-head{flex:none}
+.dd-visual{display:flex;flex-direction:column;flex:1;min-height:0;height:auto;overflow:hidden}
+.dd-chart-stage{position:relative;min-height:130px;flex:1 1 auto}
+.dd-circular-visual .dd-chart-stage{flex:1 1 150px;min-height:130px}
+.dd-chart-legend{flex:0 1 auto;max-height:105px;min-height:0;overflow-y:auto;overscroll-behavior:contain;border-top:1px solid #edf0f4;margin-top:7px}
+.dd-legend-row{width:100%;display:flex;align-items:center;gap:8px;text-align:right;border:0;border-bottom:1px solid #eff1f4;background:#fff;cursor:pointer;padding:6px 8px;color:#506172;font:inherit;font-size:11px}
+.dd-legend-row span:nth-child(2){overflow-wrap:anywhere;min-width:0;flex:1}
+.dd-legend-row strong{font-variant-numeric:tabular-nums;font-size:10px}
+.dd-legend-dot{height:9px;width:9px;flex:none;border-radius:2px}
+.dd-chart-note{font-size:10px;line-height:1.5;color:#647487;flex:none}
+.dd-partial-note{color:#8b6328}
+.dd-table-wrap{min-height:0;flex:1;overflow:auto;overscroll-behavior:contain}
+.dd-kpi{padding-top:0;align-self:center;margin:auto;font-size:clamp(28px,4vw,52px)}
+@media(max-width:1000px){.dd-grid{grid-template-columns:1fr}.dd-card.wide{grid-column:span 1}}
+@media(max-width:520px){.dd-values-actions{flex-wrap:wrap}.dd-values-actions .dd-btn{width:100%}}

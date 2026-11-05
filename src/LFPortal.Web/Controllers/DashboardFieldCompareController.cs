@@ -85,19 +85,27 @@ public sealed class DashboardFieldCompareController(
     private async Task<int> CountAllMatchingEntriesAsync(
         LFFieldDefinition field, string value, CancellationToken cancellationToken)
     {
-        var ids = new HashSet<int>();
+        var allIds = new HashSet<int>();
+        var documentIds = new HashSet<int>();
         for (var page = 1; page <= MaxExactPages; page++)
         {
             var response = await search.SearchByFieldAsync(field.Name, value, page, PageSize, cancellationToken);
             foreach (var item in response.Items)
-                ids.Add(item.EntryId);
+            {
+                allIds.Add(item.EntryId);
+                if (item.EntryType == LFEntryType.Document)
+                    documentIds.Add(item.EntryId);
+                else if (item.EntryType == LFEntryType.Unknown)
+                    throw new InvalidOperationException(
+                        "The API did not identify an entry type; a reliable document count is unavailable.");
+            }
 
             if (!response.HasNextPage)
             {
-                if (ids.Count != response.TotalCount)
+                if (allIds.Count != response.TotalCount)
                     throw new InvalidOperationException(
                         "Laserfiche returned an inconsistent result count; the chart was not generated.");
-                return ids.Count;
+                return documentIds.Count;
             }
         }
 

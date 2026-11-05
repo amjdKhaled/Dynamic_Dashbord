@@ -95,7 +95,7 @@ public sealed class DynamicDashboardController : Controller
                 {
                     children = await _entries.GetAllFolderChildrenAsync(folderId, cancellationToken);
                 }
-                catch (LaserficheException ex) when (ex.StatusCode is 403 or 404 && folderId != rootId)
+                catch (LaserficheException ex) when (folderId != rootId && (ex.StatusCode == 403 || ex.StatusCode == 404))
                 {
                     // A hidden subtree must not be traversed or disclosed to the caller.
                     continue;

@@ -95,9 +95,11 @@ try
     {
         var keys = Path.Combine(DashboardConfigPaths.ProgramDataDirectory, "keys");
         Directory.CreateDirectory(keys);
-        builder.Services.AddDataProtection()
+        var protection = builder.Services.AddDataProtection()
             .SetApplicationName("Dynamic_Dashbord_Standalone")
             .PersistKeysToFileSystem(new DirectoryInfo(keys));
+        if (OperatingSystem.IsWindows())
+            protection.ProtectKeysWithDpapi();
     }
     else
     {

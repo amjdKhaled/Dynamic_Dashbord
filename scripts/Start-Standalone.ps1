@@ -13,7 +13,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $sourceRoot = Split-Path -Parent $PSScriptRoot
-$appRoot = if ($Published) { $PSScriptRoot } else { $sourceRoot }
+$appRoot = if ($Published) { $PSScriptRoot } else { Join-Path $sourceRoot 'src\LFPortal.Web' }
 $localAppData = [Environment]::GetFolderPath('LocalApplicationData')
 if ([string]::IsNullOrWhiteSpace($localAppData)) {
     throw 'Could not determine LocalAppData for the current Windows account.'

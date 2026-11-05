@@ -26,12 +26,17 @@
   let rows = [], fields = [], charts = [], instances = [], editing = null;
   let partial = false, busy = false, editMode = false, lastUpdated = 0, saveTimer = null;
 
+  function minHeight(type) {
+    return type==="kpi"?220:["doughnut","pie"].includes(type)?340:type==="table"?280:300;
+  }
   function normalChart(chart) {
     return {
       id:String(chart.id), title:String(chart.title||"شارت").slice(0,90),
       type:validTypes.includes(chart.type)?chart.type:"bar",
       dimension:String(chart.dimension||"__template"),
-      wide:Boolean(chart.wide), height:Math.max(280,Math.min(620,Number(chart.height)||340)),
+      wide:Boolean(chart.wide),
+      span:Math.max(4,Math.min(12,Number(chart.span)|| (chart.wide?12:6))),
+      height:Math.max(minHeight(chart.type),Math.min(620,Number(chart.height)||340)),
       hidden:Boolean(chart.hidden),
       selectedValues:Array.isArray(chart.selectedValues)
         ? [...new Set(chart.selectedValues.filter(v=>typeof v==="string"))].slice(0,500) : []
@@ -211,7 +216,9 @@
     const ghost=Boolean(chart.hidden);
     const el=document.createElement("article");
     el.className="dd-card"+(chart.wide?" wide":"")+(ghost?" dd-ghost":"");
-    el.style.height=chart.height+"px";el.dataset.id=chart.id;el.draggable=editMode;
+    el.style.height=chart.height+"px";
+    el.style.gridColumn="span "+(chart.span||6);
+    el.dataset.id=chart.id;el.draggable=editMode;
     const header=document.createElement("header");header.className="dd-card-head";
     const headText=document.createElement("div"),title=document.createElement("strong");
     title.textContent=chart.title;headText.appendChild(title);
@@ -222,7 +229,10 @@
     if(editMode) {
       actions.append(
         iconButton("تعديل الشارت","⚙",()=>openEditor(chart.id)),
-        iconButton(chart.wide?"تصغير العرض":"توسيع العرض","⤢",()=>{chart.wide=!chart.wide;persist();render();}),
+        iconButton((chart.span||6)>6?"تصغير العرض":"توسيع العرض","⤢",()=>{
+          chart.span=(chart.span||6)>6?6:12;
+          chart.wide=chart.span===12;persist();render();
+        }),
         iconButton(ghost?"إظهار الشارت":"إخفاء الشارت",ghost?"◉":"◌",
           ()=>{chart.hidden=!chart.hidden;persist();render();}),
         iconButton("حذف الشارت","×",()=>{if(window.confirm("حذف هذا الشارت من لوحتك؟")){
@@ -233,6 +243,44 @@
     header.append(headText,actions);el.appendChild(header);
     const body=document.createElement("div");body.className="dd-visual";
     el.appendChild(body);
+    if(editMode) {
+      const resize=document.createElement("button");
+      resize.className="dd-resize-handle";resize.type="button";
+      resize.title="اسحب لتغيير عرض وارتفاع الكارد ضمن الحدود المناسبة";
+      resize.setAttribute("aria-label",resize.title);
+      resize.textContent="⤢";
+      resize.addEventListener("pointerdown",event=>{
+        if(event.button!==0)return;
+        event.preventDefault();event.stopPropagation();
+        const grid=$("dd-grid").getBoundingClientRect();
+        const unit=grid.width/12,startX=event.clientX,startY=event.clientY;
+        const startSpan=chart.span||6,startHeight=chart.height;
+        const minWidth=chart.type==="kpi"?220:chart.type==="table"?360:400;
+        const minSpan=Math.min(12,Math.max(4,Math.ceil(minWidth/Math.max(unit,1))));
+        resize.setPointerCapture(event.pointerId);
+        const onMove=ev=>{
+          const direction=getComputedStyle(el).direction==="rtl"?1:-1;
+          const delta=(startX-ev.clientX)*direction;
+          chart.span=Math.min(12,Math.max(minSpan,Math.round(startSpan+delta/Math.max(unit,1))));
+          chart.height=Math.max(minHeight(chart.type),Math.min(620,Math.round(startHeight+ev.clientY-startY)));
+          chart.wide=chart.span===12;
+          el.style.gridColumn="span "+chart.span;
+          el.style.height=chart.height+"px";
+          const canvas=el.querySelector("canvas");
+          if(canvas&&window.Chart)window.Chart.getChart(canvas)?.resize();
+        };
+        const onDone=()=>{
+          resize.removeEventListener("pointermove",onMove);
+          resize.removeEventListener("pointerup",onDone);
+          resize.removeEventListener("pointercancel",onDone);
+          persist();render();
+        };
+        resize.addEventListener("pointermove",onMove);
+        resize.addEventListener("pointerup",onDone);
+        resize.addEventListener("pointercancel",onDone);
+      });
+      el.appendChild(resize);
+    }
     if(ghost) {
       const text=document.createElement("p");text.className="dd-ghost-note";
       text.textContent="العنصر مخفي؛ اضغط زر العين لإظهاره";
@@ -395,6 +443,7 @@
       wide:false,hidden:false,selectedValues:[]
     };
     $("dd-title").value=editing.title;$("dd-type").value=editing.type;
+    $("dd-height").min=String(minHeight(editing.type));
     $("dd-height").value=editing.height;$("dd-heightlabel").textContent=editing.height+"px";
     selectOptions($("dd-dimension"),[...BUILTIN,...fields].map(f=>({
       value:String(f.id),label:f.name+(f.multi?" (قيم متعددة)":"")
@@ -409,7 +458,7 @@
     editing.title=$("dd-title").value.trim()||"شارت بدون عنوان";
     editing.type=$("dd-type").value;
     editing.dimension=$("dd-dimension").value;
-    editing.height=Math.max(280,Number($("dd-height").value)||340);
+    editing.height=Math.max(minHeight(editing.type),Number($("dd-height").value)||340);
     // Only store chosen category identifiers; aggregation always counts unique documents.
     const entry=normalChart(editing);
     const index=charts.findIndex(c=>c.id===entry.id);
@@ -466,6 +515,14 @@
     });
     document.addEventListener("keydown",event=>{
       if(event.key==="Escape"){closeEditor();$("dd-details-overlay").classList.add("dd-hidden");}
+    });
+    $("dd-type").addEventListener("change",event=>{
+      if(!editing)return;
+      editing.type=event.target.value;
+      const lower=minHeight(editing.type);
+      $("dd-height").min=String(lower);
+      if(Number($("dd-height").value)<lower)$("dd-height").value=String(lower);
+      $("dd-heightlabel").textContent=$("dd-height").value+"px";
     });
     $("dd-dimension").addEventListener("change",event=>{
       editing.dimension=event.target.value;

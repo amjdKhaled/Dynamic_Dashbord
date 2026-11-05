@@ -22,7 +22,7 @@
     {id:"base-users",title:"الوثائق حسب المستخدم",type:"bar",dimension:"__creator",measure:"__count",agg:"count",wide:false,height:320,hidden:false,local:{field:""}}
   ];
   let rows = [], fields = [], charts = [], instances = [], editing = null;
-  let partial = false, busy = false;
+  let partial = false, busy = false, lastUpdated = 0, saveTimer = null;
   let globalField = {field:"",value:"",from:"",to:"",operator:"contains"};
   let globalYear = "", globalCreator = "", globalTemplate = "", range = "all", from = "", to = "";
 
@@ -39,6 +39,7 @@
             wide:Boolean(x.wide),height:Math.max(240,Math.min(520,Number(x.height)||320)),
             hidden:Boolean(x.hidden),local:x.local||{field:""}
           }));
+        lastUpdated = Number(saved.updatedAt)||0;
         if (saved.globalField) globalField = saved.globalField;
         globalYear = saved.globalYear || "";
         globalCreator = saved.globalCreator || "";
@@ -50,11 +51,42 @@
     } catch (_) { /* Local storage is optional; never block live analytics. */ }
     charts = defaults.map(c => ({...c,local:{field:""}}));
   }
+  function currentConfig() {
+    return {charts,globalField,globalYear,globalCreator,globalTemplate,range,from,to,
+      updatedAt:lastUpdated};
+  }
   function persist() {
+    lastUpdated=Date.now();
+    const config=currentConfig();
+    try { localStorage.setItem(key,JSON.stringify(config)); }
+    catch (_) { /* Private browsing can disable storage. */ }
+    if(saveTimer)clearTimeout(saveTimer);
+    saveTimer=setTimeout(async()=>{
+      try {
+        const token=root.querySelector('input[name="__RequestVerificationToken"]')?.value;
+        const response=await fetch("/DynamicDashboard/SaveLayout",{
+          method:"POST",credentials:"same-origin",
+          headers:{"Content-Type":"application/json","RequestVerificationToken":token||""},
+          body:JSON.stringify(config)
+        });
+        if(!response.ok)throw new Error("Save failed: HTTP "+response.status);
+      } catch(error) {
+        // The current browser has a usable local copy, but warn about cross-device sync.
+        $("dd-warning").textContent="تعذر حفظ التخصيص على الخادم. تم حفظه محليًا في هذا المتصفح فقط.";
+        $("dd-warning").classList.remove("dd-hidden");
+        console.warn("Dynamic dashboard layout save failed",error);
+      }
+    },600);
+  }
+  async function restoreServerLayout() {
     try {
-      localStorage.setItem(key,JSON.stringify({charts,globalField,globalYear,globalCreator,
-        globalTemplate,range,from,to}));
-    } catch (_) { /* Private browsing can disable storage. */ }
+      const response=await fetch("/DynamicDashboard/Layout",{credentials:"same-origin",cache:"no-store"});
+      if(!response.ok)return;
+      const remote=await response.json();
+      if(!Array.isArray(remote.charts) || Number(remote.updatedAt||0)<=lastUpdated)return;
+      try { localStorage.setItem(key,JSON.stringify(remote)); } catch(_){}
+      loadConfig();
+    } catch (_) { /* The local layout remains available if the server is unavailable. */ }
   }
   const unique = values => [...new Set(values.filter(v => v !== null && v !== undefined && String(v).trim() !== "").map(String))];
   function selectOptions(element, items, selected, placeholder) {
@@ -493,5 +525,6 @@
       target.hidden=false;persist();render();
     });
   }
-  loadConfig();wire();refresh();
+  loadConfig();wire();
+  restoreServerLayout().finally(refresh);
 })();

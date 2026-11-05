@@ -12,7 +12,7 @@ This feature is a preview on branch `feature/dynamic-field-dashboard`, reached f
 
 **Removed:** The extra `طريقة الحساب` and `فلتر خاص بهذا الشارت` controls, numeric-field/page aggregation options, and the permanent global filter sidebar. Each widget automatically uses the **distinct number of matching documents** for its KPI or grouped chart. A multi-valued field may put one document in multiple groups, but the overall KPI counts that document only once. A missing field value is displayed as `بدون قيمة` only if at least one authorized document actually has no value.
 
-In normal viewing mode, customization controls are not displayed. Editing mode supports reorder, visibility toggle (ghost placeholder with the same eye control), and size selection. Doughnut/Pie charts use a scrollable, separate legend so labels cannot obscure the chart when the card is short. The existing navy/white ISB palette remains unchanged.
+In normal viewing mode, customization controls are not displayed. Editing mode supports reorder, visibility toggle (ghost placeholder with the same eye control), an optional width toggle, **manual drag-to-resize of height and width with minimum readable dimensions**, and the height slider in the editor. Doughnut/Pie charts use a scrollable, separate legend so labels cannot obscure the chart when the card is short. The existing navy/white ISB palette remains unchanged.
 
 ## Source data and security
 

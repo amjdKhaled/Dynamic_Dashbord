@@ -21,6 +21,9 @@ public sealed record LFFieldValue
     /// </summary>
     public string? Value { get; init; }
 
+    /// <summary>Individual values preserved before display formatting.</summary>
+    public IReadOnlyList<string> Values { get; init; } = Array.Empty<string>();
+
     /// <summary>
     /// Laserfiche field data type, e.g. <c>String</c>, <c>Integer</c>, <c>DateTime</c>,
     /// <c>Number</c>, <c>List</c>, <c>LongInteger</c>.

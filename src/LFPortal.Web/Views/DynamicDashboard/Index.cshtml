@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="~/css/dynamic-dashboard.css" asp-append-version="true" />
 }
 <div class="dd-page" id="dynamicDashboard" dir="rtl" data-scope="@scope">
+    @Html.AntiForgeryToken()
     <header class="dd-header">
         <div class="dd-headline">
             <h1>لوحة المعلومات <span>الديناميكية</span></h1>
@@ -58,7 +59,7 @@
         <section class="dd-workspace" aria-label="محتوى اللوحة">
             <div class="dd-workspace-top">
                 <div><strong>التحليلات والمؤشرات</strong><small>اسحب الكروت لتغيير ترتيبها، أو اضغط ⚙ لتخصيصها</small></div>
-                <div class="dd-hint">تغيير الحجم والترتيب والحالة محفوظ في هذا المتصفح</div>
+                <div class="dd-hint">يُحفظ التخصيص لكل مستخدم ومستودع على خادم اللوحة</div>
             </div>
             <p id="dd-warning" class="dd-warning dd-hidden" role="alert"></p>
             <div class="dd-grid" id="dd-grid"></div>

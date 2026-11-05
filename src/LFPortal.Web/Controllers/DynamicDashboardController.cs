@@ -1,4 +1,5 @@
 using LFPortal.Application.Interfaces;
+using LFPortal.Infrastructure.Configuration;
 using LFPortal.Domain.Entities;
 using LFPortal.Domain.Exceptions;
 using Microsoft.AspNetCore.Authorization;
@@ -50,8 +51,8 @@ public sealed class DynamicDashboardController : Controller
         var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
             System.Text.Encoding.UTF8.GetBytes(scope)));
         return Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-            "Dashboard", "DynamicLayouts", hash + ".json");
+            DashboardConfigPaths.ProgramDataDirectory,
+            "DynamicLayouts", hash + ".json");
     }
 
     /// <summary>Loads the current user's layout stored locally on the IIS server.</summary>

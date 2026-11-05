@@ -119,6 +119,9 @@ public sealed class DynamicDashboardController : Controller
                 if (partial) break;
             }
 
+            // Reaching the safety ceiling is always reported as partial.
+            partial |= documents.Count >= MaxDocuments;
+
             var results = new List<object>();
             // Respect the connected user's authorization for every document's metadata.
             // Throttle concurrent requests so large repositories are not flooded.
@@ -129,7 +132,12 @@ public sealed class DynamicDashboardController : Controller
                 await gate.WaitAsync(cancellationToken);
                 try
                 {
-                    rows[index] = (entry, await _entries.GetEntryFieldsAsync(entry.Id, cancellationToken), false);
+                    // Require a per-document read, not merely visibility in a parent listing.
+                    var visibleEntry = await _entries.GetEntryAsync(entry.Id, cancellationToken);
+                    if (visibleEntry.Id != entry.Id)
+                        throw new InvalidOperationException("Laserfiche returned an unexpected entry identifier.");
+                    rows[index] = (visibleEntry,
+                        await _entries.GetEntryFieldsAsync(entry.Id, cancellationToken), false);
                 }
                 catch (LaserficheException ex) when (ex.StatusCode is 403 or 404)
                 {
@@ -151,6 +159,8 @@ public sealed class DynamicDashboardController : Controller
                     name = row.Entry.Name,
                     template = row.Entry.TemplateName ?? "",
                     creator = row.Entry.Creator ?? "",
+                    folder = row.Entry.FolderPath ?? "",
+                    pages = row.Entry.PageCount,
                     created = row.Entry.CreationTime,
                     modified = row.Entry.LastModifiedTime,
                     fields = values

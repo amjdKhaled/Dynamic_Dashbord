@@ -178,7 +178,8 @@ public sealed class ShareController : Controller
             return Redirect("/Share/Login");
         }
 
-        var stats = await _dashboardService.GetDashboardStatsAsync(cancellationToken);
+        var sourceStats = await _dashboardService.GetDashboardStatsAsync(cancellationToken);
+        var stats = DashboardUserActivityScope.Apply(sourceStats, User, configuration: null, externalShare: true);
         // External Share is always rendered read-only. The option is retained as
         // an explicit deployment declaration, not as a switch that enables writes.
         ViewData["ExternalShareReadOnly"] = true;

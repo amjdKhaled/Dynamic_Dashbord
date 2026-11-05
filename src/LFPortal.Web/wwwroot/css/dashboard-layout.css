@@ -1,0 +1,70 @@
+/* Dashboard-only customization. The shared ISB theme and other pages are unchanged. */
+#dashboard-page .dash-customize-actions { display:inline-flex; flex-wrap:wrap; gap:7px; align-items:center; }
+#dashboard-page .dash-control {
+  background:var(--d-surface,#fff); color:var(--d-text,#25394e);
+  border:1px solid var(--d-border,#dce4ed); border-radius:8px;
+  padding:7px 11px; font:inherit; font-size:12px; cursor:pointer;
+}
+#dashboard-page .dash-control:hover { border-color:var(--d-accent,#2459b4); }
+#dashboard-page .dash-control.primary { background:var(--d-accent,#2459b4); color:white; }
+#dashboard-page .dash-layout-grid {
+  display:grid; grid-template-columns:repeat(12,minmax(0,1fr));
+  gap:18px; margin-bottom:18px;
+}
+#dashboard-page .dash-widget {
+  grid-column:span 6; min-width:0; min-height:0; position:relative;
+}
+#dashboard-page .dash-widget-body { height:100%; min-height:0; }
+#dashboard-page .dash-widget-body > .d-card {
+  height:100%; margin:0!important; min-width:0; overflow:auto;
+}
+#dashboard-page .dash-widget-tools {
+  display:none; position:absolute; top:4px; inset-inline-end:6px;
+  z-index:3; gap:4px; align-items:center;
+  background:rgba(255,255,255,.97); padding:4px;
+  border:1px solid #dee5ee; border-radius:7px;
+  box-shadow:0 2px 9px #14314a18;
+}
+#dashboard-page.dash-editing .dash-widget-tools { display:flex; }
+#dashboard-page .dash-tool {
+  border:1px solid #dce5ef; border-radius:5px; background:#fff;
+  color:#284965; cursor:pointer; font:inherit; font-size:12px;
+  padding:3px 7px; line-height:1.5;
+}
+#dashboard-page .dash-drag-handle { cursor:grab; }
+#dashboard-page .dash-drag-handle:active { cursor:grabbing; }
+#dashboard-page .dash-widget.dash-drag-over { outline:2px dashed var(--d-accent,#2459b4); outline-offset:3px; }
+#dashboard-page .dash-widget.dash-ghost .dash-widget-body {
+  opacity:.13; pointer-events:none; filter:grayscale(1);
+}
+#dashboard-page .dash-widget.dash-ghost { border:1px dashed #9caec1; border-radius:10px; }
+#dashboard-page .dash-widget.dash-ghost .dash-widget-tools { opacity:1; }
+#dashboard-page .dash-resize-handle {
+  display:none; position:absolute; bottom:0; inset-inline-end:0; z-index:3;
+  height:25px; width:25px; border:0; border-start-start-radius:8px;
+  background:var(--d-accent,#2459b4); color:white; font-weight:bold; cursor:nesw-resize;
+  touch-action:none; user-select:none;
+}
+#dashboard-page.dash-editing .dash-resize-handle { display:block; }
+#dashboard-page.dash-editing .dash-widget { outline:1px dashed #bacbdc; outline-offset:2px; }
+#dashboard-page .dash-compare-editor {
+  margin:12px 0 18px; padding:15px; background:var(--d-surface,#fff);
+  border:1px solid var(--d-border,#dce4ed); border-radius:12px;
+}
+#dashboard-page .dash-compare-editor[hidden] { display:none; }
+#dashboard-page .dash-compare-fields { display:grid; grid-template-columns:repeat(2,minmax(180px,1fr)); gap:12px; }
+#dashboard-page .dash-compare-fields label { display:flex; flex-direction:column; gap:6px; font-size:12px; }
+#dashboard-page .dash-compare-fields input,
+#dashboard-page .dash-compare-fields select {
+  padding:9px 11px; background:white; color:#203c55;
+  border:1px solid var(--d-border,#dce4ed); border-radius:7px;
+  font:inherit; min-width:0; width:100%;
+}
+#dashboard-page .dash-compare-status { font-size:12px; color:var(--d-muted,#6d7b89); padding:7px 0; }
+#dashboard-page .dash-compare-canvas { position:relative; height:240px; width:100%; margin-top:12px; }
+#dashboard-page .dash-compare-canvas canvas { width:100%; height:100%; }
+@media(max-width:800px) {
+  #dashboard-page .dash-layout-grid { gap:12px; }
+  #dashboard-page .dash-widget { grid-column:span 12!important; }
+  #dashboard-page .dash-compare-fields { grid-template-columns:minmax(0,1fr); }
+}

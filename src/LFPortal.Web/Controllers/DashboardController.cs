@@ -30,7 +30,9 @@ public sealed class DashboardController : Controller
         if (refresh && _dashboardService is IDashboardCacheControl cacheControl)
             await cacheControl.InvalidateAsync(cancellationToken);
         _logger.LogInformation("Dashboard: fetching statistics.");
-        var stats = await _dashboardService.GetDashboardStatsAsync(cancellationToken);
+        var sourceStats = await _dashboardService.GetDashboardStatsAsync(cancellationToken);
+        var stats = DashboardUserActivityScope.Apply(
+            sourceStats, User, HttpContext.RequestServices.GetService<IConfiguration>());
         _logger.LogInformation(
             "Dashboard stats: connected={Connected}, docs={Docs}, folders={Folders}, " +
             "templates={Tmpls}, rootFolders={RF}, recentDocs={RD}.",

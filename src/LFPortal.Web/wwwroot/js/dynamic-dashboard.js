@@ -207,11 +207,6 @@
     b.textContent=symbol;b.title=title;b.setAttribute("aria-label",title);
     b.addEventListener("click",handler);return b;
   }
-  function iconButton(title,symbol,handler) {
-    const b=document.createElement("button");b.type="button";b.className="dd-icon-btn";
-    b.textContent=symbol;b.title=title;b.setAttribute("aria-label",title);
-    b.addEventListener("click",handler);return b;
-  }
   function drawCard(chart) {
     const ghost=Boolean(chart.hidden);
     const el=document.createElement("article");
@@ -440,11 +435,11 @@
         $("dd-warning").textContent=result.warning||"تنبيه: التحليل جزئي وليس إجمالي المستودع.";
         $("dd-warning").classList.remove("dd-hidden");
       }
-      controlsFromData();render();
+      render();
     } catch(error) {
       $("dd-warning").textContent=String(error.message||error);
       $("dd-warning").classList.remove("dd-hidden");
-      rows=[];fields=[];controlsFromData();render();
+      rows=[];fields=[];partial=false;render();
     } finally{
       busy=false;$("dd-refresh").disabled=false;$("dd-refresh").textContent="⟳ تحديث البيانات";
     }

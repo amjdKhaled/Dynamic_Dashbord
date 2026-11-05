@@ -435,7 +435,10 @@ a.folder-kpi-card .folder-kpi-label { color:rgba(255,255,255,.95); }
         <button id="dash-compare-submit" class="dash-control primary" type="button">إنشاء شارت المقارنة</button>
     </section>
 }
-<div id="dash-widget-host" class="dash-layout-grid" aria-label="عناصر لوحة المعلومات القابلة للتخصيص"></div>
+@if (!externalShareReadOnly && s.IsConnected)
+{
+    <div id="dash-widget-host" class="dash-layout-grid" aria-label="عناصر لوحة المعلومات القابلة للتخصيص"></div>
+}
 
 <!-- ── KPI Cards ──────────────────────────────────────────────────────────── -->
 <div class="d-grid-5" style="margin-bottom:18px">

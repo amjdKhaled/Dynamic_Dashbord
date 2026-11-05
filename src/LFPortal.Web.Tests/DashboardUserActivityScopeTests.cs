@@ -44,7 +44,7 @@ public sealed class DashboardUserActivityScopeTests
     public void ExplicitlyConfiguredManager_SeesOnlyTheirOwnTeam()
     {
         var scoped = DashboardUserActivityScope.Apply(Sample(), Principal("manager"), Configuration());
-        Assert.Equal(["employee", "manager"],
+        Assert.Equal(new[] { "employee", "manager" },
             scoped.UserDocumentActivity.Select(x => x.Name).OrderBy(x => x).ToArray());
         Assert.DoesNotContain(scoped.UserDocumentActivity, x => x.Name == "another");
     }

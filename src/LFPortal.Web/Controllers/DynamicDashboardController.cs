@@ -41,6 +41,76 @@ public sealed class DynamicDashboardController : Controller
         return View();
     }
 
+    private async Task<string> GetLayoutPathAsync(CancellationToken cancellationToken)
+    {
+        var repo = await _repository.GetActiveRepositoryAsync(cancellationToken);
+        var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+            ?? User.Identity?.Name ?? throw new InvalidOperationException("Authenticated identity missing.");
+        var scope = string.Join("|", repo.ServerUrl, repo.RepositoryId, userId);
+        var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(scope)));
+        return Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+            "Dashboard", "DynamicLayouts", hash + ".json");
+    }
+
+    /// <summary>Loads the current user's layout stored locally on the IIS server.</summary>
+    [HttpGet]
+    public async Task<IActionResult> Layout(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var path = await GetLayoutPathAsync(cancellationToken);
+            if (!System.IO.File.Exists(path)) return Json(new { });
+            var json = await System.IO.File.ReadAllTextAsync(path, cancellationToken);
+            return Content(json, "application/json; charset=utf-8");
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Could not load dynamic dashboard layout.");
+            return StatusCode(503, new { error = "تعذر قراءة التخطيط المحفوظ." });
+        }
+    }
+
+    /// <summary>Saves layout only; no document values or credentials are stored.</summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveLayout(
+        [FromBody] System.Text.Json.JsonElement layout,
+        CancellationToken cancellationToken)
+    {
+        if (layout.ValueKind != System.Text.Json.JsonValueKind.Object ||
+            !layout.TryGetProperty("charts", out var cards) ||
+            cards.ValueKind != System.Text.Json.JsonValueKind.Array)
+            return BadRequest(new { error = "مخطط اللوحة غير صالح." });
+
+        var json = layout.GetRawText();
+        if (System.Text.Encoding.UTF8.GetByteCount(json) > 100_000)
+            return BadRequest(new { error = "تجاوز التخطيط الحد الأقصى للحفظ." });
+
+        string? temp = null;
+        try
+        {
+            var path = await GetLayoutPathAsync(cancellationToken);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            await System.IO.File.WriteAllTextAsync(temp, json, cancellationToken);
+            System.IO.File.Move(temp, path, overwrite: true);
+            temp = null;
+            return Ok(new { saved = true });
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "Could not persist dynamic dashboard layout.");
+            return StatusCode(503, new { error = "تعذر حفظ التخطيط على الخادم." });
+        }
+        finally
+        {
+            if (temp is not null && System.IO.File.Exists(temp))
+                System.IO.File.Delete(temp);
+        }
+    }
+
     /// <summary>Authoritative field schema; list/multi-value types are retained.</summary>
     [HttpGet]
     public async Task<IActionResult> Fields(CancellationToken cancellationToken)

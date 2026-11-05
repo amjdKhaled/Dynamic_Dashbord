@@ -50,10 +50,30 @@ public static class DashboardConfigPaths
     /// The machine-wide Dashboard configuration directory:
     /// <c>%ProgramData%\Dashboard</c> (or the platform equivalent of CommonApplicationData).
     /// </summary>
-    public static string ProgramDataDirectory =>
-        Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-            ProductFolderName);
+    /// <summary>
+    /// Explicitly opt-in to a private standalone data home. Without this environment
+    /// variable the installed IIS Dashboard retains its historical ProgramData path.
+    /// </summary>
+    public static bool IsStandalone =>
+        !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("DASHBOARD_STANDALONE_DATA_DIR"));
+
+    public static string ProgramDataDirectory
+    {
+        get
+        {
+            if (IsStandalone)
+            {
+                var standalonePath = Environment.GetEnvironmentVariable("DASHBOARD_STANDALONE_DATA_DIR")!.Trim();
+                if (!Path.IsPathFullyQualified(standalonePath))
+                    throw new InvalidOperationException("DASHBOARD_STANDALONE_DATA_DIR must be an absolute path.");
+                return Path.GetFullPath(standalonePath);
+            }
+
+            return Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                ProductFolderName);
+        }
+    }
 
     /// <summary>Full path of the installer-written configuration file.</summary>
     public static string InstallerConfigPath =>
@@ -87,6 +107,12 @@ public static class DashboardConfigPaths
     /// </remarks>
     public static string ResolveWritableRuntimeConfigPath(string contentRootPath)
     {
+        if (IsStandalone)
+        {
+            Directory.CreateDirectory(ProgramDataDirectory);
+            return RuntimeConfigPath;
+        }
+
         if (OperatingSystem.IsWindows())
         {
             return RuntimeConfigPath;

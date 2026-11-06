@@ -262,6 +262,72 @@ public sealed class LoginController : Controller
                 IsDynamicDashboardIisInstance() ? "DynamicDashboard" : "Dashboard");
     }
 
+    [Microsoft.AspNetCore.Authorization.Authorize]
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SwitchRepository(
+        string repository, string? password,
+        [FromServices] ILaserficheRepositoryService repositories,
+        CancellationToken cancellationToken)
+    {
+        if (User.Identity?.IsAuthenticated != true ||
+            HttpContext.Session.GetString("ExternalShare.Authenticated") == "true")
+            return Unauthorized();
+
+        var active = await _repositoryContext.GetActiveRepositoryAsync(cancellationToken);
+        if (!string.Equals(User.FindFirstValue(DashboardAuthenticationDefaults.RepositoryClaimType),
+                active.RepositoryId, StringComparison.OrdinalIgnoreCase))
+            return StatusCode(409);
+
+        if (!string.Equals(Request.Headers["X-Dashboard-Repository"].ToString(),
+                active.RepositoryId, StringComparison.OrdinalIgnoreCase)) return StatusCode(409);
+        if (string.IsNullOrWhiteSpace(repository)) return BadRequest();
+        var method = User.FindFirstValue(ClaimTypes.AuthenticationMethod);
+        try
+        {
+            var choices = await repositories.ListRepositoriesAsync(cancellationToken);
+            var targetId = choices.FirstOrDefault(choice => string.Equals(
+                choice.RepositoryId, repository, StringComparison.OrdinalIgnoreCase))?.RepositoryId;
+            if (string.IsNullOrWhiteSpace(targetId)) return NotFound();
+            if (string.Equals(active.RepositoryId, targetId, StringComparison.OrdinalIgnoreCase))
+                return Ok(new { url = Url.Action("Index", "DynamicDashboard") });
+
+            if (method == DashboardAuthenticationDefaults.LfdsAuthenticationMethod &&
+                _options.CurrentValue.Sso.IsConfigured)
+            {
+                var returnUrl = Url.Action("Index", "DynamicDashboard");
+                return Ok(new { url = Url.Action(nameof(StartSso), new { repository = targetId, returnUrl }) });
+            }
+
+            var username = User.Identity?.Name;
+            if (method != DashboardAuthenticationDefaults.PasswordAuthenticationMethod ||
+                string.IsNullOrWhiteSpace(username))
+                return Forbid();
+            if (string.IsNullOrEmpty(password))
+                return BadRequest(new { error = "أدخل كلمة مرور حسابك الحالي." });
+
+            var target = active with { Key = targetId, RepositoryId = targetId, DisplayName = targetId };
+            if (!await _authService.TryAuthenticateAsync(target, username, password, cancellationToken))
+                return StatusCode(403, new { error = "تعذر دخول حسابك إلى المستودع المحدد. تحقق من كلمة المرور والصلاحية." });
+
+            HttpContext.Session.SetString(RepositorySessionMiddleware.SessionKeyRepositoryId, targetId);
+            HttpContext.Session.SetString(SessionAuthGuardMiddleware.SessionKeyAuthenticatedRepoId, targetId);
+            HttpContext.Session.Remove("Archive.DynamicDashboardSelection");
+            await EstablishDashboardIdentityAsync(username, targetId,
+                DashboardAuthenticationDefaults.PasswordAuthenticationMethod);
+            return Ok(new { url = Url.Action("Index", "DynamicDashboard") });
+        }
+        catch (LaserficheException ex) when (ex.StatusCode is 401 or 403 or 404)
+        {
+            return StatusCode(ex.StatusCode, new { error = "تعذر دخول حسابك إلى المستودع المحدد." });
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning("Repository switch failed ({ErrorType}).", ex.GetType().Name);
+            return StatusCode(503, new { error = "تعذر تبديل المستودع. حاول مرة أخرى." });
+        }
+    }
+
     private static bool IsDynamicDashboardIisInstance() =>
         string.Equals(Environment.GetEnvironmentVariable("DASHBOARD_INSTANCE_NAME"),
             "dynamic_dashboard", StringComparison.OrdinalIgnoreCase);

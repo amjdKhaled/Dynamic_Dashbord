@@ -59,7 +59,7 @@ public sealed class ArchiveController : Controller
     [ValidateAntiForgeryToken]
     [RequestSizeLimit(64 * 1024)]
     public async Task<IActionResult> OpenDashboardSelection(
-        [FromForm] string title, [FromForm] string entryIds, CancellationToken cancellationToken)
+        [FromForm] string title, [FromForm] string entryIds, [FromForm] string repository, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(entryIds) || entryIds.Length > 22_000 || !ModelState.IsValid)
             return BadRequest();
@@ -74,10 +74,10 @@ public sealed class ArchiveController : Controller
             ids.Add(id);
         }
 
-        if (ids.Count == 1)
-            return RedirectToAction(nameof(Index), new { scope = "document", entryId = ids.Single() });
-
         var repo = await _repositoryContext.GetActiveRepositoryAsync(cancellationToken);
+        if (!string.Equals(repository, repo.RepositoryId, StringComparison.OrdinalIgnoreCase))
+            return StatusCode(409);
+
         var selection = new DashboardSelection(Guid.NewGuid(), DashboardUser(), repo.ServerUrl, repo.RepositoryId,
             string.IsNullOrWhiteSpace(title) ? "نتائج اللوحة" : title[..Math.Min(title.Length, 180)], ids.ToArray());
         HttpContext.Session.SetString(DashboardSelectionKey, JsonSerializer.Serialize(selection));

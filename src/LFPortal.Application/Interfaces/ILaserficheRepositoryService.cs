@@ -25,6 +25,9 @@ public interface ILaserficheRepositoryService
         string password,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Lists repositories returned to the active authenticated session.</summary>
+    Task<IReadOnlyList<RepositoryInfo>> ListRepositoriesAsync(CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Retrieves the configured repository's metadata by reading the documented
     /// <c>GET /Repositories</c> list and validating the configured identifier.

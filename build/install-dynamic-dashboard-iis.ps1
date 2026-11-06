@@ -206,14 +206,27 @@ if ($LASTEXITCODE -ne 0) { throw 'Failed to secure the independent data director
 if (-not $existingSite) {
     New-Website -Name $siteName -PhysicalPath $root -Port $Port -IPAddress '127.0.0.1' -ApplicationPool $poolName | Out-Null
 }
-$wasRunning = (Get-WebAppPoolState -Name $poolName).Value -eq 'Started'
-if ($wasRunning) {
-    Stop-WebAppPool -Name $poolName
-}
 try {
+    if ((Get-WebAppPoolState -Name $poolName).Value -eq 'Started') {
+        Stop-WebAppPool -Name $poolName
+    }
+    # Wait for IIS to report Stopped before retrying any transient file locks.
+    $deadline = [DateTime]::UtcNow.AddSeconds(60)
+    while ($true) {
+        if ((Get-WebAppPoolState -Name $poolName).Value -eq 'Stopped') { break }
+        if ([DateTime]::UtcNow -ge $deadline) {
+            throw "IIS application pool '$poolName' did not report Stopped within 60 seconds. No files were copied."
+        }
+        Start-Sleep -Milliseconds 500
+    }
+
     # /E intentionally never deletes files or settings from an existing installation.
-    & robocopy.exe $publish $root /E /XJ /R:2 /W:1 /XF appsettings.Development.json /NFL /NDL /NJH /NJS /NP | Out-Null
-    if ($LASTEXITCODE -ge 8) { throw "robocopy failed with code $LASTEXITCODE" }
+    $copyOutput = @(& robocopy.exe $publish $root /E /XJ /R:15 /W:2 /XF appsettings.Development.json /NFL /NDL /NJH /NP)
+    $copyCode = $LASTEXITCODE
+    if ($copyCode -ge 8) {
+        throw ("robocopy failed with code {0} copying to '{1}'.{2}{3}" -f
+            $copyCode, $root, [Environment]::NewLine, ($copyOutput -join [Environment]::NewLine))
+    }
     $webConfig = Join-Path $root 'web.config'
     [xml]$xml = Get-Content -LiteralPath $webConfig -Raw
     $asp = $xml.SelectSingleNode('//aspNetCore')
@@ -243,7 +256,7 @@ finally {
     if ($stage -and (Test-Path -LiteralPath $stage)) {
         Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
     }
-    if ((Get-WebAppPoolState -Name $poolName).Value -ne 'Started') {
+    if ((Get-WebAppPoolState -Name $poolName).Value -eq 'Stopped') {
         Start-WebAppPool -Name $poolName
     }
     $installedSite = Get-Website -Name $siteName -ErrorAction SilentlyContinue

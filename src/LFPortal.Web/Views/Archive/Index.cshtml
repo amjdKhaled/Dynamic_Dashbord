@@ -192,6 +192,10 @@ footer.site-footer { background: #F7F8FD !important; }
         <p class="arc-sub">@(Model.IsDrillDown ? Model.DrillDownDescription : L["BrowseRepository"].Value)</p>
     </div>
     <div style="display:flex;align-items:center;gap:8px">
+        @if (Model.IsDrillDown && Model.DrillDownScope != "documents")
+        {
+            <a class="arc-open-lf" href="@Url.Action("Index", "Archive", new { scope = "documents" })">عرض كل المستندات</a>
+        }
         @if (Model.IsDrillDown && !string.IsNullOrWhiteSpace(Model.LaserficheWebClientUrl))
         {
             <a class="arc-open-lf" href="@Model.LaserficheWebClientUrl" target="_blank" rel="noopener">

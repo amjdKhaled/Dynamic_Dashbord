@@ -69,6 +69,17 @@ internal sealed class LaserficheRepositoryService : ILaserficheRepositoryService
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<RepositoryInfo>> ListRepositoriesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var url = _adapter.BuildRepositoriesUrl();
+        using var client = _httpClientFactory.CreateClient("LaserficheAuthenticated");
+        using var response = await client.GetAsync(url, cancellationToken).ConfigureAwait(false);
+        var body = await ReadRepositoryJsonAsync(response, url, cancellationToken).ConfigureAwait(false);
+        return DeserializeRepositories(body, url).Select(r => ToRepositoryInfo(r)).ToArray();
+    }
+
+    /// <inheritdoc />
     public async Task<RepositoryInfo> GetRepositoryInfoAsync(
         CancellationToken cancellationToken = default)
     {

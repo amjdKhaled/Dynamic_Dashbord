@@ -33,7 +33,7 @@ if ($source -match '(?im)^\s*(Stop-Website|Remove-Website|Stop-WebAppPool|Remove
 $target = Join-Path ([IO.Path]::GetTempPath()) ('dynamic-iis-plan-'+[Guid]::NewGuid().ToString('N'))
 $web = Join-Path $target 'web'
 $data = Join-Path $target 'private'
-$output = & $script -PlanOnly -Port 5190 -WebRoot $web -DataRoot $data 2>&1 | Out-String
+$output = & $script -PlanOnly -Port 5190 -WebRoot $web -DataRoot $data 6>&1 2>&1 | Out-String
 if ($output -notmatch 'PlanOnly: no IIS' -or $output -notmatch 'dynamic_dashboard') {
     throw 'Plan mode did not report the expected independent site.'
 }

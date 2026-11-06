@@ -58,6 +58,34 @@ public sealed class DiagnosticsApiController : ControllerBase
         var opts   = _options.CurrentValue;
         var repoId = string.IsNullOrWhiteSpace(repository) ? opts.RepositoryId : repository.Trim();
 
+        // An unconfigured, separately installed IIS instance must not probe a
+        // relative URL or return "unknown-error" when it has no ServerUrl yet.
+        // No credentials are read and no outbound request is made in this case.
+        if (!Uri.TryCreate(opts.ServerUrl, UriKind.Absolute, out var apiServer) ||
+            (apiServer.Scheme != Uri.UriSchemeHttp && apiServer.Scheme != Uri.UriSchemeHttps) ||
+            string.IsNullOrWhiteSpace(apiServer.Host))
+        {
+            return Ok(new
+            {
+                configuration = new
+                {
+                    serverUrl = opts.ServerUrl,
+                    apiBasePath = opts.ApiBasePath,
+                    apiVersion = opts.ApiVersion,
+                    fallbackRepository = string.IsNullOrWhiteSpace(opts.RepositoryId)
+                        ? null : opts.RepositoryId
+                },
+                urls = new { repositoriesUrl = (string?)null, tokenUrl = (string?)null },
+                probe = new
+                {
+                    result = "configuration-error",
+                    httpStatus = (int?)null,
+                    detail = "Laserfiche Server URL is missing or invalid in this website. " +
+                             "Configure the Server URL in /Settings and retry."
+                }
+            });
+        }
+
         var repositoriesUrl = _adapter.BuildRepositoriesUrl();
         var tokenUrl = string.IsNullOrWhiteSpace(repoId)
             ? null

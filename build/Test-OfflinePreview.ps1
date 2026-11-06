@@ -12,7 +12,7 @@ $web = Join-Path $repo 'artifacts\offline-zip-test'
 if (Test-Path $web) { Remove-Item $web -Recurse -Force }
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 [System.IO.Compression.ZipFile]::ExtractToDirectory($zip, $web)
-foreach ($required in @('Start-Dashboard.cmd', 'LFPortal.Web.exe', 'coreclr.dll', 'README-OFFLINE.md')) {
+foreach ($required in @('Start-Dashboard.cmd', 'Start-Dashboard.ps1', 'LFPortal.Web.exe', 'coreclr.dll', 'README-OFFLINE.md')) {
     if (-not (Test-Path (Join-Path $web $required))) { throw "Standalone ZIP is missing $required" }
 }
 $office = Join-Path $web 'tools\LibreOffice\program\soffice.com'
@@ -34,6 +34,9 @@ try {
 }
 finally { Remove-Item Env:DASHBOARD_OFFICE_TEST_PATH -ErrorAction SilentlyContinue }
 
+# Launch the same isolated runtime mode used by Start-Dashboard.ps1.
+$previousStandaloneDir = $env:DASHBOARD_STANDALONE_DATA_DIR
+$env:DASHBOARD_STANDALONE_DATA_DIR = Join-Path $web 'ci-standalone-data'
 $port = 15983
 $process = Start-Process (Join-Path $web 'LFPortal.Web.exe') -ArgumentList @('--urls', "http://127.0.0.1:$port") -WorkingDirectory $web -PassThru
 try {
@@ -45,12 +48,24 @@ try {
         } catch { Start-Sleep -Milliseconds 500 }
     }
     if (-not $ready) { throw 'Standalone executable did not start without dotnet run.' }
+    $marker = Invoke-RestMethod "http://127.0.0.1:$port/_standalone/ready" -TimeoutSec 3
+    if ($marker.application -ne 'Dynamic_Dashbord' -or $marker.mode -ne 'standalone' -or
+        $marker.dashboardPath -ne '/DynamicDashboard') {
+        throw 'The standalone process did not expose the expected route ownership marker.'
+    }
     foreach ($asset in @('/lib/chartjs/chart.umd.min.js', '/js/document-preview.js', '/fonts/IBMPlexSansArabic-Regular.ttf')) {
         $response = Invoke-WebRequest "http://127.0.0.1:$port$asset" -UseBasicParsing
         if ($response.StatusCode -ne 200 -or $response.RawContentLength -eq 0) { throw "Missing offline asset: $asset" }
     }
 }
-finally { if (-not $process.HasExited) { Stop-Process $process.Id -Force } }
+finally {
+    if (-not $process.HasExited) { Stop-Process $process.Id -Force }
+    if ($null -eq $previousStandaloneDir) {
+        Remove-Item Env:DASHBOARD_STANDALONE_DATA_DIR -ErrorAction SilentlyContinue
+    } else {
+        $env:DASHBOARD_STANDALONE_DATA_DIR = $previousStandaloneDir
+    }
+}
 Write-Host 'Final ZIP checksum, extraction, bundled Office conversion, standalone startup and local assets passed.'
 
 }

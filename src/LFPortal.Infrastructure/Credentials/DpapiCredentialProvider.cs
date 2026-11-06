@@ -2,6 +2,7 @@ using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Text;
 using LFPortal.Application.Interfaces;
+using LFPortal.Infrastructure.Configuration;
 using LFPortal.Domain.Common;
 using Microsoft.Extensions.Logging;
 
@@ -46,7 +47,7 @@ internal sealed class DpapiCredentialProvider : ICredentialProvider
 
     /// <summary>Primary credential directory (current product name).</summary>
     private static readonly string CredentialDirectory =
-        Path.Combine(ProgramData, "Dashboard", "credentials");
+        Path.Combine(DashboardConfigPaths.ProgramDataDirectory, "credentials");
 
     /// <summary>
     /// Legacy credential directory kept for backward-compatibility.
@@ -76,7 +77,7 @@ internal sealed class DpapiCredentialProvider : ICredentialProvider
             // older installations.  If found, we read them but do not migrate them here;
             // the next StoreCredentialsAsync call will write them to the new path.
             var legacyPath = GetLegacyCredentialFilePath(repositoryKey);
-            if (File.Exists(legacyPath))
+            if (!DashboardConfigPaths.IsStandalone && File.Exists(legacyPath))
             {
                 _logger.LogInformation(
                     "Reading DPAPI credentials from legacy path for repository key {Key}. " +

@@ -363,6 +363,46 @@ public sealed class SessionAuthGuardMiddlewareTests
         Assert.Equal("/Share/Dashboard", ctx.Response.Headers.Location);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Invoke_StandaloneReadinessEndpoint_PassesBeforeLoginAndExternalShare(bool externalShare)
+    {
+        // The standalone launcher makes this request before it can open Login.
+        // No repository is configured and no authentication cookie is present.
+        var reached = false;
+        var middleware = MakeMiddleware(
+            configuredRepoId: "",
+            next: _ => { reached = true; return Task.CompletedTask; });
+        var context = MakeContext(path: "/_standalone/ready");
+        if (externalShare)
+            context.Session.SetString("ExternalShare.Authenticated", "true");
+
+        await middleware.InvokeAsync(context);
+
+        Assert.True(reached);
+        Assert.Empty(context.Response.Headers.Location.ToString());
+    }
+
+    [Fact]
+    public async Task Invoke_SimilarlyNamedReadinessPath_DoesNotBypassLogin()
+    {
+        var reached = false;
+        var middleware = MakeMiddleware(
+            configuredRepoId: "",
+            next: _ => { reached = true; return Task.CompletedTask; });
+        var context = MakeContext(path: "/_standalone/ready/extra");
+
+        await middleware.InvokeAsync(context);
+
+        Assert.False(reached);
+        // A direct browser without any configured repository uses the existing
+        // repository-selection redirect, which is exactly /Login (no returnUrl).
+        // The important security property is that /_standalone/ready/extra
+        // cannot bypass the login guard.
+        Assert.Equal("/Login", context.Response.Headers.Location.ToString());
+    }
+
     // ── Excluded paths are never redirected ───────────────────────────────────
 
     [Theory]

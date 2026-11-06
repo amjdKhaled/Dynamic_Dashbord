@@ -2110,14 +2110,19 @@ foreach ($doc in @("InstallationGuide.md", "UpgradeGuide.md", "ReleaseNotes.md")
 # Standalone distribution: double-click the launcher, without SDK, IIS or dotnet run.
 # Only label a distribution offline-ready when its Windows converter was staged.
 if ($IsWindowsOS) {
+# Bundled standalone uses the same guarded launcher as source mode, but does
+# not require the .NET SDK. It never touches the IIS Dashboard configuration.
+Copy-Item (Join-Path $RepoRoot 'scripts\Start-Standalone.ps1') (Join-Path $webAppDst 'Start-Dashboard.ps1') -Force
 $launcher = @'
 @echo off
 cd /d "%~dp0"
 set "DASHBOARD_PORT=%~1"
-if "%DASHBOARD_PORT%"=="" set "DASHBOARD_PORT=5050"
-start "" "http://localhost:%DASHBOARD_PORT%"
-LFPortal.Web.exe --urls http://localhost:%DASHBOARD_PORT%
-pause
+if "%DASHBOARD_PORT%"=="" set "DASHBOARD_PORT=5188"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0Start-Dashboard.ps1" -Published -Port %DASHBOARD_PORT%
+if errorlevel 1 (
+  echo Standalone startup failed. Check the console error above.
+  pause
+)
 '@
 Set-Content (Join-Path $webAppDst 'Start-Dashboard.cmd') $launcher -Encoding ASCII
 Copy-Item (Join-Path $RepoRoot 'docs\offline-preview.md') (Join-Path $webAppDst 'README-OFFLINE.md') -Force

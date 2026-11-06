@@ -7,6 +7,7 @@ using LFPortal.Web.Middleware;
 using LFPortal.Web.Options;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Options;
 using Serilog;
 
@@ -29,10 +30,15 @@ try
     //  3. %ProgramData%\Dashboard\laserfiche.config.json    installer wizard values
     //  4. %ProgramData%\Dashboard\laserfiche.runtime.json   Settings-page overrides
     // All are optional with reloadOnChange so Settings-page saves apply without restart.
-    builder.Configuration.AddJsonFile(
-        DashboardConfigPaths.GetLegacyRuntimeConfigPath(builder.Environment.ContentRootPath),
-        optional: true,
-        reloadOnChange: true);
+    // A standalone launch intentionally ignores older installed/config files.
+    // It receives a private DASHBOARD_STANDALONE_DATA_DIR from its launcher.
+    if (!DashboardConfigPaths.IsStandalone)
+    {
+        builder.Configuration.AddJsonFile(
+            DashboardConfigPaths.GetLegacyRuntimeConfigPath(builder.Environment.ContentRootPath),
+            optional: true,
+            reloadOnChange: true);
+    }
 
     builder.Configuration.AddJsonFile(
         DashboardConfigPaths.InstallerConfigPath,
@@ -63,8 +69,7 @@ try
         try
         {
             var programDataLogs = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-                "Dashboard", "Logs");
+                DashboardConfigPaths.ProgramDataDirectory, "Logs");
             Directory.CreateDirectory(programDataLogs);
             loggerConfig.WriteTo.File(
                 Path.Combine(programDataLogs, "dashboard-.log"),
@@ -86,7 +91,20 @@ try
     });
 
     // ── ASP.NET Core Data Protection (cross-platform credential encryption) ───
-    builder.Services.AddDataProtection();
+    if (DashboardConfigPaths.IsStandalone)
+    {
+        var keys = Path.Combine(DashboardConfigPaths.ProgramDataDirectory, "keys");
+        Directory.CreateDirectory(keys);
+        var protection = builder.Services.AddDataProtection()
+            .SetApplicationName("Dynamic_Dashbord_Standalone")
+            .PersistKeysToFileSystem(new DirectoryInfo(keys));
+        if (OperatingSystem.IsWindows())
+            protection.ProtectKeysWithDpapi();
+    }
+    else
+    {
+        builder.Services.AddDataProtection();
+    }
 
     // ── Localization — Arabic (ar) + English (en, default) ────────────────────
     // No ResourcesPath: the RESX in Resources/SharedResource.resx has a C# codebehind
@@ -113,7 +131,8 @@ try
         })
         .AddCookie(DashboardAuthenticationDefaults.Scheme, options =>
         {
-            options.Cookie.Name = ".Dashboard.Authentication";
+            options.Cookie.Name = DashboardConfigPaths.IsStandalone
+                ? ".Dynamic_Dashbord.Authentication" : ".Dashboard.Authentication";
             options.Cookie.HttpOnly = true;
             options.Cookie.IsEssential = true;
             options.Cookie.SameSite = SameSiteMode.Lax;
@@ -164,7 +183,8 @@ try
         opts.Cookie.HttpOnly  = true;
         opts.Cookie.IsEssential = true;
         opts.IdleTimeout      = TimeSpan.FromHours(8);
-        opts.Cookie.Name      = ".Dashboard.Session";
+        opts.Cookie.Name      = DashboardConfigPaths.IsStandalone
+            ? ".Dynamic_Dashbord.Session" : ".Dashboard.Session";
         opts.Cookie.SameSite  = SameSiteMode.Lax;
         opts.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
     });
@@ -261,6 +281,18 @@ try
 
     // ── Session auth guard — redirects unauthenticated Desktop Client sessions to /Login ──
     app.UseMiddleware<SessionAuthGuardMiddleware>();
+
+    // Launcher-only marker; proves that localhost is this standalone app,
+    // rather than another service returning {"error":"not_found"}.
+    if (DashboardConfigPaths.IsStandalone)
+    {
+        app.MapGet("/_standalone/ready", () => Results.Json(new
+        {
+            application = "Dynamic_Dashbord",
+            mode = "standalone",
+            dashboardPath = "/DynamicDashboard"
+        }));
+    }
 
     // ── Health check endpoint ─────────────────────────────────────────────────
     app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions

@@ -62,6 +62,19 @@ public sealed class SessionAuthGuardMiddleware
     /// </summary>
     public async Task InvokeAsync(HttpContext context)
     {
+        // The standalone process identity probe contains no repository/user data.
+        // It must work before first login, when no repository is configured, and
+        // when the external-share cookie is present. The endpoint itself is only
+        // registered by Program.cs for the independent standalone host.
+        // Never allow this exception for a parent path or a similarly named route.
+        if (string.Equals(
+            context.Request.Path.Value, "/_standalone/ready",
+            StringComparison.OrdinalIgnoreCase))
+        {
+            await _next(context);
+            return;
+        }
+
         // An authenticated external-share browser is confined to the read-only
         // Share surface. It cannot reach Settings, Archive, document writes, probes,
         // or normal Dashboard routes by typing a URL directly.

@@ -17,9 +17,7 @@ the WebView2 runtime. These Windows prerequisites are separate from app librarie
 ## Standalone application
 
 Extract LFDashboard-Standalone-win-x64.zip to a writable folder, then double-click
-Start-Dashboard.cmd. Open http://localhost:5050. Keep the console open while using
-Dashboard. To choose another port, run `Start-Dashboard.cmd 5080`. There is no SDK,
-IIS, Microsoft Office, LibreOffice installation or project build requirement.
+Start-Dashboard.cmd. The launcher chooses an unused port starting at **5188**, verifies that the active service really is Dynamic_Dashbord, and opens `http://127.0.0.1:<selected-port>/DynamicDashboard` only after startup succeeds. Keep the console open while using Dashboard. To choose another preferred port, run `Start-Dashboard.cmd 5200`; if occupied, the next free port is chosen. Standalone settings, encrypted credentials, keys, logs, and layouts live under `%LOCALAPPDATA%\Dynamic_Dashbord\Standalone`, separately from the original installed IIS Dashboard. There is no SDK, IIS, Microsoft Office, LibreOffice installation or project build requirement.
 The .NET and Office runtimes are already in the ZIP. Use Settings to configure
 the Laserfiche server if it has not been configured on this computer.
 

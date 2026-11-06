@@ -396,7 +396,7 @@ public sealed class SessionAuthGuardMiddlewareTests
         await middleware.InvokeAsync(context);
 
         Assert.False(reached);
-        Assert.Equal("/Login", context.Response.Headers.Location.ToString());
+        Assert.StartsWith("/Login?returnUrl=", context.Response.Headers.Location.ToString());
     }
 
     // ── Excluded paths are never redirected ───────────────────────────────────

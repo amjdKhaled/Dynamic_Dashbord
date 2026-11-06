@@ -142,6 +142,14 @@ foreach ($app in @($poolApps.SelectNodes('//APP'))) {
     }
 }
 $existingPool = Get-Item "IIS:\AppPools\$poolName" -ErrorAction SilentlyContinue
+if (-not $existingSite) {
+    # An independent Kestrel app or other non-IIS process may already own this port.
+    # Check it before creating a Windows HTTP.sys binding.
+    $tcpCommand = Get-Command Get-NetTCPConnection -ErrorAction SilentlyContinue
+    if ($tcpCommand -and @(Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue).Count -gt 0) {
+        throw "Port $Port is already listening. Stop that app or use -Port 5190."
+    }
+}
 if (-not $existingSite -and $existingPool) {
     throw "Application pool $poolName already exists without a matching site. Inspect IIS manually."
 }
@@ -184,6 +192,8 @@ if (-not $existingPool) {
 Set-ItemProperty "IIS:\AppPools\$poolName" -Name managedRuntimeVersion -Value ''
 Set-ItemProperty "IIS:\AppPools\$poolName" -Name enable32BitAppOnWin64 -Value $false
 Set-ItemProperty "IIS:\AppPools\$poolName" -Name processModel.identityType -Value 'ApplicationPoolIdentity'
+# User-profile loading is required for current-user DPAPI-protected auth keys.
+Set-ItemProperty "IIS:\AppPools\$poolName" -Name processModel.loadUserProfile -Value $true
 New-Item -ItemType Directory -Path $root -Force | Out-Null
 New-Item -ItemType Directory -Path $data -Force | Out-Null
 
@@ -236,7 +246,8 @@ finally {
     if ((Get-WebAppPoolState -Name $poolName).Value -ne 'Started') {
         Start-WebAppPool -Name $poolName
     }
-    if ((Get-Website -Name $siteName).State -ne 'Started') {
+    $installedSite = Get-Website -Name $siteName -ErrorAction SilentlyContinue
+    if ($installedSite -and $installedSite.State -ne 'Started') {
         Start-Website -Name $siteName
     }
 }

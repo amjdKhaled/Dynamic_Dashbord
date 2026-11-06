@@ -5,59 +5,75 @@
   if (!root) return;
   const $ = id => document.getElementById(id);
   const key = "lf-dynamic-dashboard-v1:" + root.dataset.scope;
+  const requestHeaders = {"X-Dashboard-Repository":root.dataset.repository,"X-Requested-With":"XMLHttpRequest"};
   const BUILTIN = [
     {id:"__template",name:"القالب",type:"list"},
     {id:"__creator",name:"المستخدم / المنشئ",type:"list"},
     {id:"__created",name:"تاريخ الإضافة",type:"date"},
     {id:"__modified",name:"تاريخ التعديل",type:"date"},
-    {id:"__name",name:"اسم الوثيقة",type:"text"},
     {id:"__folder",name:"المجلد",type:"list"},
     {id:"__pages",name:"عدد الصفحات",type:"number"}
   ];
-  const palette = ["#0b1c49","#2367c6","#7f96a8","#4c8b72","#a4b5c6","#c8a55b","#64748b"];
+  const palette = ["#0d3850","#60a2c4","#bf972c","#156083","#2b795b","#9eb0c1","#dcb455"];
   const defaults = [
-    {id:"base-docs",title:"إجمالي الوثائق الظاهرة",type:"kpi",dimension:"__template",height:280,wide:false,hidden:false,selectedValues:[]},
-    {id:"base-templates",title:"توزيع الوثائق حسب القالب",type:"doughnut",dimension:"__template",height:360,wide:false,hidden:false,selectedValues:[]},
-    {id:"base-months",title:"الوثائق حسب تاريخ الإضافة",type:"line",dimension:"__created",height:340,wide:true,hidden:false,selectedValues:[]},
-    {id:"base-users",title:"الوثائق حسب المستخدم",type:"bar",dimension:"__creator",height:320,wide:false,hidden:false,selectedValues:[]}
+    {id:"base-docs",title:"إجمالي الوثائق الظاهرة",type:"kpi",dimension:"__template",wide:false,hidden:false,selectedValues:[]},
+    {id:"base-templates",title:"توزيع الوثائق حسب القالب",type:"doughnut",dimension:"__template",wide:false,hidden:false,selectedValues:[]},
+    {id:"base-months",title:"الوثائق حسب تاريخ الإضافة",type:"line",dimension:"__created",wide:true,hidden:false,selectedValues:[]},
+    {id:"base-users",title:"الوثائق حسب المستخدم",type:"bar",dimension:"__creator",wide:false,hidden:false,selectedValues:[]},
+    {id:"base-recent-created",title:"المستندات المنشأة حديثًا",type:"recent-created",wide:true},
+    {id:"base-recent-modified",title:"نشاط المستندات الأخير",type:"recent-modified",wide:true}
   ];
   const EMPTY_VALUE = "\u0000no-value";
-  const validTypes = ["bar","horizontal","line","doughnut","pie","table","kpi","audit"];
-  const auditReports = new Map();
+  const validTypes = ["bar","horizontal","line","doughnut","pie","table","kpi","recent-created","recent-modified"];
+  const isRecent = type => type==="recent-created" || type==="recent-modified";
+  const isTable = type => type==="table" || isRecent(type);
+  const isDateRange = chart => chart.type==="recent-modified" || (!isRecent(chart.type) && chart.dimension==="__modified");
+  const pageCount = value => value !== "" && value != null && /^\d+$/.test(String(value)) &&
+    Number(value) <= 2147483647 ? Number(value) : null;
+  const validDate = value => typeof value==="string" && /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+    dateStamp(value)?.toISOString().slice(0,10)===value;
+  const tablePages = new Map();
   let rows = [], fields = [], charts = [], instances = [], editing = null;
   let partial = false, busy = false, editMode = false, lastUpdated = 0, saveTimer = null;
 
-  function minHeight(type) {
-    return type==="kpi"?220:["doughnut","pie"].includes(type)?340:["table","audit"].includes(type)?280:300;
-  }
   function normalChart(chart) {
+    const oldName = chart.dimension==="__name";
+    const type = chart.type==="audit" ? "recent-modified" : chart.type;
     return {
-      id:String(chart.id), title:String(chart.title||"شارت").slice(0,90),
-      type:validTypes.includes(chart.type)?chart.type:"bar",
-      dimension:String(chart.dimension||"__template"),
+      id:String(chart.id), title:String(chart.type==="audit" ? "نشاط المستندات الأخير" : chart.title||"شارت").slice(0,90),
+      type:validTypes.includes(type)?type:"bar",
+      dimension:oldName?"__template":String(chart.dimension||"__template"),
       wide:Boolean(chart.wide),
       span:Math.max(4,Math.min(12,Number(chart.span)|| (chart.wide?12:6))),
-      height:Math.max(minHeight(chart.type),Math.min(620,Number(chart.height)||340)),
+      from:validDate(chart.from)?chart.from:"",
+      to:validDate(chart.to)?chart.to:"",
+      pages:pageCount(chart.pages),
       hidden:Boolean(chart.hidden),
       allValues:Boolean(chart.allValues),
-      selectedValues:Array.isArray(chart.selectedValues)
+      selectedValues:!oldName && Array.isArray(chart.selectedValues)
         ? [...new Set(chart.selectedValues.filter(v=>typeof v==="string"))].slice(0,500) : []
     };
   }
   function safeLocal(config) {
     // Browser preferences must not persist potentially sensitive document field values.
-    return {updatedAt:config.updatedAt,
+    return {version:config.version,updatedAt:config.updatedAt,
       charts:config.charts.map(c=>({...c,allValues:false,selectedValues:[]}))};
   }
   function loadConfig(config) {
     if (config && Array.isArray(config.charts)) {
       charts = config.charts.filter(c=>c && typeof c.id==="string").slice(0,60).map(normalChart);
       lastUpdated=Number(config.updatedAt)||0;
-    } else charts=defaults.map(c=>normalChart(c));
+      if(config.version!==2) {
+        for(const card of defaults.filter(item=>isRecent(item.type))) {
+          if(charts.length<60 && !charts.some(item=>item.type===card.type))
+            charts.push(normalChart(card));
+        }
+      }
+    } else charts=defaults.map(normalChart);
   }
   function persist() {
     lastUpdated=Date.now();
-    const config={charts,updatedAt:lastUpdated};
+    const config={version:2,charts,updatedAt:lastUpdated};
     try { localStorage.setItem(key,JSON.stringify(safeLocal(config))); }
     catch(_) {}
     if (saveTimer) clearTimeout(saveTimer);
@@ -66,7 +82,7 @@
         const token=root.querySelector('input[name="__RequestVerificationToken"]')?.value;
         const response=await fetch("/DynamicDashboard/SaveLayout",{
           method:"POST",credentials:"same-origin",
-          headers:{"Content-Type":"application/json","RequestVerificationToken":token||""},
+          headers:{...requestHeaders,"Content-Type":"application/json","RequestVerificationToken":token||""},
           body:JSON.stringify(config)
         });
         if(!response.ok)throw new Error("HTTP "+response.status);
@@ -81,7 +97,7 @@
     let cached=null;
     try { cached=JSON.parse(localStorage.getItem(key)||"null"); } catch(_){}
     try {
-      const response=await fetch("/DynamicDashboard/Layout",{credentials:"same-origin",cache:"no-store"});
+      const response=await fetch("/DynamicDashboard/Layout",{credentials:"same-origin",cache:"no-store",headers:requestHeaders});
       if(response.ok) {
         const remote=await response.json();
         if(Array.isArray(remote.charts)) { loadConfig(remote); return; }
@@ -119,7 +135,6 @@
     if(raw==="__creator")return row.creator?[row.creator]:[];
     if(raw==="__created")return row.created?[row.created]:[];
     if(raw==="__modified")return row.modified?[row.modified]:[];
-    if(raw==="__name")return row.name?[row.name]:[];
     if(raw==="__folder")return row.folder?[row.folder]:[];
     if(raw==="__pages")return row.pages==null?[]:[String(row.pages)];
     const value=row.fields&&row.fields[raw];
@@ -152,25 +167,36 @@
     const keys=unique(valuesFor(row,dimension).map(v=>groupKey(dimension,v)));
     return keys.length?keys:[EMPTY_VALUE];
   }
-  function observedValues(dimension) {
+  function observedValues(dimension, source=rows) {
     // Counts come from distinct readable documents, NOT a hardcoded list or field definition choices.
     const counts=new Map();
-    for(const row of rows)
+    for(const row of source)
       for(const value of new Set(categoryKeys(row,dimension)))
         counts.set(value,(counts.get(value)||0)+1);
     return [...counts.entries()]
       .map(([value,count])=>({value,count,label:value===EMPTY_VALUE?"بدون قيمة":value}))
       .sort((a,b)=>b.count-a.count||a.label.localeCompare(b.label,"ar"));
   }
+  function fieldRows(dimension) {
+    return /^\d+$/.test(dimension) ? rows.filter(row=>row.fields!=null) : rows;
+  }
   function selectedRows(chart) {
-    if(!chart.selectedValues.length)return rows;
+    let source=isRecent(chart.type)?rows:fieldRows(chart.dimension);
+    if(isDateRange(chart) && (chart.from||chart.to))
+      source=source.filter(row=>{
+        const day=dayKey(dateStamp(row.modified));
+        return day && (!chart.from||day>=chart.from) && (!chart.to||day<=chart.to);
+      });
+    if(!isRecent(chart.type) && chart.dimension==="__pages" && chart.pages!=null)
+      return source.filter(row=>row.pages!=null && Number(row.pages)===chart.pages);
+    if(isRecent(chart.type) || !chart.selectedValues.length)return source;
     const filter=new Set(chart.selectedValues);
-    return rows.filter(row=>categoryKeys(row,chart.dimension).some(v=>filter.has(v)!==Boolean(chart.allValues)));
+    return source.filter(row=>categoryKeys(row,chart.dimension).some(v=>filter.has(v)!==Boolean(chart.allValues)));
   }
   function summary(chart) {
     const source=selectedRows(chart);
     if(chart.type==="kpi")return {kpi:new Set(source.map(x=>x.id)).size,items:source,groups:[],extra:0};
-    const map=new Map(),selected=new Set(chart.selectedValues);
+    const map=new Map(),selected=new Set(chart.dimension==="__pages" && chart.pages!=null ? [] : chart.selectedValues);
     for(const row of source) {
       for(const key of new Set(categoryKeys(row,chart.dimension))) {
         if(selected.size&&selected.has(key)===Boolean(chart.allValues))continue;
@@ -183,7 +209,7 @@
     if(chart.dimension==="__created"||chart.dimension==="__modified")
       list.sort((a,b)=>a.label.localeCompare(b.label));
     else list.sort((a,b)=>b.value-a.value||a.label.localeCompare(b.label,"ar"));
-    const isChart=chart.type!=="table";
+    const isChart=!isTable(chart.type);
     return {groups:isChart?list.slice(0,30):list,extra:isChart?Math.max(0,list.length-30):0,
       totalGroups:list.length,items:source};
   }
@@ -196,7 +222,7 @@
     for (const [name, value] of [
       ["__RequestVerificationToken", root.querySelector('input[name="__RequestVerificationToken"]').value],
       ["title", title.slice(0, 180)],
-      ["entryIds", ids.join(",")]
+      ["repository", root.dataset.repository], ["entryIds", ids.join(",")]
     ]) {
       const input = document.createElement("input");
       input.type = "hidden";
@@ -208,100 +234,89 @@
     form.submit();
   }
 
-  function parseAuditCsv(text) {
-    const records = [];
-    let record = [], cell = "", quoted = false;
-    for (let i = 0; i < text.length; i++) {
-      const ch = text[i];
-      if (quoted) {
-        if (ch !== '"') cell += ch;
-        else if (text[i + 1] === '"') { cell += '"'; i++; }
-        else quoted = false;
-      } else if (ch === '"' && cell === "") {
-        quoted = true;
-      } else if (ch === ",") {
-        record.push(cell); cell = "";
-      } else if (ch === "\r" || ch === "\n") {
-        record.push(cell);
-        if (record.some(value => value.trim())) records.push(record);
-        if (ch === "\r" && text[i + 1] === "\n") i++;
-        record = []; cell = "";
-      } else {
-        cell += ch;
-      }
-    }
-    if (quoted) throw new Error("ملف CSV يحتوي على قيمة نصية غير مكتملة.");
-    record.push(cell);
-    if (record.some(value => value.trim())) records.push(record);
-    const [headers, ...events] = records;
-    if (!headers || headers.length < 2 || events.some(row => row.length !== headers.length))
-      throw new Error("اختر تقرير CSV مفصولاً بفواصل ويحتوي على عناوين الأعمدة.");
-    return {headers, events};
+  function recentRows(chart) {
+    const key=chart.type==="recent-created"?"created":"modified";
+    return selectedRows(chart)
+      .filter(row=>dateStamp(row[key]) && (key==="created" || (!dateStamp(row.created) || Date.parse(row.modified)>Date.parse(row.created))))
+      .sort((a,b)=>Date.parse(b[key])-Date.parse(a[key]) || a.id-b.id);
   }
 
-  function drawAuditTable(body, chart) {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = ".csv,text/csv";
-    input.setAttribute("aria-label", "استيراد تقرير Audit Trail");
-    const status = document.createElement("p");
-    status.className = "dd-values-help";
-    status.setAttribute("role", "status");
-    const wrap = document.createElement("div");
-    wrap.className = "dd-table-wrap";
-    const controls = document.createElement("div");
-    controls.className = "dd-values-actions";
-    let page = 0;
-    const back = iconButton("الصفحة السابقة", "‹", () => { page--; show(); });
-    const next = iconButton("الصفحة التالية", "›", () => { page++; show(); });
-    controls.append(back, status, next);
-    body.append(input, wrap, controls);
-
-    function show() {
-      wrap.replaceChildren();
-      const report = auditReports.get(chart.id);
-      back.disabled = page === 0;
-      next.disabled = !report || (page + 1) * 10 >= report.events.length;
-      status.textContent = report
-        ? `${report.events.length} حدث · صفحة ${page + 1} من ${Math.max(1, Math.ceil(report.events.length / 10))}`
-        : "اختر تقرير Audit Trail بصيغة CSV.";
-      if (!report) return;
-      const table = document.createElement("table");
-      table.className = "dd-table";
-      const heading = table.createTHead().insertRow();
-      for (const title of report.headers) {
-        const th = document.createElement("th");
-        th.scope = "col";
-        th.textContent = title;
-        heading.appendChild(th);
-      }
-      const tbody = table.createTBody();
-      for (const record of report.events.slice(page * 10, page * 10 + 10)) {
-        const row = tbody.insertRow();
-        for (const value of record) row.insertCell().textContent = value;
-      }
-      wrap.appendChild(table);
+  function drawTable(body, chart, headers, rows, cells, activate) {
+    body.classList.add("dd-table-visual");
+    const wrap=document.createElement("div");
+    wrap.className="dd-table-wrap";
+    const table=document.createElement("table");
+    table.className="dd-table";
+    const head=table.createTHead().insertRow();
+    for(const label of headers) {
+      const th=document.createElement("th");
+      th.scope="col";th.textContent=label;head.appendChild(th);
     }
-
-    input.addEventListener("change", async () => {
-      const file = input.files[0];
-      if (!file) return;
-      input.disabled = true;
-      try {
-        if (file.size > 5 * 1024 * 1024) throw new Error("الحد الأقصى لحجم التقرير 5 ميغابايت.");
-        const report = parseAuditCsv(await file.text());
-        auditReports.set(chart.id, report);
-        page = 0;
-        show();
-      } catch (error) {
-        status.textContent = error.message;
-      } finally {
-        input.value = "";
-        input.disabled = false;
+    const tbody=table.createTBody();
+    wrap.appendChild(table);
+    const nav=document.createElement("nav");
+    nav.className="dd-pager";
+    nav.setAttribute("aria-label","صفحات الجدول");
+    body.append(wrap,nav);
+    const size=10;
+    const total=Math.max(1,Math.ceil(rows.length/size));
+    function show(page) {
+      page=Math.min(total,Math.max(1,page));
+      tablePages.set(chart.id,page);
+      tbody.replaceChildren();
+      nav.replaceChildren();
+      if(!rows.length) {
+        const cell=tbody.insertRow().insertCell();
+        cell.colSpan=headers.length;cell.textContent="لا توجد مستندات مطابقة.";
       }
-    });
-    show();
+      for(const item of rows.slice((page-1)*size,page*size)) {
+        const row=tbody.insertRow();
+        for(const value of cells(item))row.insertCell().textContent=value;
+        row.tabIndex=0;row.style.cursor="pointer";
+        row.addEventListener("click",()=>activate(item));
+        row.addEventListener("keydown",event=>{
+          if(event.key==="Enter"||event.key===" "){event.preventDefault();activate(item);}
+        });
+      }
+      nav.hidden=total===1;
+      if(total===1)return;
+      function button(label, target, disabled) {
+        const control=iconButton(label,label,()=>show(target));
+        control.className="dd-btn";
+        control.disabled=disabled;
+        nav.appendChild(control);
+        return control;
+      }
+      button("السابق",page-1,page===1);
+      const first=Math.max(1,Math.min(page-2,total-4));
+      for(let index=first;index<=Math.min(total,first+4);index++) {
+        const control=button(String(index),index,index===page);
+        if(index===page)control.setAttribute("aria-current","page");
+      }
+      button("التالي",page+1,page===total);
+      const input=document.createElement("input");
+      input.type="number";input.min="1";input.max=String(total);input.value=String(page);
+      input.setAttribute("aria-label","رقم الصفحة");
+      const go=()=>{if(input.checkValidity() && input.value)show(Number(input.value));};
+      const submit=iconButton("انتقال","انتقال",go);
+      submit.className="dd-btn";
+      input.addEventListener("keydown",event=>{if(event.key==="Enter")go();});
+      nav.append(input,submit);
+      nav.append("من "+total);
+    }
+    show(tablePages.get(chart.id)||1);
   }
+
+  function drawRecentTable(body,chart) {
+    const modified=chart.type==="recent-modified";
+    const headers=["اسم المستند","المجلد","القالب","تاريخ الإنشاء",
+      ...(modified?["تاريخ التعديل"]:[]),"أنشأه"];
+    const format=value=>dateStamp(value)?.toLocaleString("ar-SA",{calendar:"gregory"})||"—";
+    drawTable(body,chart,headers,recentRows(chart),row=>[row.name,row.folder||"—",row.template||"—",
+      format(row.created),...(modified?[format(row.modified)]:[]),row.creator||"—"],
+      row=>openArchive(row.name,[row]));
+  }
+
   function iconButton(title,symbol,handler) {
     const b=document.createElement("button");b.type="button";b.className="dd-icon-btn";
     b.textContent=symbol;b.title=title;b.setAttribute("aria-label",title);
@@ -311,14 +326,14 @@
     const ghost=Boolean(chart.hidden);
     const el=document.createElement("article");
     el.className="dd-card"+(chart.wide?" wide":"")+(ghost?" dd-ghost":"");
-    el.style.height=chart.height+"px";
+    el.classList.toggle("dd-graph",!isTable(chart.type)&&chart.type!=="kpi");
     el.style.gridColumn="span "+(chart.span||6);
     el.dataset.id=chart.id;el.draggable=editMode;
     const header=document.createElement("header");header.className="dd-card-head";
     const headText=document.createElement("div"),title=document.createElement("strong");
     title.textContent=chart.title;headText.appendChild(title);
     const sub=document.createElement("small");sub.className="dd-card-sub";
-    sub.textContent=chart.type==="audit"?"Laserfiche Audit Trail":(fieldMeta(chart.dimension)?.name||"الوثائق")+" · عدد الوثائق";
+    sub.textContent=isRecent(chart.type)?"بيانات مباشرة من Laserfiche":(fieldMeta(chart.dimension)?.name||"الوثائق")+" · عدد الوثائق";
     headText.appendChild(sub);
     const actions=document.createElement("div");actions.className="dd-card-actions";
     if(editMode) {
@@ -331,7 +346,7 @@
         iconButton(ghost?"إظهار الشارت":"إخفاء الشارت",ghost?"◉":"◌",
           ()=>{chart.hidden=!chart.hidden;persist();render();}),
         iconButton("حذف الشارت","×",()=>{if(window.confirm("حذف هذا الشارت من لوحتك؟")){
-          auditReports.delete(chart.id);charts=charts.filter(c=>c.id!==chart.id);persist();render();}}),
+          tablePages.delete(chart.id);charts=charts.filter(c=>c.id!==chart.id);persist();render();}}),
         iconButton("اسحب لتغيير الترتيب","⠿",()=>{})
       );
     }
@@ -341,26 +356,24 @@
     if(editMode) {
       const resize=document.createElement("button");
       resize.className="dd-resize-handle";resize.type="button";
-      resize.title="اسحب لتغيير عرض وارتفاع الكارد ضمن الحدود المناسبة";
+      resize.title="اسحب لتغيير عرض الكرت";
       resize.setAttribute("aria-label",resize.title);
       resize.textContent="⤢";
       resize.addEventListener("pointerdown",event=>{
         if(event.button!==0)return;
         event.preventDefault();event.stopPropagation();
         const grid=$("dd-grid").getBoundingClientRect();
-        const unit=grid.width/12,startX=event.clientX,startY=event.clientY;
-        const startSpan=chart.span||6,startHeight=chart.height;
-        const minWidth=chart.type==="kpi"?220:["table","audit"].includes(chart.type)?360:400;
+        const unit=grid.width/12,startX=event.clientX;
+        const startSpan=chart.span||6;
+        const minWidth=chart.type==="kpi"?220:isTable(chart.type)?360:400;
         const minSpan=Math.min(12,Math.max(4,Math.ceil(minWidth/Math.max(unit,1))));
         resize.setPointerCapture(event.pointerId);
         const onMove=ev=>{
           const direction=getComputedStyle(el).direction==="rtl"?1:-1;
           const delta=(startX-ev.clientX)*direction;
           chart.span=Math.min(12,Math.max(minSpan,Math.round(startSpan+delta/Math.max(unit,1))));
-          chart.height=Math.max(minHeight(chart.type),Math.min(620,Math.round(startHeight+ev.clientY-startY)));
           chart.wide=chart.span===12;
           el.style.gridColumn="span "+chart.span;
-          el.style.height=chart.height+"px";
           const canvas=el.querySelector("canvas");
           if(canvas&&window.Chart)window.Chart.getChart(canvas)?.resize();
         };
@@ -380,8 +393,8 @@
       const text=document.createElement("p");text.className="dd-ghost-note";
       text.textContent="العنصر مخفي؛ اضغط زر العين لإظهاره";
       body.appendChild(text);
-    } else if(chart.type==="audit") {
-      drawAuditTable(body,chart);
+    } else if(isRecent(chart.type)) {
+      drawRecentTable(body,chart);
     } else {
       const data=summary(chart);
       const partialText=partial?"نتيجة جزئية من الوثائق المقروءة — ليست إجمالي المستودع":"";
@@ -410,25 +423,9 @@
           });
         }
       } else if(chart.type==="table") {
-        const wrap=document.createElement("div");wrap.className="dd-table-wrap";
-        const table=document.createElement("table");table.className="dd-table";
-        const tr=document.createElement("tr");
-        [fieldMeta(chart.dimension)?.name||"القيمة","عدد الوثائق"].forEach(t=>{
-          const th=document.createElement("th");th.textContent=t;tr.appendChild(th);});
-        const thead=document.createElement("thead");thead.appendChild(tr);table.appendChild(thead);
-        const tbody=document.createElement("tbody");
-        for(const group of data.groups) {
-          const row=document.createElement("tr");row.style.cursor="pointer";
-          for(const value of [group.label,group.value.toLocaleString("ar-SA")]) {
-            const td=document.createElement("td");td.textContent=value;row.appendChild(td);
-          }
-          row.tabIndex=0;
-          row.addEventListener("click",()=>openArchive(group.label,group.docs));
-          row.addEventListener("keydown",event=>{
-            if(event.key==="Enter"||event.key===" "){event.preventDefault();row.click();}
-          });tbody.appendChild(row);
-        }
-        table.appendChild(tbody);wrap.appendChild(table);body.appendChild(wrap);
+        drawTable(body,chart,[fieldMeta(chart.dimension)?.name||"القيمة","عدد الوثائق"],data.groups,
+          group=>[group.label,group.value.toLocaleString("ar-SA")],
+          group=>openArchive(group.label,group.docs));
       } else if(!window.Chart) {
         const p=document.createElement("p");p.textContent="مكتبة الرسم المحلي غير متاحة";body.appendChild(p);
       } else {
@@ -468,15 +465,15 @@
           type,
           data:{labels:data.groups.map(g=>g.label),datasets:[{
             label:"عدد الوثائق",data:data.groups.map(g=>g.value),
-            borderColor:"#2367c6",backgroundColor:circ?data.groups.map((_,i)=>palette[i%palette.length]):"#2367c6",
+            borderColor:palette[0],backgroundColor:type==="line"?palette[0]:data.groups.map((_,i)=>palette[i%palette.length]),
             fill:false,borderWidth:type==="line"?2:0,tension:.27,borderRadius:type==="bar"?4:0
           }]},
           options:{
             responsive:true,maintainAspectRatio:false,indexAxis:axis?"y":"x",
             plugins:{legend:{display:false},tooltip:{backgroundColor:"#0b1c49"}},
             scales:circ?{}:{
-              x:{grid:{display:axis,color:"#eef1f6"},ticks:{color:"#657469",maxRotation:30,autoSkip:true}},
-              y:{beginAtZero:true,grid:{color:axis?"transparent":"#eef1f6"},ticks:{color:"#657469"}}
+              x:{grid:{display:axis,color:"#eef1f6"},ticks:{font:{size:14},color:"#506678",maxRotation:30,autoSkip:true}},
+              y:{beginAtZero:true,grid:{color:axis?"transparent":"#eef1f6"},ticks:{font:{size:14},color:"#506678"}}
             },
             onClick:(_,points)=>{const group=data.groups[points[0]?.index];if(group)openArchive(group.label,group.docs);}
           }
@@ -493,7 +490,7 @@
     el.addEventListener("dragend",()=>el.classList.remove("is-dragging"));
     el.addEventListener("dragover",event=>{if(editMode)event.preventDefault();});
     el.addEventListener("drop",event=>{
-      if(!editMode)return;
+      if(!editMode || busy)return;
       event.preventDefault();const source=event.dataTransfer?.getData("text/plain");
       if(!source||source===chart.id)return;
       const i=charts.findIndex(c=>c.id===source),j=charts.findIndex(c=>c.id===chart.id);
@@ -515,7 +512,10 @@
     $("dd-empty").classList.toggle("dd-hidden",charts.some(c=>!c.hidden)||editMode&&charts.length>0);
   }
   function selectedValidChoices() {
-    return observedValues(editing.dimension);
+    const source=editing.dimension==="__modified"
+      ? selectedRows({...editing,selectedValues:[],from:$("dd-modified-from").value,to:$("dd-modified-to").value})
+      : fieldRows(editing.dimension);
+    return observedValues(editing.dimension,source);
   }
   function valueChoices() {
     const target=$("dd-value-list");target.replaceChildren();
@@ -524,10 +524,12 @@
     const categories=selectedValidChoices();
     const visible=categories.filter(x=>x.label.toLocaleLowerCase().includes(term));
     const selected=new Set(editing.selectedValues);
-    if(!visible.length) {
+    if(!visible.length || (visible.length===1 && visible[0].value===EMPTY_VALUE &&
+        !BUILTIN.some(field=>field.id===editing.dimension))) {
       const p=document.createElement("p");p.className="dd-values-help";
       p.textContent=partial
         ?"لا توجد قيم ضمن الوثائق التي أمكن قراءتها؛ قد تكون البيانات غير مكتملة."
+        :visible.length?"لا توجد قيم مقروءة لهذا الحقل ضمن الوثائق المتاحة."
         :"لا توجد قيم مطابقة للبحث في الوثائق المتاحة.";
       target.appendChild(p);
     }
@@ -562,13 +564,15 @@
     const item=charts.find(c=>c.id===id);
     editing=item?structuredClone(item):{
       id:"custom-"+Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,6),
-      title:"شارت جديد",type:"bar",dimension:"__template",height:340,
+      title:"شارت جديد",type:"bar",dimension:"__template",
       wide:false,hidden:false,selectedValues:[]
     };
     $("dd-title").value=editing.title;$("dd-type").value=editing.type;
-    $("dd-height").min=String(minHeight(editing.type));
-    $("dd-height").value=editing.height;$("dd-heightlabel").textContent=editing.height+"px";
-    const isField=!BUILTIN.some(f=>f.id===editing.dimension);
+    $("dd-modified-from").value=editing.from||"";
+    $("dd-modified-to").value=editing.to||"";
+    $("dd-pages").value=editing.pages??"";
+    $("dd-filter-error").classList.add("dd-hidden");
+    const isField=Boolean(editing.dimension) && !BUILTIN.some(f=>f.id===editing.dimension);
     selectOptions($("dd-dimension"),[
       ...BUILTIN.map(f=>({value:f.id,label:f.name})),
       {value:"__fields",label:"حقول"}
@@ -583,13 +587,14 @@
     $("dd-editoroverlay").classList.remove("dd-hidden");
   }
   function updateEditorSource() {
-    const audit=$("dd-type").value==="audit";
+    const recent=isRecent(editing.type);
     const usesField=$("dd-dimension").value==="__fields";
-    $("dd-document-options").classList.toggle("dd-hidden",audit);
-    $("dd-audit-help").classList.toggle("dd-hidden",!audit);
-    $("dd-field-options").classList.toggle("dd-hidden",!usesField);
-    $("dd-save").disabled=!audit&&!editing.dimension;
-    $("dd-value-summary").hidden=!editing.dimension;
+    $("dd-axis-options").classList.toggle("dd-hidden",recent);
+    $("dd-field-options").classList.toggle("dd-hidden",!usesField || recent);
+    $("dd-modified-range").classList.toggle("dd-hidden",!isDateRange(editing));
+    $("dd-page-count").classList.toggle("dd-hidden",recent || editing.dimension!=="__pages");
+    $("dd-category-options").classList.toggle("dd-hidden",recent || editing.dimension==="__pages");
+    $("dd-save").disabled=!recent&&!editing.dimension;
   }
   function changeDimension() {
     if(!editing)return;
@@ -605,9 +610,20 @@
     if(!editing)return;
     editing.title=$("dd-title").value.trim()||"شارت بدون عنوان";
     editing.type=$("dd-type").value;
-    if(editing.type!=="audit"&&!editing.dimension)return;
-    if(editing.type!=="audit")auditReports.delete(editing.id);
-    editing.height=Math.max(minHeight(editing.type),Number($("dd-height").value)||340);
+    if(!isRecent(editing.type)&&!editing.dimension)return;
+    editing.from=isDateRange(editing)?$("dd-modified-from").value:"";
+    editing.to=isDateRange(editing)?$("dd-modified-to").value:"";
+    editing.pages=editing.dimension==="__pages"?pageCount($("dd-pages").value):null;
+    const invalidRange=editing.from && editing.to && editing.from>editing.to;
+    const invalidPages=!isRecent(editing.type) && editing.dimension==="__pages" && !$("dd-pages").checkValidity();
+    if(invalidRange || invalidPages) {
+      const error=$("dd-filter-error");
+      error.textContent=invalidRange?"تاريخ البداية يجب أن يسبق تاريخ النهاية أو يطابقه.":"أدخل عدد صفحات صحيحًا يبدأ من صفر.";
+      error.classList.remove("dd-hidden");
+      return;
+    }
+    if(editing.dimension==="__pages")editing.selectedValues=[];
+    tablePages.delete(editing.id);
     // Only store chosen category identifiers; aggregation always counts unique documents.
     const entry=normalChart(editing);
     const index=charts.findIndex(c=>c.id===entry.id);
@@ -616,13 +632,19 @@
   }
   async function refresh() {
     if(busy)return;busy=true;
-    $("dd-refresh").disabled=true;$("dd-refresh").textContent="⏳ تحميل بيانات Laserfiche...";
+    if(editing)closeEditor();
+    $("dd-refresh").disabled=true;
+    $("dd-customize").disabled=true;
+    $("dd-loading").classList.remove("dd-hidden");
+    $("dd-grid").setAttribute("aria-busy","true");
     $("dd-warning").classList.add("dd-hidden");
     try {
       const [catalog,records]=await Promise.all([
-        fetch("/DynamicDashboard/Fields",{credentials:"same-origin",cache:"no-store"}),
-        fetch("/DynamicDashboard/Rows",{credentials:"same-origin",cache:"no-store"})
+        fetch("/DynamicDashboard/Fields",{credentials:"same-origin",cache:"no-store",headers:requestHeaders}),
+        fetch("/DynamicDashboard/Rows",{credentials:"same-origin",cache:"no-store",headers:requestHeaders})
       ]);
+      if ([catalog.status,records.status].includes(409))
+        throw new Error("تغيّر المستودع في تبويب آخر. أعد تحميل الصفحة.");
       if (!catalog.ok||!records.ok) throw new Error(
         [catalog.status,records.status].includes(401)||[catalog.status,records.status].includes(403)
           ?"لا توجد صلاحية لقراءة بيانات هذه الجلسة. سجل الدخول من جديد.":"تعذر قراءة بيانات المستودع من Laserfiche.");
@@ -639,10 +661,63 @@
       $("dd-warning").classList.remove("dd-hidden");
       rows=[];fields=[];partial=false;render();
     } finally{
-      busy=false;$("dd-refresh").disabled=false;$("dd-refresh").textContent="⟳ تحديث البيانات";
+      busy=false;$("dd-refresh").disabled=false;$("dd-customize").disabled=false;
+      $("dd-loading").classList.add("dd-hidden");
+      $("dd-grid").removeAttribute("aria-busy");
     }
   }
+  function wireRepositorySwitch() {
+    const dialog=$("dd-repository-dialog"), form=dialog.querySelector("form");
+    const select=$("dd-repository-list"), submit=$("dd-repository-submit");
+    const password=$("dd-repository-password"), message=$("dd-repository-message");
+    $("dd-repository").addEventListener("click",async()=>{
+      password.value="";
+      password.required=false;
+      $("dd-repository-password-wrap").hidden=true;
+      select.replaceChildren();
+      submit.disabled=true;
+      message.textContent="جارٍ قراءة المستودعات…";
+      dialog.showModal();
+      try {
+        const response=await fetch("/DynamicDashboard/Repositories",
+          {credentials:"same-origin",cache:"no-store",headers:requestHeaders});
+        if(!response.ok)throw new Error();
+        const result=await response.json();
+        const choices=result.repositories.filter(item=>
+          item.id.toLowerCase()!==root.dataset.repository.toLowerCase());
+        selectOptions(select,choices.map(item=>({value:item.id,label:item.name||item.id})),
+          "","اختر المستودع");
+        $("dd-repository-password-wrap").hidden=!result.requiresPassword;
+        password.required=Boolean(result.requiresPassword);
+        message.textContent=choices.length?"":"لا توجد مستودعات أخرى في القائمة التي أعادها Laserfiche.";
+        submit.disabled=!choices.length;
+      } catch {
+        message.textContent="تعذر قراءة المستودعات من Laserfiche.";
+      }
+    });
+    $("dd-repository-cancel").addEventListener("click",()=>dialog.close());
+    dialog.addEventListener("close",()=>{password.value="";});
+    form.addEventListener("submit",async event=>{
+      event.preventDefault();
+      submit.disabled=true;
+      message.textContent="";
+      try {
+        const response=await fetch(form.action,{
+          method:"POST",credentials:"same-origin",headers:requestHeaders,body:new FormData(form)
+        });
+        const result=await response.json().catch(()=>({}));
+        if(!response.ok || !result.url)throw new Error(result.error||"تعذر تبديل المستودع.");
+        window.location.assign(result.url);
+      } catch(error) {
+        password.value="";
+        message.textContent=error.message;
+        submit.disabled=false;
+      }
+    });
+  }
+
   function wire() {
+    wireRepositorySwitch();
     $("dd-refresh").addEventListener("click",refresh);
     $("dd-customize").addEventListener("click",()=>{
       editMode=!editMode;
@@ -663,23 +738,18 @@
       if(!editing)return;
       editing.type=event.target.value;
       updateEditorSource();
-      const lower=minHeight(editing.type);
-      $("dd-height").min=String(lower);
-      if(Number($("dd-height").value)<lower)$("dd-height").value=String(lower);
-      $("dd-heightlabel").textContent=$("dd-height").value+"px";
     });
     $("dd-dimension").addEventListener("change",changeDimension);
     $("dd-field").addEventListener("change",changeDimension);
     $("dd-value-search").addEventListener("input",valueChoices);
+    $("dd-modified-from").addEventListener("change",valueChoices);
+    $("dd-modified-to").addEventListener("change",valueChoices);
     $("dd-clear-values").addEventListener("click",()=>{
       if(!editing||!editing.dimension)return;
       editing.allValues=true;
       editing.selectedValues=[];
       $("dd-value-search").value="";
       valueChoices();
-    });
-    $("dd-height").addEventListener("input",event=>{
-      $("dd-heightlabel").textContent=event.target.value+"px";
     });
   }
   loadConfig(null);wire();

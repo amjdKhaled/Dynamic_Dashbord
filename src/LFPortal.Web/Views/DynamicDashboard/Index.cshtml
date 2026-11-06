@@ -6,7 +6,7 @@
 @section Styles {
     <link rel="stylesheet" href="~/css/dynamic-dashboard.css" asp-append-version="true" />
 }
-<div class="dd-page" id="dynamicDashboard" dir="rtl" data-scope="@scope" data-archive-url="@Url.Action("OpenDashboardSelection", "Archive")">
+<div class="dd-page" id="dynamicDashboard" dir="rtl" data-scope="@scope" data-repository="@ViewBag.RepositoryId" data-archive-url="@Url.Action("OpenDashboardSelection", "Archive")">
     @Html.AntiForgeryToken()
     <header class="dd-header">
         <div class="dd-headline">
@@ -14,6 +14,7 @@
             <p>أنشئ مؤشراتك وشارتاتك من بيانات وحقول Laserfiche المباشرة</p>
         </div>
         <div class="dd-head-actions">
+            <button type="button" class="dd-btn" id="dd-repository">تبديل المستودع · @ViewBag.RepositoryId</button>
             <button type="button" class="dd-btn" id="dd-refresh">⟳ تحديث البيانات</button>
             <button type="button" class="dd-btn" id="dd-customize" aria-pressed="false">⚙ تخصيص اللوحة</button>
             <button type="button" class="dd-btn dd-btn-primary dd-hidden" id="dd-add">＋ إضافة شارت</button>
@@ -26,10 +27,27 @@
                 <div class="dd-hint">يُحفظ التخصيص لكل مستخدم ومستودع على خادم اللوحة</div>
             </div>
             <p id="dd-warning" class="dd-warning dd-hidden" role="alert"></p>
+            <div id="dd-loading" class="dd-loading" role="status" aria-label="تحميل بيانات Laserfiche"><span></span></div>
             <div class="dd-grid" id="dd-grid"></div>
             <div id="dd-empty" class="dd-empty dd-hidden">لا توجد شارتات ظاهرة. اضغط «إضافة شارت» لبدء إنشاء تحليلك.</div>
         </section>
     </div>
+    <dialog id="dd-repository-dialog" class="dd-repository-dialog">
+        <form method="post" action="@Url.Action("SwitchRepository", "Login")">
+            @Html.AntiForgeryToken()
+            <label class="dd-label" for="dd-repository-list">مستودع Laserfiche</label>
+            <select class="dd-control" id="dd-repository-list" name="repository" required></select>
+            <div id="dd-repository-password-wrap" hidden>
+                <label class="dd-label" for="dd-repository-password">كلمة مرور حسابك الحالي</label>
+                <input class="dd-control" id="dd-repository-password" type="password" name="password" autocomplete="current-password" />
+            </div>
+            <p id="dd-repository-message" role="status"></p>
+            <div class="dd-editor-actions">
+                <button type="button" id="dd-repository-cancel" class="dd-btn">إلغاء</button>
+                <button type="submit" id="dd-repository-submit" class="dd-btn dd-btn-primary" disabled>تبديل المستودع</button>
+            </div>
+        </form>
+    </dialog>
     <div id="dd-editoroverlay" class="dd-overlay dd-hidden">
         <section class="dd-editor" role="dialog" aria-modal="true" aria-labelledby="dd-editor-title">
             <div class="dd-editor-head">
@@ -46,16 +64,27 @@
                 <option value="doughnut">دائري مجوف</option>
                 <option value="pie">دائري</option>
                 <option value="table">جدول</option>
-                <option value="audit">جدول Audit Trail</option>
+                <option value="recent-created">جدول المستندات المنشأة حديثًا</option>
+                <option value="recent-modified">جدول نشاط المستندات الأخير</option>
                 <option value="kpi">بطاقة رقم</option>
             </select>
-            <div id="dd-document-options">
+            <div id="dd-axis-options">
             <label class="dd-label" for="dd-dimension">البيانات / المحور التصنيفي</label>
             <select class="dd-control" id="dd-dimension"></select>
             <div id="dd-field-options" class="dd-hidden">
                 <label class="dd-label" for="dd-field">الحقل</label>
                 <select class="dd-control" id="dd-field"></select>
             </div>
+            </div>
+            <div id="dd-modified-range" class="dd-dates dd-hidden">
+                <label class="dd-label">من تاريخ <input type="date" id="dd-modified-from" class="dd-control" /></label>
+                <label class="dd-label">إلى تاريخ <input type="date" id="dd-modified-to" class="dd-control" /></label>
+            </div>
+            <div id="dd-page-count" class="dd-hidden">
+                <label class="dd-label" for="dd-pages">عدد الصفحات (مطابقة الرقم)</label>
+                <input type="number" min="0" step="1" max="2147483647" id="dd-pages" class="dd-control" />
+            </div>
+            <div id="dd-category-options">
             <label class="dd-label" for="dd-value-search">القيم الموجودة في الوثائق (اختياري)</label>
             <p class="dd-values-help">القيم مأخوذة من حقول الوثائق التي يحق لك قراءتها في Laserfiche. اختر قيمة أو أكثر، أو اترك الاختيار فارغًا لعرض جميع القيم. عدد الوثائق يُحسب تلقائيًا.</p>
             <div class="dd-values-actions">
@@ -65,10 +94,7 @@
             <div id="dd-value-list" class="dd-value-list" aria-live="polite"></div>
             <div id="dd-value-summary" class="dd-value-summary"></div>
             </div>
-            <p id="dd-audit-help" class="dd-values-help dd-hidden">استورد تقرير Audit Trail بصيغة CSV من داخل الجدول بعد حفظه. يبقى التقرير في هذه الصفحة حتى إغلاقها أو تحديثها.</p>
-            <label class="dd-label" for="dd-height">ارتفاع الكرت</label>
-            <input id="dd-height" type="range" min="280" max="620" step="20" value="340" />
-            <div class="dd-heightlabel" id="dd-heightlabel">320px</div>
+            <p id="dd-filter-error" class="dd-warning dd-hidden" role="alert"></p>
             <div class="dd-editor-actions">
                 <button type="button" id="dd-cancel" class="dd-btn">إلغاء</button>
                 <button type="button" id="dd-save" class="dd-btn dd-btn-primary">حفظ الشارت</button>

@@ -8,23 +8,26 @@ const source=readFileSync(new URL("../src/LFPortal.Web/wwwroot/js/dynamic-dashbo
 const valuesStart=source.indexOf("  function valuesFor(row,id) {");
 const valuesEnd=source.indexOf("  function number(value) {",valuesStart);
 const groupStart=source.indexOf("  function groupKey(id,value) {");
+const utilitiesStart=source.indexOf("  const isRecent =");
+const utilitiesEnd=source.indexOf("  const tablePages",utilitiesStart);
+const dayStart=source.indexOf("  function dayKey");
 const groupEnd=source.indexOf("  function openArchive(title, docs) {",groupStart);
 assert.ok(valuesStart>=0 && valuesEnd>valuesStart && groupStart>=0 && groupEnd>groupStart,
   "The actual aggregation functions must be present in the bundled script");
 
-const implementation=source.slice(valuesStart,valuesEnd)+"\n"+source.slice(groupStart,groupEnd);
+const implementation=source.slice(valuesStart,valuesEnd)+"\n"+source.slice(utilitiesStart,utilitiesEnd)+source.slice(dayStart,groupEnd);
 const make=new Function("seedRows",[
   'const EMPTY_VALUE="\\u0000no-value";',
   'const unique=values=>[...new Set(values.filter(v=>v!==null&&v!==undefined&&String(v).trim()!=="").map(String))];',
   'const dateStamp=value=>{const time=Date.parse(value);return Number.isFinite(time)?new Date(time):null;};',
   'let rows=seedRows;',
   implementation,
-  'return {observedValues,selectedRows,summary};'
+  'return {observedValues,selectedRows,summary,pageCount};'
 ].join("\n"));
 const rows=[
-  {id:1,template:"Contracts",fields:{"123":["High","Medium"]},created:"2026-01-11T12:00:00Z"},
-  {id:2,template:"Invoices",fields:{"123":["High","High"]},created:"2026-01-12T12:00:00Z"},
-  {id:3,template:"Contracts",fields:{},created:"2026-02-12T12:00:00Z"}
+  {id:1,template:"Contracts",fields:{"123":["High","Medium"]},created:"2026-01-11T12:00:00",modified:"2026-02-01T00:00:00",pages:0},
+  {id:2,template:"Invoices",fields:{"123":["High","High"]},created:"2026-01-12T12:00:00",modified:"2026-02-03T23:59:59",pages:3},
+  {id:3,template:"Contracts",fields:{},created:"2026-02-12T12:00:00",modified:"2026-02-12T12:00:00",pages:null}
 ];
 const engine=make(rows);
 const chart=(dimension,selectedValues=[],type="bar")=>({dimension,selectedValues,type});
@@ -75,12 +78,17 @@ test("select all includes every category and supports individual exclusions",()=
   assert.ok(!result.groups.some(group=>group.label==="High"));
 });
 
-test("Audit Trail CSV retains commas, escaped quotes and line breaks inside cells",()=>{
-  const start=source.indexOf("  function parseAuditCsv(");
-  const end=source.indexOf("  function drawAuditTable(",start);
-  assert.ok(start>=0 && end>start);
-  const parse=new Function(source.slice(start,end)+"\nreturn parseAuditCsv;")();
-  const result=parse('Event,User,Note\r\nOpen,Admin,"First, ""quoted""\r\nsecond"\r\n');
-  assert.deepEqual(result,{headers:["Event","User","Note"],events:[["Open","Admin",'First, "quoted"\r\nsecond']]});
-  assert.throws(()=>parse('Event,User\nOpen,"Admin'));
+test("modification date filter includes both selected days",()=>{
+  const config={...chart("__modified"),from:"2026-02-01",to:"2026-02-03"};
+  assert.deepEqual(engine.summary(config).items.map(row=>row.id),[1,2]);
+  assert.deepEqual(engine.summary({...config,from:"",to:"2026-02-01"}).items.map(row=>row.id),[1]);
+  assert.deepEqual(engine.summary({...config,from:"2026-02-12",to:""}).items.map(row=>row.id),[3]);
+});
+
+test("exact page counts accept zero but distinguish missing and reject invalid inputs",()=>{
+  assert.equal(engine.pageCount("0"),0);
+  for(const value of ["","-1","1.2","2147483648","test"])assert.equal(engine.pageCount(value),null);
+  assert.deepEqual(engine.summary({...chart("__pages"),pages:0}).items.map(row=>row.id),[1]);
+  assert.deepEqual(engine.summary({...chart("__pages"),pages:3}).items.map(row=>row.id),[2]);
+  assert.deepEqual(engine.summary({...chart("__pages"),pages:7}).items,[]);
 });

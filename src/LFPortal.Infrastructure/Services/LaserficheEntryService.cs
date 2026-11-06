@@ -66,45 +66,26 @@ internal sealed class LaserficheEntryService : ILaserficheEntryService
         var url = _adapter.BuildEntryUrl(repo.RepositoryId, entryId, Adapters.EntryResource.Fields);
 
         using var client = _httpClientFactory.CreateClient("LaserficheAuthenticated");
-        using var response = await client.GetAsync(url, cancellationToken).ConfigureAwait(false);
-        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        var contentType = response.Content.Headers.ContentType?.ToString() ?? "(missing)";
-
-        // Field values can contain personal or confidential information.
-        // Do not log response bodies during analytics scans.
-        _logger.LogDebug(
-            "Entry field response: Repository={Repository}; EntryId={EntryId}; HTTP={Status}; ContentType={ContentType}; BodyLength={BodyLength}.",
-            repo.RepositoryId, entryId, (int)response.StatusCode, contentType, body.Length);
-
-        if (!response.IsSuccessStatusCode)
+        var results = new List<LFFieldValue>();
+        var visited = new HashSet<string>(StringComparer.Ordinal);
+        string? nextUrl = url;
+        while (nextUrl is not null)
         {
-            throw new LaserficheException(
-                $"Laserfiche API returned HTTP {(int)response.StatusCode} for {url}. Body: {body}",
-                (int)response.StatusCode);
+            if (!visited.Add(nextUrl) || visited.Count > 100)
+                throw new JsonException("Entry fields pagination exceeded the safe limit.");
+
+            using var response = await client.GetAsync(nextUrl, cancellationToken).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+                throw new LaserficheException($"Laserfiche field request returned HTTP {(int)response.StatusCode}.",
+                    (int)response.StatusCode);
+            var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(body)) break;
+            var (resources, nextLink) = ParseFieldResources(body);
+            results.AddRange(resources.Select(MapFieldValue));
+            nextUrl = string.IsNullOrWhiteSpace(nextLink) ? null : ResolveNextLink(nextUrl, nextLink)
+                ?? throw new JsonException("Entry fields returned an invalid continuation URL.");
         }
-
-        if (string.IsNullOrWhiteSpace(body))
-        {
-            _logger.LogInformation(
-                "ARCHIVE METADATA DIAGNOSTIC: EntryId={EntryId} FieldsApiStatus=HTTP {Status} " +
-                "RawFields=0 ParsedFields=0 FieldDefinitions=resolved later",
-                entryId, (int)response.StatusCode);
-            return [];
-        }
-
-        var resources = ParseFieldResources(body);
-        var parsed = resources.Select(MapFieldValue).ToList().AsReadOnly();
-
-        _logger.LogInformation(
-            "ARCHIVE METADATA DIAGNOSTIC: EntryId={EntryId} FieldsApiStatus=HTTP {Status} " +
-            "RawFields={RawCount} ParsedFields={ParsedCount} fieldDefinitionIds=[{Ids}]",
-            entryId,
-            (int)response.StatusCode,
-            resources.Count,
-            parsed.Count,
-            string.Join(", ", parsed.Select(f => f.FieldDefinitionId)));
-
-        return parsed;
+        return results.AsReadOnly();
     }
 
     /// <inheritdoc />
@@ -580,7 +561,7 @@ internal sealed class LaserficheEntryService : ILaserficheEntryService
     /// an optional property is absent; name resolution happens later via
     /// FieldDefinitions.
     /// </summary>
-    private static List<FieldResource> ParseFieldResources(string body)
+    private static (List<FieldResource> Fields, string? NextLink) ParseFieldResources(string body)
     {
         using var document = JsonDocument.Parse(body);
         var root = document.RootElement;
@@ -621,7 +602,9 @@ internal sealed class LaserficheEntryService : ILaserficheEntryService
             }
         }
 
-        return resources;
+        var nextLink = root.ValueKind == JsonValueKind.Object
+            ? ReadString(root, "@odata.nextLink") ?? ReadString(root, "nextLink") : null;
+        return (resources, nextLink);
     }
 
     private static bool TryGetArray(
@@ -643,10 +626,11 @@ internal sealed class LaserficheEntryService : ILaserficheEntryService
     {
         // Confirmed Laserfiche v1 EntryFieldValue shape:
         // fieldId, fieldName, fieldType, and values[].value.
-        // Keep the older property names as compatibility fallbacks for other
-        // Repository API v1 builds.
+        // V2 Field uses id, name and a values array of scalars.
+        // Retain compatibility with earlier on-prem response variants.
         var definitionId = ReadInt(item, "fieldId")
-                           ?? ReadInt(item, "fieldDefinitionId");
+                           ?? ReadInt(item, "fieldDefinitionId")
+                           ?? ReadInt(item, "id");
         var inlineName   = ReadString(item, "fieldName")
                            ?? ReadString(item, "name");
         var fieldType    = ReadString(item, "fieldType");

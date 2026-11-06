@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using LFPortal.Web.Authentication;
 using LFPortal.Application.Interfaces;
 using LFPortal.Infrastructure.Configuration;
 using LFPortal.Domain.Entities;
@@ -37,17 +39,49 @@ public sealed class DynamicDashboardController : Controller
     public async Task<IActionResult> Index(CancellationToken cancellationToken)
     {
         var repo = await _repository.GetActiveRepositoryAsync(cancellationToken);
+        ViewBag.RepositoryId = repo.RepositoryId;
         ViewBag.StorageScope = string.Concat(repo.ServerUrl, "|", repo.RepositoryId, "|",
             User.Identity?.Name ?? "anonymous");
         return View();
     }
 
-    private async Task<string> GetLayoutPathAsync(CancellationToken cancellationToken)
+    [HttpGet]
+    public async Task<IActionResult> Repositories(
+        [FromServices] ILaserficheRepositoryService repositories, CancellationToken cancellationToken)
     {
-        var repo = await _repository.GetActiveRepositoryAsync(cancellationToken);
+        var active = await _repository.GetActiveRepositoryAsync(cancellationToken);
+        if (!string.Equals(User.FindFirstValue(DashboardAuthenticationDefaults.RepositoryClaimType),
+                active.RepositoryId, StringComparison.OrdinalIgnoreCase))
+            return Unauthorized();
+        try
+        {
+            var choices = await repositories.ListRepositoriesAsync(cancellationToken);
+            return Json(new
+            {
+                repositories = choices.Where(item => !string.IsNullOrWhiteSpace(item.RepositoryId))
+                    .DistinctBy(item => item.RepositoryId, StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(item => item.RepositoryName)
+                    .Select(item => new { id = item.RepositoryId, name = item.RepositoryName }),
+                requiresPassword = User.FindFirstValue(ClaimTypes.AuthenticationMethod) ==
+                    DashboardAuthenticationDefaults.PasswordAuthenticationMethod
+            });
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning("Could not list repositories ({ErrorType}).", ex.GetType().Name);
+            return StatusCode(503);
+        }
+    }
+
+    private bool IsCurrentRepository(string repositoryId) =>
+        string.Equals(Request.Headers["X-Dashboard-Repository"].ToString(), repositoryId,
+            StringComparison.OrdinalIgnoreCase);
+
+    private string GetLayoutPath(string serverUrl, string repositoryId)
+    {
         var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
             ?? User.Identity?.Name ?? throw new InvalidOperationException("Authenticated identity missing.");
-        var scope = string.Join("|", repo.ServerUrl, repo.RepositoryId, userId);
+        var scope = string.Join("|", serverUrl, repositoryId, userId);
         var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
             System.Text.Encoding.UTF8.GetBytes(scope)));
         return Path.Combine(
@@ -61,7 +95,9 @@ public sealed class DynamicDashboardController : Controller
     {
         try
         {
-            var path = await GetLayoutPathAsync(cancellationToken);
+            var repo = await _repository.GetActiveRepositoryAsync(cancellationToken);
+            if (!IsCurrentRepository(repo.RepositoryId)) return StatusCode(409);
+            var path = GetLayoutPath(repo.ServerUrl, repo.RepositoryId);
             if (!System.IO.File.Exists(path)) return Json(new { });
             var json = await System.IO.File.ReadAllTextAsync(path, cancellationToken);
             return Content(json, "application/json; charset=utf-8");
@@ -92,7 +128,9 @@ public sealed class DynamicDashboardController : Controller
         string? temp = null;
         try
         {
-            var path = await GetLayoutPathAsync(cancellationToken);
+            var repo = await _repository.GetActiveRepositoryAsync(cancellationToken);
+            if (!IsCurrentRepository(repo.RepositoryId)) return StatusCode(409);
+            var path = GetLayoutPath(repo.ServerUrl, repo.RepositoryId);
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
             await System.IO.File.WriteAllTextAsync(temp, json, cancellationToken);
@@ -118,6 +156,8 @@ public sealed class DynamicDashboardController : Controller
     {
         try
         {
+            var repo = await _repository.GetActiveRepositoryAsync(cancellationToken);
+            if (!IsCurrentRepository(repo.RepositoryId)) return StatusCode(409);
             var definitions = await _fields.GetFieldDefinitionsAsync(cancellationToken);
             return Json(definitions.Values.OrderBy(f => f.Name).Select(f => new
             {
@@ -147,6 +187,13 @@ public sealed class DynamicDashboardController : Controller
     {
         try
         {
+            var repo = await _repository.GetActiveRepositoryAsync(cancellationToken);
+            if (!IsCurrentRepository(repo.RepositoryId)) return StatusCode(409);
+            var definitions = await _fields.GetFieldDefinitionsAsync(cancellationToken);
+            var idsByName = definitions.Values.Where(f => !string.IsNullOrWhiteSpace(f.Name))
+                .GroupBy(f => f.Name.Trim(), StringComparer.OrdinalIgnoreCase)
+                .Where(group => group.Count() == 1)
+                .ToDictionary(group => group.Key, group => group.Single().Id, StringComparer.OrdinalIgnoreCase);
             var rootId = await _entries.GetRootEntryIdAsync(cancellationToken);
             var folders = new Queue<int>();
             var seenFolders = new HashSet<int>();
@@ -197,7 +244,7 @@ public sealed class DynamicDashboardController : Controller
             // Respect the connected user's authorization for every document's metadata.
             // Throttle concurrent requests so large repositories are not flooded.
             using var gate = new SemaphoreSlim(6);
-            var rows = new (LFEntry Entry, IReadOnlyList<LFFieldValue>? Fields, bool Denied)[documents.Count];
+            var rows = new (LFEntry? Entry, IReadOnlyList<LFFieldValue>? Fields)[documents.Count];
             await Task.WhenAll(documents.Select(async (entry, index) =>
             {
                 await gate.WaitAsync(cancellationToken);
@@ -207,23 +254,36 @@ public sealed class DynamicDashboardController : Controller
                     var visibleEntry = await _entries.GetEntryAsync(entry.Id, cancellationToken);
                     if (visibleEntry.Id != entry.Id)
                         throw new InvalidOperationException("Laserfiche returned an unexpected entry identifier.");
-                    rows[index] = (visibleEntry,
-                        await _entries.GetEntryFieldsAsync(entry.Id, cancellationToken), false);
+                    rows[index] = (visibleEntry, null);
+                    try
+                    {
+                        rows[index] = (visibleEntry,
+                            await _entries.GetEntryFieldsAsync(entry.Id, cancellationToken));
+                    }
+                    catch (LaserficheException ex) when (ex.StatusCode is 403 or 404)
+                    {
+                        // A readable document may have separately restricted field metadata.
+                    }
                 }
                 catch (LaserficheException ex) when (ex.StatusCode is 403 or 404)
                 {
-                    rows[index] = (entry, null, true);
+                    // A document that cannot be read must not appear in the dashboard.
                 }
                 finally { gate.Release(); }
             }));
 
             foreach (var row in rows)
             {
-                if (row.Denied || row.Fields is null) continue;
-                var values = row.Fields
-                    .Where(f => f.FieldDefinitionId > 0)
-                    .GroupBy(f => f.FieldDefinitionId.ToString(System.Globalization.CultureInfo.InvariantCulture))
-                    .ToDictionary(g => g.Key, g => g.SelectMany(f => f.Values).ToArray());
+                if (row.Entry is null) continue;
+                var values = row.Fields?
+                    .Select(f => (Id: definitions.ContainsKey(f.FieldDefinitionId)
+                        ? f.FieldDefinitionId : idsByName.GetValueOrDefault(f.FieldName.Trim()), Field: f))
+                    .Where(f => f.Id > 0)
+                    .GroupBy(f => f.Id.ToString(System.Globalization.CultureInfo.InvariantCulture))
+                    .ToDictionary(g => g.Key, g => g.SelectMany(f => f.Field.Values.Count > 0
+                        ? f.Field.Values : string.IsNullOrWhiteSpace(f.Field.Value)
+                            ? Array.Empty<string>() : new[] { f.Field.Value! })
+                        .Distinct(StringComparer.Ordinal).ToArray());
                 results.Add(new
                 {
                     id = row.Entry.Id,

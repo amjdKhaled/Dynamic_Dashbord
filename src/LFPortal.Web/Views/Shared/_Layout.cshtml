@@ -498,7 +498,7 @@ textarea {
     }
     <header class="site-header">
         <a class="site-header__logo"
-           href="@(_externalShareReadOnly ? "/Share/Dashboard" : Url.Action("Index", "Dashboard"))">
+           href="@(_externalShareReadOnly ? "/Share/Dashboard" : Url.Action("Index", "DynamicDashboard"))">
             @* IS<span>B</span> *@
             <img src="~/frontend/isb-logo.jpg" alt="ISB" width="108" height="48" />
         </a>
@@ -511,7 +511,7 @@ textarea {
             }
             else
             {
-                <a asp-controller="Dashboard" asp-action="Index" class="@(_ctrl == "Dashboard" ? "active" : "")">@L["Dashboard"]</a>
+                <a asp-controller="DynamicDashboard" asp-action="Index" class="@(_ctrl == "DynamicDashboard" ? "active" : "")">@L["Dashboard"]</a>
                 <a asp-controller="Archive"   asp-action="Index" class="@(_ctrl == "Archive"   ? "active" : "")">@L["Archive"]</a>
                 <a asp-controller="Settings"  asp-action="Index" class="@(_ctrl == "Settings"  ? "active" : "")">@L["Settings"]</a>
             }

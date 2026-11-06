@@ -1,6 +1,10 @@
 using LFPortal.Application.Interfaces;
 using LFPortal.Application.DTOs;
 using LFPortal.Domain.Entities;
+using LFPortal.Domain.Exceptions;
+using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
+using System.Text.Json;
 using LFPortal.Infrastructure.Adapters;
 using Microsoft.AspNetCore.Mvc;
 using System.Net;
@@ -44,6 +48,95 @@ public sealed class ArchiveController : Controller
         _documentService = documentService;
         _adapter         = adapter;
         _logger          = logger;
+    }
+
+    private const string DashboardSelectionKey = "Archive.DynamicDashboardSelection";
+    private sealed record DashboardSelection(Guid Id, string User, string Server, string Repository,
+        string Title, int[] EntryIds);
+
+    [Authorize]
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [RequestSizeLimit(64 * 1024)]
+    public async Task<IActionResult> OpenDashboardSelection(
+        [FromForm] string title, [FromForm] string entryIds, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(entryIds) || entryIds.Length > 22_000 || !ModelState.IsValid)
+            return BadRequest();
+
+        var parts = entryIds.Split(',');
+        if (parts.Length > 2000) return BadRequest();
+
+        var ids = new HashSet<int>();
+        foreach (var part in parts)
+        {
+            if (!int.TryParse(part, out var id) || id <= 0) return BadRequest();
+            ids.Add(id);
+        }
+
+        if (ids.Count == 1)
+            return RedirectToAction(nameof(Index), new { scope = "document", entryId = ids.Single() });
+
+        var repo = await _repositoryContext.GetActiveRepositoryAsync(cancellationToken);
+        var selection = new DashboardSelection(Guid.NewGuid(), DashboardUser(), repo.ServerUrl, repo.RepositoryId,
+            string.IsNullOrWhiteSpace(title) ? "نتائج اللوحة" : title[..Math.Min(title.Length, 180)], ids.ToArray());
+        HttpContext.Session.SetString(DashboardSelectionKey, JsonSerializer.Serialize(selection));
+        return RedirectToAction(nameof(DashboardResults), new { selectionId = selection.Id });
+    }
+
+    [Authorize]
+    [HttpGet]
+    [ResponseCache(Location = ResponseCacheLocation.None, NoStore = true)]
+    public async Task<IActionResult> DashboardResults(Guid selectionId, int page, CancellationToken cancellationToken)
+    {
+        var stored = HttpContext.Session.GetString(DashboardSelectionKey);
+        var selection = stored is null ? null : JsonSerializer.Deserialize<DashboardSelection>(stored);
+        var repo = await _repositoryContext.GetActiveRepositoryAsync(cancellationToken);
+        if (selection is null || selection.Id != selectionId || selection.User != DashboardUser() ||
+            selection.Server != repo.ServerUrl || selection.Repository != repo.RepositoryId)
+            return View(nameof(Index), ArchiveViewModel.Error("انتهت صلاحية نتائج اللوحة. افتح النتائج من اللوحة مرة أخرى."));
+
+        const int pageSize = 10;
+        page = Math.Clamp(page, 1, (selection.EntryIds.Length + pageSize - 1) / pageSize);
+        try
+        {
+            var entries = await Task.WhenAll(selection.EntryIds.Skip((page - 1) * pageSize).Take(pageSize)
+                .Select(id => ReadDashboardDocumentAsync(id, cancellationToken)));
+            return View(nameof(Index), new ArchiveViewModel
+            {
+                IsConnected = true,
+                IsDrillDown = true,
+                DrillDownTitle = selection.Title,
+                CurrentName = selection.Title,
+                DrillDownDescription = "الوثائق المطابقة لاختيارك من اللوحة",
+                Entries = entries.OfType<LFEntry>().ToArray(),
+                PageNumber = page,
+                PageSize = pageSize,
+                TotalCount = selection.EntryIds.Length,
+                LaserficheWebClientEntryUrlPrefix = BuildWebClientBaseUrl(repo.ServerUrl, repo.RepositoryId) + "id="
+            });
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Could not load dashboard archive results.");
+            return View(nameof(Index), ArchiveViewModel.Error("تعذر تحميل الوثائق المطابقة من Laserfiche."));
+        }
+    }
+
+    private string DashboardUser() => User.FindFirstValue(ClaimTypes.NameIdentifier)
+        ?? User.Identity?.Name ?? throw new InvalidOperationException("Authenticated identity missing.");
+
+    private async Task<LFEntry?> ReadDashboardDocumentAsync(int id, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var entry = await _entryService.GetEntryAsync(id, cancellationToken);
+            return entry.Id == id && entry.EntryType == LFEntryType.Document ? entry : null;
+        }
+        catch (LaserficheException ex) when (ex.StatusCode is 403 or 404)
+        {
+            return null;
+        }
     }
 
     // GET /Archive          → root

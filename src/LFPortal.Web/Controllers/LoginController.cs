@@ -164,6 +164,25 @@ public sealed class LoginController : Controller
                 "Enter the name of the Laserfiche repository to sign in to."));
         }
 
+
+        // The newly provisioned dynamic_dashboard IIS instance has its own settings.
+        // A missing/invalid ServerUrl otherwise becomes a relative token URI and
+        // HttpClient throws InvalidOperationException, previously shown as a
+        // misleading "unexpected error contacting Laserfiche server".
+        if (!Uri.TryCreate(opts.ServerUrl, UriKind.Absolute, out var apiServer) ||
+            (apiServer.Scheme != Uri.UriSchemeHttp && apiServer.Scheme != Uri.UriSchemeHttps) ||
+            string.IsNullOrWhiteSpace(apiServer.Host))
+        {
+            _logger.LogWarning(
+                "Login blocked: Laserfiche ServerUrl is missing or invalid for this IIS instance.");
+            return View(ViewWithError(
+                "Laserfiche API Server URL is not configured or invalid for this Dashboard. " +
+                "Open Settings on this site, enter the Laserfiche server URL and repository, " +
+                "save, then test the connection. / " +
+                "رابط خادم Laserfiche غير مُعدّ أو غير صالح في هذا الموقع. " +
+                "افتح الإعدادات واضبط رابط الـ API والمستودع ثم اختبر الاتصال."));
+        }
+
         var targetRepo = repo with { RepositoryId = repoId, DisplayName = repoId };
 
         // Establish a stable per-browser cache scope before acquiring the token.
@@ -239,8 +258,13 @@ public sealed class LoginController : Controller
 
         return IsLocalUrl(input.ReturnUrl)
             ? LocalRedirect(input.ReturnUrl!)
-            : RedirectToAction("Index", "Dashboard");
+            : RedirectToAction("Index",
+                IsDynamicDashboardIisInstance() ? "DynamicDashboard" : "Dashboard");
     }
+
+    private static bool IsDynamicDashboardIisInstance() =>
+        string.Equals(Environment.GetEnvironmentVariable("DASHBOARD_INSTANCE_NAME"),
+            "dynamic_dashboard", StringComparison.OrdinalIgnoreCase);
 
     // ------------------------------------------------------------------ //
     // GET /Login/StartSso                                                  //

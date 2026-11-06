@@ -396,7 +396,11 @@ public sealed class SessionAuthGuardMiddlewareTests
         await middleware.InvokeAsync(context);
 
         Assert.False(reached);
-        Assert.StartsWith("/Login?returnUrl=", context.Response.Headers.Location.ToString());
+        // A direct browser without any configured repository uses the existing
+        // repository-selection redirect, which is exactly /Login (no returnUrl).
+        // The important security property is that /_standalone/ready/extra
+        // cannot bypass the login guard.
+        Assert.Equal("/Login", context.Response.Headers.Location.ToString());
     }
 
     // ── Excluded paths are never redirected ───────────────────────────────────

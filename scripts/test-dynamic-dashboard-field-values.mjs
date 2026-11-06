@@ -15,14 +15,17 @@ const groupEnd=source.indexOf("  function openArchive(title, docs) {",groupStart
 assert.ok(valuesStart>=0 && valuesEnd>valuesStart && groupStart>=0 && groupEnd>groupStart,
   "The actual aggregation functions must be present in the bundled script");
 
-const implementation=source.slice(valuesStart,valuesEnd)+"\n"+source.slice(utilitiesStart,utilitiesEnd)+source.slice(dayStart,groupEnd);
+const documentStart=source.indexOf("  function dateColumnsLimited(");
+const documentEnd=source.indexOf("  function drawTable(",documentStart);
+const implementation=source.slice(valuesStart,valuesEnd)+"\n"+source.slice(utilitiesStart,utilitiesEnd)
+  +source.slice(dayStart,groupEnd)+source.slice(documentStart,documentEnd);
 const make=new Function("seedRows",[
   'const EMPTY_VALUE="\\u0000no-value";',
   'const unique=values=>[...new Set(values.filter(v=>v!==null&&v!==undefined&&String(v).trim()!=="").map(String))];',
   'const dateStamp=value=>{const time=Date.parse(value);return Number.isFinite(time)?new Date(time):null;};',
   'let rows=seedRows;',
   implementation,
-  'return {observedValues,selectedRows,summary,pageCount};'
+  'return {observedValues,selectedRows,summary,pageCount,displayType,documentRows};'
 ].join("\n"));
 const rows=[
   {id:1,template:"Contracts",fields:{"123":["High","Medium"]},created:"2026-01-11T12:00:00",modified:"2026-02-01T00:00:00",pages:0},
@@ -82,13 +85,31 @@ test("modification date filter includes both selected days",()=>{
   const config={...chart("__modified"),from:"2026-02-01",to:"2026-02-03"};
   assert.deepEqual(engine.summary(config).items.map(row=>row.id),[1,2]);
   assert.deepEqual(engine.summary({...config,from:"",to:"2026-02-01"}).items.map(row=>row.id),[1]);
-  assert.deepEqual(engine.summary({...config,from:"2026-02-12",to:""}).items.map(row=>row.id),[3]);
+  assert.deepEqual(engine.documentRows(config).map(row=>row.id),[2,1]);
+  assert.deepEqual(engine.documentRows({...config,from:"2026-02-12",to:""}),[]);
+  assert.deepEqual(engine.documentRows({...chart("__created"),from:"2026-02-12",to:"2026-02-12"}).map(row=>row.id),[3]);
 });
 
 test("exact page counts accept zero but distinguish missing and reject invalid inputs",()=>{
   assert.equal(engine.pageCount("0"),0);
-  for(const value of ["","-1","1.2","2147483648","test"])assert.equal(engine.pageCount(value),null);
+  assert.equal(engine.pageCount("٣٫٠"),3);
+  assert.equal(engine.pageCount("2.5"),2.5);
+  assert.deepEqual(engine.summary({...chart("__pages"),pages:2.5}).items,[]);
+  for(const value of ["","-1","2147483648","test"])assert.equal(engine.pageCount(value),null);
   assert.deepEqual(engine.summary({...chart("__pages"),pages:0}).items.map(row=>row.id),[1]);
   assert.deepEqual(engine.summary({...chart("__pages"),pages:3}).items.map(row=>row.id),[2]);
   assert.deepEqual(engine.summary({...chart("__pages"),pages:7}).items,[]);
+});
+
+test("the ten-document column limit applies only to creation and modification date ranges",()=>{
+  const documents=Array.from({length:11},(_,id)=>({id,template:"Contracts",
+    created:"2026-02-01T12:00:00",modified:id===10?"2026-02-03T12:00:00":"2026-02-02T12:00:00"}));
+  const dashboard=make(documents);
+  assert.equal(dashboard.displayType(chart("__template")),"bar");
+  assert.equal(dashboard.displayType(chart("__template",[],"horizontal")),"horizontal");
+  assert.equal(dashboard.displayType(chart("__created")),"documents");
+  assert.equal(dashboard.displayType({...chart("__modified"),to:"2026-02-02"}),"bar");
+  assert.equal(dashboard.displayType(chart("__modified",[],"horizontal")),"documents");
+  assert.equal(engine.displayType(chart("__modified",[],"table")),"documents");
+  assert.equal(engine.displayType(chart("__modified",[],"line")),"line");
 });

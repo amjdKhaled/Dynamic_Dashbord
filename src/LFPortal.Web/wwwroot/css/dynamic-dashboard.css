@@ -82,16 +82,6 @@
 @media(max-width:520px){.dd-values-actions{flex-wrap:wrap}.dd-values-actions .dd-btn{width:100%}}
 
 
-/* Layout dimensions for drag-to-resize, scoped to dynamic Dashboard only. */
-.dd-grid{grid-template-columns:repeat(12,minmax(0,1fr));align-items:stretch}
-.dd-card{grid-column:span 6}
-.dd-card.wide{grid-column:span 12}
-.dd-resize-handle{position:absolute;bottom:0;inset-inline-end:0;z-index:5;touch-action:none;
-  border:0;border-radius:8px 0 0 0;padding:7px 10px;cursor:nesw-resize;
-  background:var(--dd-navy);color:#fff;font:inherit;font-size:15px}
-.dd-edit-mode .dd-card{position:relative}
-@media(max-width:880px){.dd-grid{grid-template-columns:repeat(12,minmax(0,1fr))}.dd-card,.dd-card.wide{grid-column:span 12!important}}
-
 .dd-legend-shell{display:grid;grid-template-rows:18px minmax(0,1fr) 18px;min-height:0;flex:0 1 142px;margin-top:7px}
 .dd-legend-shell .dd-chart-legend{margin-top:0;max-height:none;scrollbar-width:none}
 .dd-legend-shell .dd-chart-legend::-webkit-scrollbar{display:none}
@@ -106,7 +96,18 @@ main:has(> .dd-page){width:100%;max-width:1800px;padding:24px clamp(16px,4vw,76p
 .dd-card-sub,.dd-workspace-top small,.dd-hint,.dd-values-help,.dd-value-summary,.dd-value-option small,.dd-chart-note{font-size:13px;color:var(--dd-muted)}
 .dd-card-head strong,.dd-workspace-top strong,.dd-editor-head h2{font-size:20px}
 .dd-workspace{background:transparent;border:0;box-shadow:none;padding:0;min-height:0}
-.dd-grid{gap:20px;align-items:start}
+.dd-grid{gap:18px}
+.dd-card-head > div:first-child{min-width:0;overflow-wrap:anywhere}
+.dd-card-actions{flex-wrap:wrap;justify-content:flex-end}
+.dd-card-actions .dd-icon-btn{min-height:32px}
+.dd-edit-mode .dd-card[draggable=true]{cursor:grab}
+.dd-layout-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+  margin:18px 0;padding:11px 16px;border:1px solid var(--dd-border);border-radius:12px;background:#fff}
+.dd-layout-bar strong{font-size:16px}
+.dd-save-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+#dd-layout-status{font-size:14px;color:var(--dd-muted)}
+.dd-save-actions button:disabled{opacity:.6;cursor:default}
+@media(max-width:850px){.dd-grid{grid-template-columns:minmax(0,1fr)}.dd-card-head{flex-wrap:wrap}}
 .dd-card{border-radius:18px;min-height:0;box-shadow:0 3px 10px #102a3d0d}
 .dd-card-head{padding:16px 20px}
 .dd-card-head strong{border-inline-start:4px solid #bf972c;padding-inline-start:9px}
@@ -124,12 +125,29 @@ main:has(> .dd-page){width:100%;max-width:1800px;padding:24px clamp(16px,4vw,76p
 .dd-pager .dd-btn[aria-current=page]{background:var(--dd-blue);color:#fff}
 .dd-pager .dd-btn:disabled:not([aria-current]){opacity:.48;cursor:default}
 .dd-pager input{width:64px;text-align:center;border:1px solid var(--dd-border);border-radius:8px;padding:7px;font:inherit}
-.dd-loading{display:grid;place-items:center;min-height:120px}
+.dd-loading{display:none}
+.dd-is-loading .dd-loading{display:grid;place-items:center;position:fixed;inset:0}
+.dd-is-loading .dd-content,
+body:has(.dd-page.dd-is-loading) > :is(.site-header,.site-footer){display:none}
 .dd-loading span{width:42px;height:42px;border:4px solid var(--dd-border);border-top-color:#bf972c;border-inline-end-color:var(--dd-navy);border-radius:50%;animation:dd-spin .85s linear infinite}
 @keyframes dd-spin{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){.dd-loading span{animation:none}}
 .dd-repository-dialog{width:min(460px,92vw);border:1px solid var(--dd-border);border-radius:16px;color:inherit;padding:22px}
 .dd-repository-dialog::backdrop{background:#102a3d70}
 .dd-repository-dialog p{color:var(--dd-muted)}
-.dd-resize-handle{cursor:ew-resize}
 .dd-legend-shell{flex:none;grid-template-rows:18px minmax(0,1fr) 18px;height:142px}
+
+.dd-grid{grid-template-columns:repeat(12,minmax(0,1fr));align-items:start}
+.dd-card{grid-column:span var(--dd-card-span,6);position:relative}
+.dd-card.dd-sized-card .dd-chart-stage{height:auto;flex:1 1 0;min-height:72px}
+.dd-card.dd-sized-card .dd-circular-visual .dd-legend-shell{height:clamp(45px,25%,142px)}
+.dd-card.dd-sized-card .dd-table-visual{overflow:hidden}
+.dd-card.dd-sized-card .dd-table-wrap{height:auto;overflow:auto}
+.dd-card.dd-sized-card .dd-pager{flex:none}
+.dd-resize-handle{position:absolute;inset-block-end:0;inset-inline-end:0;z-index:2;
+  touch-action:none;cursor:nwse-resize;background:var(--dd-navy);color:white;border-radius:8px 0 0 0;
+  min-width:36px;min-height:33px}
+.dd-resize-handle:hover,.dd-resize-handle:focus-visible{background:var(--dd-blue);color:white}
+.dd-board-picker{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.dd-board-picker .dd-control{width:auto;min-width:min(220px,70vw);max-width:min(350px,80vw)}
+@media(max-width:850px){.dd-grid{grid-template-columns:minmax(0,1fr)}.dd-card{grid-column:1/-1}}

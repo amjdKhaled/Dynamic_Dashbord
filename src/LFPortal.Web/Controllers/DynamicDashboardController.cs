@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Security.Claims;
 using LFPortal.Web.Authentication;
 using LFPortal.Application.Interfaces;
@@ -40,8 +41,7 @@ public sealed class DynamicDashboardController : Controller
     {
         var repo = await _repository.GetActiveRepositoryAsync(cancellationToken);
         ViewBag.RepositoryId = repo.RepositoryId;
-        ViewBag.StorageScope = string.Concat(repo.ServerUrl, "|", repo.RepositoryId, "|",
-            User.Identity?.Name ?? "anonymous");
+        ViewBag.StorageScope = GetLayoutScope(repo.ServerUrl, repo.RepositoryId);
         return View();
     }
 
@@ -77,17 +77,22 @@ public sealed class DynamicDashboardController : Controller
         string.Equals(Request.Headers["X-Dashboard-Repository"].ToString(), repositoryId,
             StringComparison.OrdinalIgnoreCase);
 
-    private string GetLayoutPath(string serverUrl, string repositoryId)
+    private string? GetLayoutScope(string serverUrl, string repositoryId)
     {
-        var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
-            ?? User.Identity?.Name ?? throw new InvalidOperationException("Authenticated identity missing.");
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name;
+        if (string.IsNullOrWhiteSpace(userId)) return null;
         var scope = string.Join("|", serverUrl, repositoryId, userId);
-        var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
             System.Text.Encoding.UTF8.GetBytes(scope)));
-        return Path.Combine(
-            DashboardConfigPaths.ProgramDataDirectory,
-            "DynamicLayouts", hash + ".json");
     }
+
+    private bool MatchesLayoutScope(string scope) =>
+        string.Equals(Request.Headers["X-Dashboard-Layout-Scope"].ToString(), scope,
+            StringComparison.Ordinal);
+
+    private static string GetLayoutPath(string scope, string boardId) => boardId == "default"
+        ? Path.Combine(DashboardConfigPaths.ProgramDataDirectory, "DynamicLayouts", scope + ".json")
+        : Path.Combine(DashboardConfigPaths.ProgramDataDirectory, "DynamicLayouts", scope, boardId + ".json");
 
     /// <summary>Loads the current user's layout stored locally on the IIS server.</summary>
     [HttpGet]
@@ -97,10 +102,32 @@ public sealed class DynamicDashboardController : Controller
         {
             var repo = await _repository.GetActiveRepositoryAsync(cancellationToken);
             if (!IsCurrentRepository(repo.RepositoryId)) return StatusCode(409);
-            var path = GetLayoutPath(repo.ServerUrl, repo.RepositoryId);
-            if (!System.IO.File.Exists(path)) return Json(new { });
-            var json = await System.IO.File.ReadAllTextAsync(path, cancellationToken);
-            return Content(json, "application/json; charset=utf-8");
+            var scope = GetLayoutScope(repo.ServerUrl, repo.RepositoryId);
+            if (scope is null) return Forbid();
+            if (!MatchesLayoutScope(scope)) return StatusCode(409);
+            var boards = new List<object>();
+            var original = GetLayoutPath(scope, "default");
+            if (System.IO.File.Exists(original)) await ReadBoardAsync(original, "default");
+
+            var directory = Path.Combine(Path.GetDirectoryName(original)!, scope);
+            if (Directory.Exists(directory))
+            {
+                foreach (var file in Directory.EnumerateFiles(directory, "*.json").OrderBy(path => path))
+                {
+                    var id = Path.GetFileNameWithoutExtension(file);
+                    if (Guid.TryParseExact(id, "N", out _)) await ReadBoardAsync(file, id);
+                }
+            }
+            return Json(new { boards });
+
+            async Task ReadBoardAsync(string path, string id)
+            {
+                var json = await System.IO.File.ReadAllTextAsync(path, cancellationToken);
+                var layout = JsonSerializer.Deserialize<JsonElement>(json);
+                var name = layout.TryGetProperty("name", out var savedName) && savedName.ValueKind == JsonValueKind.String
+                    ? savedName.GetString() : "اللوحة الرئيسية";
+                boards.Add(new { id, name, layout });
+            }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -113,12 +140,17 @@ public sealed class DynamicDashboardController : Controller
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> SaveLayout(
-        [FromBody] System.Text.Json.JsonElement layout,
+        [FromQuery] string boardId,
+        [FromBody] JsonElement layout,
         CancellationToken cancellationToken)
     {
-        if (layout.ValueKind != System.Text.Json.JsonValueKind.Object ||
+        if ((boardId != "default" && (!Guid.TryParseExact(boardId, "N", out var parsedId) ||
+                                      boardId != parsedId.ToString("N"))) ||
+            layout.ValueKind != JsonValueKind.Object ||
+            !layout.TryGetProperty("name", out var name) || name.ValueKind != JsonValueKind.String ||
+            string.IsNullOrWhiteSpace(name.GetString()) || name.GetString()!.Length > 80 ||
             !layout.TryGetProperty("charts", out var cards) ||
-            cards.ValueKind != System.Text.Json.JsonValueKind.Array)
+            cards.ValueKind != JsonValueKind.Array || cards.GetArrayLength() > 60)
             return BadRequest(new { error = "مخطط اللوحة غير صالح." });
 
         var json = layout.GetRawText();
@@ -130,7 +162,10 @@ public sealed class DynamicDashboardController : Controller
         {
             var repo = await _repository.GetActiveRepositoryAsync(cancellationToken);
             if (!IsCurrentRepository(repo.RepositoryId)) return StatusCode(409);
-            var path = GetLayoutPath(repo.ServerUrl, repo.RepositoryId);
+            var scope = GetLayoutScope(repo.ServerUrl, repo.RepositoryId);
+            if (scope is null) return Forbid();
+            if (!MatchesLayoutScope(scope)) return StatusCode(409);
+            var path = GetLayoutPath(scope, boardId);
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
             await System.IO.File.WriteAllTextAsync(temp, json, cancellationToken);

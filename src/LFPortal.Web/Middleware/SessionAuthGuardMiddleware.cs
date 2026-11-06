@@ -62,6 +62,16 @@ public sealed class SessionAuthGuardMiddleware
     /// </summary>
     public async Task InvokeAsync(HttpContext context)
     {
+        // The isolated IIS site's non-sensitive identity endpoint is safe to
+        // query before first sign-in. Only Program.cs registers this exact path
+        // for the dynamic_dashboard site; no other protected route is exempted.
+        if (string.Equals(context.Request.Path.Value, "/_instance/ready",
+            StringComparison.OrdinalIgnoreCase))
+        {
+            await _next(context);
+            return;
+        }
+
         // The standalone process identity probe contains no repository/user data.
         // It must work before first login, when no repository is configured, and
         // when the external-share cookie is present. The endpoint itself is only

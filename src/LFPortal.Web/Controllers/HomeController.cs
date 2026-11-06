@@ -25,6 +25,11 @@ public sealed class HomeController : Controller
     [HttpGet]
     public IActionResult Index()
     {
+        if (string.Equals(
+            Environment.GetEnvironmentVariable("DASHBOARD_INSTANCE_NAME"),
+            "dynamic_dashboard", StringComparison.OrdinalIgnoreCase))
+            return RedirectToAction("Index", "DynamicDashboard");
+
         return RedirectToAction("Index", "Dashboard");
     }
 

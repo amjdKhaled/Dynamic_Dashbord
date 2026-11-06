@@ -366,6 +366,40 @@ public sealed class SessionAuthGuardMiddlewareTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public async Task Invoke_DynamicIisReadiness_PassesWithoutLoginOrRepository(bool externalShare)
+    {
+        var reached = false;
+        var middleware = MakeMiddleware(
+            configuredRepoId: "",
+            next: _ => { reached = true; return Task.CompletedTask; });
+        var context = MakeContext(path: "/_instance/ready");
+        if (externalShare)
+            context.Session.SetString("ExternalShare.Authenticated", "true");
+
+        await middleware.InvokeAsync(context);
+
+        Assert.True(reached);
+        Assert.Empty(context.Response.Headers.Location.ToString());
+    }
+
+    [Fact]
+    public async Task Invoke_DynamicIisReadinessLookalike_StillRequiresLogin()
+    {
+        var reached = false;
+        var middleware = MakeMiddleware(
+            configuredRepoId: "",
+            next: _ => { reached = true; return Task.CompletedTask; });
+        var context = MakeContext(path: "/_instance/ready/other");
+
+        await middleware.InvokeAsync(context);
+
+        Assert.False(reached);
+        Assert.Equal("/Login", context.Response.Headers.Location.ToString());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task Invoke_StandaloneReadinessEndpoint_PassesBeforeLoginAndExternalShare(bool externalShare)
     {
         // The standalone launcher makes this request before it can open Login.

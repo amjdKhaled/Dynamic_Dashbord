@@ -23,6 +23,16 @@ try
 
     var builder = WebApplication.CreateBuilder(args);
 
+    // Only the separately installed IIS website named dynamic_dashboard opts in.
+    // The original Dashboard host must retain its existing settings and cookies.
+    var isDynamicIisSite = string.Equals(
+        Environment.GetEnvironmentVariable("DASHBOARD_INSTANCE_NAME"),
+        "dynamic_dashboard", StringComparison.OrdinalIgnoreCase);
+    if (isDynamicIisSite && !DashboardConfigPaths.IsStandalone)
+        throw new InvalidOperationException(
+            "dynamic_dashboard requires its dedicated DASHBOARD_STANDALONE_DATA_DIR. " +
+            "Refusing to use the original Dashboard configuration or credentials.");
+
     // ── Configuration layering (last-wins) ────────────────────────────────────
     //  1. appsettings.json                                  structural defaults (already loaded)
     //  2. <ContentRoot>\config\laserfiche.json              LEGACY writable file (pre-Phase-1
@@ -96,7 +106,7 @@ try
         var keys = Path.Combine(DashboardConfigPaths.ProgramDataDirectory, "keys");
         Directory.CreateDirectory(keys);
         var protection = builder.Services.AddDataProtection()
-            .SetApplicationName("Dynamic_Dashbord_Standalone")
+            .SetApplicationName(isDynamicIisSite ? "Dynamic_Dashbord_IIS_dynamic_dashboard" : "Dynamic_Dashbord_Standalone")
             .PersistKeysToFileSystem(new DirectoryInfo(keys));
         if (OperatingSystem.IsWindows())
             protection.ProtectKeysWithDpapi();
@@ -131,8 +141,9 @@ try
         })
         .AddCookie(DashboardAuthenticationDefaults.Scheme, options =>
         {
-            options.Cookie.Name = DashboardConfigPaths.IsStandalone
-                ? ".Dynamic_Dashbord.Authentication" : ".Dashboard.Authentication";
+            options.Cookie.Name = isDynamicIisSite ? ".dynamic_dashboard.Authentication"
+                : DashboardConfigPaths.IsStandalone
+                    ? ".Dynamic_Dashbord.Authentication" : ".Dashboard.Authentication";
             options.Cookie.HttpOnly = true;
             options.Cookie.IsEssential = true;
             options.Cookie.SameSite = SameSiteMode.Lax;
@@ -143,7 +154,8 @@ try
         })
         .AddCookie(ExternalShareAuthenticationDefaults.Scheme, options =>
         {
-            options.Cookie.Name = ExternalShareAuthenticationDefaults.CookieName;
+            options.Cookie.Name = isDynamicIisSite
+                ? ".dynamic_dashboard.ExternalShare" : ExternalShareAuthenticationDefaults.CookieName;
             options.Cookie.HttpOnly = true;
             options.Cookie.IsEssential = true;
             options.Cookie.SameSite = SameSiteMode.Lax;
@@ -183,8 +195,9 @@ try
         opts.Cookie.HttpOnly  = true;
         opts.Cookie.IsEssential = true;
         opts.IdleTimeout      = TimeSpan.FromHours(8);
-        opts.Cookie.Name      = DashboardConfigPaths.IsStandalone
-            ? ".Dynamic_Dashbord.Session" : ".Dashboard.Session";
+        opts.Cookie.Name = isDynamicIisSite ? ".dynamic_dashboard.Session"
+            : DashboardConfigPaths.IsStandalone
+                ? ".Dynamic_Dashbord.Session" : ".Dashboard.Session";
         opts.Cookie.SameSite  = SameSiteMode.Lax;
         opts.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
     });
@@ -291,6 +304,18 @@ try
             application = "Dynamic_Dashbord",
             mode = "standalone",
             dashboardPath = "/DynamicDashboard"
+        }));
+    }
+
+    // Readiness identifies the new IIS site without exposing credentials or
+    // repository metadata. It is available before the first Laserfiche sign-in.
+    if (isDynamicIisSite)
+    {
+        app.MapGet("/_instance/ready", () => Results.Json(new
+        {
+            application = "Dynamic_Dashbord",
+            instance = "dynamic_dashboard",
+            mode = "iis"
         }));
     }
 

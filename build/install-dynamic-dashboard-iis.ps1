@@ -210,21 +210,18 @@ try {
     if ((Get-WebAppPoolState -Name $poolName).Value -eq 'Started') {
         Stop-WebAppPool -Name $poolName
     }
-    # The stop request can return while the worker still holds published files.
+    # Wait for IIS to report Stopped before retrying any transient file locks.
     $deadline = [DateTime]::UtcNow.AddSeconds(60)
     while ($true) {
-        $state = (Get-WebAppPoolState -Name $poolName).Value
-        $workers = @(& $appcmd list wp "/apppool.name:$poolName" /text:WP.NAME)
-        if ($LASTEXITCODE -ne 0) { throw "Could not inspect IIS workers for '$poolName'." }
-        if ($state -eq 'Stopped' -and $workers.Count -eq 0) { break }
+        if ((Get-WebAppPoolState -Name $poolName).Value -eq 'Stopped') { break }
         if ([DateTime]::UtcNow -ge $deadline) {
-            throw "IIS application pool '$poolName' did not stop and release its workers within 60 seconds. No files were copied."
+            throw "IIS application pool '$poolName' did not report Stopped within 60 seconds. No files were copied."
         }
         Start-Sleep -Milliseconds 500
     }
 
     # /E intentionally never deletes files or settings from an existing installation.
-    $copyOutput = @(& robocopy.exe $publish $root /E /XJ /R:6 /W:2 /XF appsettings.Development.json /NFL /NDL /NJH /NP)
+    $copyOutput = @(& robocopy.exe $publish $root /E /XJ /R:15 /W:2 /XF appsettings.Development.json /NFL /NDL /NJH /NP)
     $copyCode = $LASTEXITCODE
     if ($copyCode -ge 8) {
         throw ("robocopy failed with code {0} copying to '{1}'.{2}{3}" -f

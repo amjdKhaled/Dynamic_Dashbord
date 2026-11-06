@@ -50,6 +50,10 @@ jobs:
         shell: powershell
         run: .\build\Test-DeployIisIsolation.ps1
 
+      - name: Validate new dynamic_dashboard IIS installer plan (no IIS changes)
+        shell: powershell
+        run: .\build\Test-DynamicIisPlan.ps1
+
       - name: Run installer isolation regression tests
         shell: powershell
         run: |

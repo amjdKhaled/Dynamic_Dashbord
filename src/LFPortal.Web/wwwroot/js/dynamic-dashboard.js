@@ -223,7 +223,7 @@
     const keys=unique(valuesFor(row,dimension).map(v=>groupKey(dimension,v)));
     return keys.length?keys:[EMPTY_VALUE];
   }
-  function observedValues(dimension, source=rows) {
+  function observedValues(dimension, source=fieldRows(dimension)) {
     // Counts come from distinct readable documents, NOT a hardcoded list or field definition choices.
     const counts=new Map();
     for(const row of source)
@@ -233,8 +233,12 @@
       .map(([value,count])=>({value,count,label:value===EMPTY_VALUE?"بدون قيمة":value}))
       .sort((a,b)=>b.count-a.count||a.label.localeCompare(b.label,"ar"));
   }
+  function isFieldDimension(dimension) {
+    return /^(?:\d+$|field:)/.test(dimension);
+  }
   function fieldRows(dimension) {
-    return /^\d+$/.test(dimension) ? rows.filter(row=>row.fields!=null) : rows;
+    return isFieldDimension(dimension)
+      ? rows.filter(row=>row.fields!=null && Object.hasOwn(row.fields,dimension)) : rows;
   }
   function selectedRows(chart) {
     let source=isRecent(chart.type)?rows:fieldRows(chart.dimension);
@@ -276,13 +280,18 @@
   function openArchive(title, docs) {
     const ids = [...new Set(docs.map(doc => doc.id))];
     if (!ids.length) return;
+    const entryIds=ids.join(",");
+    if(entryIds.length>300000) {
+      window.alert("عدد النتائج أكبر من سعة فتح الأرشيف دفعة واحدة. ضيّق التصفية.");
+      return;
+    }
     const form = document.createElement("form");
     form.method = "POST";
     form.action = root.dataset.archiveUrl;
     for (const [name, value] of [
       ["__RequestVerificationToken", root.querySelector('input[name="__RequestVerificationToken"]').value],
       ["title", title.slice(0, 180)],
-      ["repository", root.dataset.repository], ["entryIds", ids.join(",")]
+      ["repository", root.dataset.repository], ["entryIds", entryIds]
     ]) {
       const input = document.createElement("input");
       input.type = "hidden";
@@ -437,7 +446,7 @@
       drawDocumentTable(body,chart);
     } else {
       const data=summary(chart);
-      const partialText=partial?"نتيجة جزئية من الوثائق المقروءة — ليست إجمالي المستودع":"";
+      const partialText=partial && isFieldDimension(chart.dimension)?"قد تكون بعض قيم الحقول غير متاحة.":"";
       if(data.extra) {
         const note=document.createElement("small");note.className="dd-chart-note";
         note.textContent="عرض أول 30 فئة من "+data.totalGroups+"؛ اختر قيمًا محددة لعرض المزيد.";
@@ -613,16 +622,14 @@
     if(!editing||!editing.dimension)return;
     const term=$("dd-value-search").value.trim().toLocaleLowerCase();
     if(dateColumn(editing) || isRecent(editing.type) || editing.dimension==="__pages")return;
-    const categories=observedValues(editing.dimension,fieldRows(editing.dimension));
+    const categories=observedValues(editing.dimension);
     const visible=categories.filter(x=>x.label.toLocaleLowerCase().includes(term));
     const selected=new Set(editing.selectedValues);
-    if(!visible.length || (visible.length===1 && visible[0].value===EMPTY_VALUE &&
-        !BUILTIN.some(field=>field.id===editing.dimension))) {
+    if(!visible.length) {
       const p=document.createElement("p");p.className="dd-values-help";
-      p.textContent=partial
-        ?"لا توجد قيم ضمن الوثائق التي أمكن قراءتها؛ قد تكون البيانات غير مكتملة."
-        :visible.length?"لا توجد قيم مقروءة لهذا الحقل ضمن الوثائق المتاحة."
-        :"لا توجد قيم مطابقة للبحث في الوثائق المتاحة.";
+      p.textContent=term?"لا توجد قيم تطابق البحث."
+        :partial && isFieldDimension(editing.dimension)?"لم تصل قيم قابلة للعرض لهذا الحقل. بعض بيانات الحقول غير مكتملة."
+        :"لم يُرجع Laserfiche قيماً لهذا الحقل ضمن الوثائق المقروءة.";
       target.appendChild(p);
     }
     for(const category of visible) {
@@ -738,20 +745,16 @@
     $("dd-grid").setAttribute("aria-busy","true");
     $("dd-warning").classList.add("dd-hidden");
     try {
-      const [catalog,records]=await Promise.all([
-        fetch("/DynamicDashboard/Fields",{credentials:"same-origin",cache:"no-store",headers:requestHeaders}),
-        fetch("/DynamicDashboard/Rows",{credentials:"same-origin",cache:"no-store",headers:requestHeaders})
-      ]);
-      if ([catalog.status,records.status].includes(409))
-        throw new Error("تغيّر المستودع في تبويب آخر. أعد تحميل الصفحة.");
-      if (!catalog.ok||!records.ok) throw new Error(
-        [catalog.status,records.status].includes(401)||[catalog.status,records.status].includes(403)
-          ?"لا توجد صلاحية لقراءة بيانات هذه الجلسة. سجل الدخول من جديد.":"تعذر قراءة بيانات المستودع من Laserfiche.");
-      const defs=await catalog.json(),result=await records.json();
-      if(!Array.isArray(defs)||!Array.isArray(result.rows))throw new Error("استجابة غير متوقعة من Laserfiche.");
-      fields=defs;rows=result.rows;partial=Boolean(result.partial);
+      const records=await fetch("/DynamicDashboard/Rows",{credentials:"same-origin",cache:"no-store",headers:requestHeaders});
+      if(records.status===409)throw new Error("تغيّرت الجلسة أو المستودع. أعد تحميل الصفحة.");
+      if(!records.ok)throw new Error([401,403].includes(records.status)
+        ?"لا توجد صلاحية لقراءة بيانات هذه الجلسة. سجل الدخول من جديد."
+        :"تعذر إكمال قراءة الوثائق والحقول من Laserfiche.");
+      const result=await records.json();
+      if(!Array.isArray(result.fields)||!Array.isArray(result.rows))throw new Error("استجابة غير متوقعة من Laserfiche.");
+      fields=result.fields;rows=result.rows;partial=Boolean(result.fieldDataIncomplete);
       if(partial){
-        $("dd-warning").textContent=result.warning||"تنبيه: التحليل جزئي وليس إجمالي المستودع.";
+        $("dd-warning").textContent="بعض بيانات الحقول لم ترجع كاملة من Laserfiche. تعرض المؤشرات القيم المتاحة فقط.";
         $("dd-warning").classList.remove("dd-hidden");
       }
       render();

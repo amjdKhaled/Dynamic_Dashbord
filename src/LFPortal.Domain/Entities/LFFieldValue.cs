@@ -21,6 +21,9 @@ public sealed record LFFieldValue
     /// </summary>
     public string? Value { get; init; }
 
+    /// <summary>Whether Laserfiche reports additional values beyond this response.</summary>
+    public bool HasMoreValues { get; init; }
+
     /// <summary>Individual values preserved before display formatting.</summary>
     public IReadOnlyList<string> Values { get; init; } = Array.Empty<string>();
 

@@ -30,7 +30,7 @@ const make=new Function("seedRows",[
 const rows=[
   {id:1,template:"Contracts",fields:{"123":["High","Medium"]},created:"2026-01-11T12:00:00",modified:"2026-02-01T00:00:00",pages:0},
   {id:2,template:"Invoices",fields:{"123":["High","High"]},created:"2026-01-12T12:00:00",modified:"2026-02-03T23:59:59",pages:3},
-  {id:3,template:"Contracts",fields:{},created:"2026-02-12T12:00:00",modified:"2026-02-12T12:00:00",pages:null}
+  {id:3,template:"Contracts",fields:{"123":[]},created:"2026-02-12T12:00:00",modified:"2026-02-12T12:00:00",pages:null}
 ];
 const engine=make(rows);
 const chart=(dimension,selectedValues=[],type="bar")=>({dimension,selectedValues,type});
@@ -112,4 +112,16 @@ test("the ten-document column limit applies only to creation and modification da
   assert.equal(dashboard.displayType(chart("__modified",[],"horizontal")),"documents");
   assert.equal(engine.displayType(chart("__modified",[],"table")),"documents");
   assert.equal(engine.displayType(chart("__modified",[],"line")),"line");
+});
+
+test("metadata counts include assigned blank fields but exclude unavailable and unassigned fields",()=>{
+  const dashboard=make([
+    {id:1,fields:{"field:SUBJECT":["First","Second"]}},
+    {id:2,fields:{"field:SUBJECT":[]}},
+    {id:3,fields:{}},
+    {id:4,fields:null}
+  ]);
+  assert.deepEqual(dashboard.summary(chart("field:SUBJECT")).items.map(row=>row.id),[1,2]);
+  assert.equal(dashboard.observedValues("field:SUBJECT").find(value=>value.label==="بدون قيمة").count,1);
+  assert.equal(dashboard.observedValues("field:SUBJECT").length,3);
 });

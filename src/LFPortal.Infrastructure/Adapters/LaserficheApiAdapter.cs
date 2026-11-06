@@ -34,7 +34,9 @@ public sealed class LaserficheApiAdapter : ILaserficheApiAdapter
         resource switch
         {
             EntryResource.Details  => $"{RepoBase(repositoryId)}/Entries/{entryId}",
-            EntryResource.Fields   => $"{RepoBase(repositoryId)}/Entries/{entryId}/fields?formatValue=false",
+            EntryResource.Fields   => ApiVersion.Equals("v2", StringComparison.OrdinalIgnoreCase)
+                ? $"{RepoBase(repositoryId)}/Entries/{entryId}/Fields"
+                : $"{RepoBase(repositoryId)}/Entries/{entryId}/fields?formatValue=false",
             EntryResource.Tags     => $"{RepoBase(repositoryId)}/Entries/{entryId}/tags",
             EntryResource.Children => $"{RepoBase(repositoryId)}/Entries/{entryId}/children",
             EntryResource.FolderChildren => BuildFolderChildrenUrl(repositoryId, entryId),

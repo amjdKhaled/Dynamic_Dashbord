@@ -13,32 +13,8 @@ namespace LFPortal.Web.Controllers;
 [ResponseCache(Location = ResponseCacheLocation.None, NoStore = true)]
 public sealed class DashboardController : Controller
 {
-    private readonly ILaserficheDashboardService _dashboardService;
-    private readonly ILogger<DashboardController> _logger;
-
-    public DashboardController(
-        ILaserficheDashboardService dashboardService,
-        ILogger<DashboardController> logger)
-    {
-        _dashboardService = dashboardService;
-        _logger = logger;
-    }
-
     [HttpGet]
-    public async Task<IActionResult> Index(bool refresh, CancellationToken cancellationToken)
-    {
-        if (refresh && _dashboardService is IDashboardCacheControl cacheControl)
-            await cacheControl.InvalidateAsync(cancellationToken);
-        _logger.LogInformation("Dashboard: fetching statistics.");
-        var stats = await _dashboardService.GetDashboardStatsAsync(cancellationToken);
-        _logger.LogInformation(
-            "Dashboard stats: connected={Connected}, docs={Docs}, folders={Folders}, " +
-            "templates={Tmpls}, rootFolders={RF}, recentDocs={RD}.",
-            stats.IsConnected, stats.TotalDocuments, stats.TotalFolders,
-            stats.TotalTemplates, stats.RootFolders.Count, stats.RecentDocs.Count);
-
-        return View(new DashboardViewModel { Stats = stats });
-    }
+    public IActionResult Index() => RedirectToAction("Index", "DynamicDashboard");
 
     /// <summary>
     /// Diagnostic probe for the endpoints used by the dashboard. Root entry discovery

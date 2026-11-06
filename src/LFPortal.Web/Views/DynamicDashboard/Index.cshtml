@@ -6,7 +6,7 @@
 @section Styles {
     <link rel="stylesheet" href="~/css/dynamic-dashboard.css" asp-append-version="true" />
 }
-<div class="dd-page" id="dynamicDashboard" dir="rtl" data-scope="@scope">
+<div class="dd-page" id="dynamicDashboard" dir="rtl" data-scope="@scope" data-archive-url="@Url.Action("OpenDashboardSelection", "Archive")">
     @Html.AntiForgeryToken()
     <header class="dd-header">
         <div class="dd-headline">
@@ -14,7 +14,6 @@
             <p>أنشئ مؤشراتك وشارتاتك من بيانات وحقول Laserfiche المباشرة</p>
         </div>
         <div class="dd-head-actions">
-            <a class="dd-btn" href="/Dashboard"><span aria-hidden="true">↩</span> اللوحة الأصلية</a>
             <button type="button" class="dd-btn" id="dd-refresh">⟳ تحديث البيانات</button>
             <button type="button" class="dd-btn" id="dd-customize" aria-pressed="false">⚙ تخصيص اللوحة</button>
             <button type="button" class="dd-btn dd-btn-primary dd-hidden" id="dd-add">＋ إضافة شارت</button>
@@ -47,10 +46,16 @@
                 <option value="doughnut">دائري مجوف</option>
                 <option value="pie">دائري</option>
                 <option value="table">جدول</option>
+                <option value="audit">جدول Audit Trail</option>
                 <option value="kpi">بطاقة رقم</option>
             </select>
+            <div id="dd-document-options">
             <label class="dd-label" for="dd-dimension">البيانات / المحور التصنيفي</label>
             <select class="dd-control" id="dd-dimension"></select>
+            <div id="dd-field-options" class="dd-hidden">
+                <label class="dd-label" for="dd-field">الحقل</label>
+                <select class="dd-control" id="dd-field"></select>
+            </div>
             <label class="dd-label" for="dd-value-search">القيم الموجودة في الوثائق (اختياري)</label>
             <p class="dd-values-help">القيم مأخوذة من حقول الوثائق التي يحق لك قراءتها في Laserfiche. اختر قيمة أو أكثر، أو اترك الاختيار فارغًا لعرض جميع القيم. عدد الوثائق يُحسب تلقائيًا.</p>
             <div class="dd-values-actions">
@@ -59,6 +64,8 @@
             </div>
             <div id="dd-value-list" class="dd-value-list" aria-live="polite"></div>
             <div id="dd-value-summary" class="dd-value-summary"></div>
+            </div>
+            <p id="dd-audit-help" class="dd-values-help dd-hidden">استورد تقرير Audit Trail بصيغة CSV من داخل الجدول بعد حفظه. يبقى التقرير في هذه الصفحة حتى إغلاقها أو تحديثها.</p>
             <label class="dd-label" for="dd-height">ارتفاع الكرت</label>
             <input id="dd-height" type="range" min="280" max="620" step="20" value="340" />
             <div class="dd-heightlabel" id="dd-heightlabel">320px</div>
@@ -68,12 +75,7 @@
             </div>
         </section>
     </div>
-    <div id="dd-details-overlay" class="dd-overlay dd-hidden">
-        <section class="dd-editor dd-details" role="dialog" aria-modal="true" aria-label="الوثائق المطابقة">
-            <div class="dd-editor-head"><h2 id="dd-details-title">الوثائق المطابقة</h2><button type="button" id="dd-close-details" class="dd-icon-btn">✕</button></div>
-            <div id="dd-details-content"></div>
-        </section>
-    </div>
+
 </div>
 @section Scripts {
     <script src="~/lib/chartjs/chart.umd.min.js" asp-append-version="true"></script>

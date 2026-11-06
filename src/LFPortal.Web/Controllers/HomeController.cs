@@ -23,15 +23,7 @@ public sealed class HomeController : Controller
 
     /// <summary>Redirects to the Dashboard (legacy root URL support).</summary>
     [HttpGet]
-    public IActionResult Index()
-    {
-        if (string.Equals(
-            Environment.GetEnvironmentVariable("DASHBOARD_INSTANCE_NAME"),
-            "dynamic_dashboard", StringComparison.OrdinalIgnoreCase))
-            return RedirectToAction("Index", "DynamicDashboard");
-
-        return RedirectToAction("Index", "Dashboard");
-    }
+    public IActionResult Index() => RedirectToAction("Index", "DynamicDashboard");
 
     /// <summary>
     /// Displays a minimal error page. Used by the production exception handler.

@@ -328,7 +328,7 @@ try
     // ── MVC routes — default lands on the Dashboard ──────────────────────────
     app.MapControllerRoute(
         name: "default",
-        pattern: "{controller=Dashboard}/{action=Index}/{id?}");
+        pattern: "{controller=DynamicDashboard}/{action=Index}/{id?}");
 
     Log.Information("{Display} started successfully.", LFPortalVersion.Display);
     await app.RunAsync();

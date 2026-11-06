@@ -43,7 +43,6 @@
 .dd-heightlabel{font-size:11px;color:#7d8985}.dd-editor input[type=range]{width:100%}
 .dd-table{width:100%;border-collapse:collapse;font-size:11px}.dd-table td,.dd-table th{border-bottom:1px solid #e8ecf0;text-align:right;padding:8px}
 .dd-table td a{color:#0b438a;text-decoration:none}.dd-table-wrap{height:100%;overflow:auto}
-.dd-details{width:min(680px,96vw)}.dd-details #dd-details-content{max-height:85vh;overflow:auto}
 @media(max-width:860px){.dd-layout{grid-template-columns:1fr}.dd-sidebar{position:static;max-height:unset}.dd-grid{grid-template-columns:1fr}.dd-card.wide{grid-column:span 1}.dd-hint{display:none}}
 
 
@@ -92,3 +91,9 @@
   background:var(--dd-navy);color:#fff;font:inherit;font-size:15px}
 .dd-edit-mode .dd-card{position:relative}
 @media(max-width:880px){.dd-grid{grid-template-columns:repeat(12,minmax(0,1fr))}.dd-card,.dd-card.wide{grid-column:span 12!important}}
+
+.dd-legend-shell{display:grid;grid-template-rows:18px minmax(0,1fr) 18px;min-height:0;flex:0 1 142px;margin-top:7px}
+.dd-legend-shell .dd-chart-legend{margin-top:0;max-height:none;scrollbar-width:none}
+.dd-legend-shell .dd-chart-legend::-webkit-scrollbar{display:none}
+.dd-legend-shell > button{height:18px;width:100%;padding:0;border:0;background:transparent;font-size:12px;line-height:1;color:#0b1c49}
+.dd-legend-shell > button:disabled{visibility:hidden}

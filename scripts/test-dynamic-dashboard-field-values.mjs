@@ -8,7 +8,7 @@ const source=readFileSync(new URL("../src/LFPortal.Web/wwwroot/js/dynamic-dashbo
 const valuesStart=source.indexOf("  function valuesFor(row,id) {");
 const valuesEnd=source.indexOf("  function number(value) {",valuesStart);
 const groupStart=source.indexOf("  function groupKey(id,value) {");
-const groupEnd=source.indexOf("  function details(title,docs) {",groupStart);
+const groupEnd=source.indexOf("  function openArchive(title, docs) {",groupStart);
 assert.ok(valuesStart>=0 && valuesEnd>valuesStart && groupStart>=0 && groupEnd>groupStart,
   "The actual aggregation functions must be present in the bundled script");
 
@@ -64,4 +64,23 @@ test("created-date groups are derived from actual documents",()=>{
 
 test("unavailable saved values cannot broaden results",()=>{
   assert.equal(engine.summary(chart("123",["Removed value"],"kpi")).kpi,0);
+});
+
+test("select all includes every category and supports individual exclusions",()=>{
+  const config={...chart("123"),allValues:true};
+  assert.equal(engine.summary(config).groups.length,3);
+  config.selectedValues=["High"];
+  const result=engine.summary(config);
+  assert.deepEqual(result.items.map(row=>row.id),[1,3]);
+  assert.ok(!result.groups.some(group=>group.label==="High"));
+});
+
+test("Audit Trail CSV retains commas, escaped quotes and line breaks inside cells",()=>{
+  const start=source.indexOf("  function parseAuditCsv(");
+  const end=source.indexOf("  function drawAuditTable(",start);
+  assert.ok(start>=0 && end>start);
+  const parse=new Function(source.slice(start,end)+"\nreturn parseAuditCsv;")();
+  const result=parse('Event,User,Note\r\nOpen,Admin,"First, ""quoted""\r\nsecond"\r\n');
+  assert.deepEqual(result,{headers:["Event","User","Note"],events:[["Open","Admin",'First, "quoted"\r\nsecond']]});
+  assert.throws(()=>parse('Event,User\nOpen,"Admin'));
 });

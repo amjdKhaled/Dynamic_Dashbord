@@ -18,16 +18,21 @@
             <button type="button" class="dd-btn" id="dd-repository">تبديل المستودع · @ViewBag.RepositoryId</button>
             <button type="button" class="dd-btn" id="dd-refresh">⟳ تحديث البيانات</button>
             <button type="button" class="dd-btn" id="dd-customize" aria-pressed="false">⚙ تخصيص اللوحة</button>
-            <button type="button" class="dd-btn dd-btn-primary dd-hidden" id="dd-add">＋ إضافة شارت</button>
+            <button type="button" class="dd-btn dd-btn-primary dd-hidden" id="dd-add">＋ إضافة مؤشر</button>
         </div>
     </header>
     <div class="dd-layout">
         <section class="dd-workspace" aria-label="محتوى اللوحة">
             <div class="dd-layout-bar" aria-label="حفظ اللوحة">
-                <strong>لوحتي المحفوظة</strong>
+                <div class="dd-board-picker">
+                    <label for="dd-board-list"><strong>لوحات التحكم</strong></label>
+                    <select class="dd-control" id="dd-board-list" disabled></select>
+                    <button type="button" class="dd-btn" id="dd-new-board" disabled>＋ لوحة جديدة</button>
+                    <button type="button" class="dd-btn" id="dd-rename-board" disabled>تغيير الاسم</button>
+                </div>
                 <div class="dd-save-actions">
                     <span id="dd-layout-status" role="status"></span>
-                    <button type="button" class="dd-btn dd-btn-primary" id="dd-save-layout" disabled>حفظ ترتيب اللوحة</button>
+                    <button type="button" class="dd-btn dd-btn-primary" id="dd-save-layout" disabled>حفظ اللوحة</button>
                 </div>
             </div>
             <p id="dd-warning" class="dd-warning dd-hidden" role="alert"></p>
@@ -36,6 +41,18 @@
         </section>
     </div>
     </div>
+    <dialog id="dd-board-dialog" class="dd-repository-dialog" aria-labelledby="dd-board-dialog-title">
+        <form>
+            <strong id="dd-board-dialog-title"></strong>
+            <label class="dd-label" for="dd-board-name">اسم اللوحة</label>
+            <input class="dd-control" id="dd-board-name" maxlength="80" required />
+            <p id="dd-board-error" role="alert"></p>
+            <div class="dd-editor-actions">
+                <button type="button" class="dd-btn" id="dd-board-cancel">إلغاء</button>
+                <button type="submit" class="dd-btn dd-btn-primary">متابعة</button>
+            </div>
+        </form>
+    </dialog>
     <dialog id="dd-repository-dialog" class="dd-repository-dialog">
         <form method="post" action="@Url.Action("SwitchRepository", "Login")">
             @Html.AntiForgeryToken()
@@ -55,7 +72,7 @@
     <div id="dd-editoroverlay" class="dd-overlay dd-hidden">
         <section class="dd-editor" role="dialog" aria-modal="true" aria-labelledby="dd-editor-title">
             <div class="dd-editor-head">
-                <h2 id="dd-editor-title">إعدادات الشارت</h2>
+                <h2 id="dd-editor-title">إعدادات المؤشر</h2>
                 <button type="button" id="dd-closeeditor" class="dd-icon-btn" aria-label="إغلاق">✕</button>
             </div>
             <label class="dd-label" for="dd-title">العنوان</label>
@@ -101,7 +118,7 @@
             <p id="dd-filter-error" class="dd-warning dd-hidden" role="alert"></p>
             <div class="dd-editor-actions">
                 <button type="button" id="dd-cancel" class="dd-btn">إلغاء</button>
-                <button type="button" id="dd-save" class="dd-btn dd-btn-primary">حفظ الشارت</button>
+                <button type="button" id="dd-save" class="dd-btn dd-btn-primary">تطبيق المؤشر</button>
             </div>
         </section>
     </div>

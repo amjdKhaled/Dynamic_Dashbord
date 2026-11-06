@@ -15,7 +15,7 @@ const groupEnd=source.indexOf("  function openArchive(title, docs) {",groupStart
 assert.ok(valuesStart>=0 && valuesEnd>valuesStart && groupStart>=0 && groupEnd>groupStart,
   "The actual aggregation functions must be present in the bundled script");
 
-const documentStart=source.indexOf("  function displayType(");
+const documentStart=source.indexOf("  function dateColumnsLimited(");
 const documentEnd=source.indexOf("  function drawTable(",documentStart);
 const implementation=source.slice(valuesStart,valuesEnd)+"\n"+source.slice(utilitiesStart,utilitiesEnd)
   +source.slice(dayStart,groupEnd)+source.slice(documentStart,documentEnd);
@@ -101,11 +101,15 @@ test("exact page counts accept zero but distinguish missing and reject invalid i
   assert.deepEqual(engine.summary({...chart("__pages"),pages:7}).items,[]);
 });
 
-test("columns are available through ten matching documents and date views always list documents",()=>{
-  const documents=Array.from({length:11},(_,id)=>({id,template:id===10?"Other":"Contracts"}));
+test("the ten-document column limit applies only to creation and modification date ranges",()=>{
+  const documents=Array.from({length:11},(_,id)=>({id,template:"Contracts",
+    created:"2026-02-01T12:00:00",modified:id===10?"2026-02-03T12:00:00":"2026-02-02T12:00:00"}));
   const dashboard=make(documents);
-  assert.equal(dashboard.displayType(chart("__template",["Contracts"])),"bar");
-  assert.equal(dashboard.displayType(chart("__template")),"documents");
-  assert.equal(dashboard.displayType(chart("__template",[],"horizontal")),"documents");
-  assert.equal(engine.displayType(chart("__modified",[],"line")),"documents");
+  assert.equal(dashboard.displayType(chart("__template")),"bar");
+  assert.equal(dashboard.displayType(chart("__template",[],"horizontal")),"horizontal");
+  assert.equal(dashboard.displayType(chart("__created")),"documents");
+  assert.equal(dashboard.displayType({...chart("__modified"),to:"2026-02-02"}),"bar");
+  assert.equal(dashboard.displayType(chart("__modified",[],"horizontal")),"documents");
+  assert.equal(engine.displayType(chart("__modified",[],"table")),"documents");
+  assert.equal(engine.displayType(chart("__modified",[],"line")),"line");
 });

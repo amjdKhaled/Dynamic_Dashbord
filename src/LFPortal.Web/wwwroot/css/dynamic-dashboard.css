@@ -96,8 +96,7 @@ main:has(> .dd-page){width:100%;max-width:1800px;padding:24px clamp(16px,4vw,76p
 .dd-card-sub,.dd-workspace-top small,.dd-hint,.dd-values-help,.dd-value-summary,.dd-value-option small,.dd-chart-note{font-size:13px;color:var(--dd-muted)}
 .dd-card-head strong,.dd-workspace-top strong,.dd-editor-head h2{font-size:20px}
 .dd-workspace{background:transparent;border:0;box-shadow:none;padding:0;min-height:0}
-.dd-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;align-items:stretch}
-.dd-card.dd-full-card{grid-column:1/-1}
+.dd-grid{gap:18px}
 .dd-card-head > div:first-child{min-width:0;overflow-wrap:anywhere}
 .dd-card-actions{flex-wrap:wrap;justify-content:flex-end}
 .dd-card-actions .dd-icon-btn{min-height:32px}
@@ -137,3 +136,18 @@ body:has(.dd-page.dd-is-loading) > :is(.site-header,.site-footer){display:none}
 .dd-repository-dialog::backdrop{background:#102a3d70}
 .dd-repository-dialog p{color:var(--dd-muted)}
 .dd-legend-shell{flex:none;grid-template-rows:18px minmax(0,1fr) 18px;height:142px}
+
+.dd-grid{grid-template-columns:repeat(12,minmax(0,1fr));align-items:start}
+.dd-card{grid-column:span var(--dd-card-span,6);position:relative}
+.dd-card.dd-sized-card .dd-chart-stage{height:auto;flex:1 1 0;min-height:72px}
+.dd-card.dd-sized-card .dd-circular-visual .dd-legend-shell{height:clamp(45px,25%,142px)}
+.dd-card.dd-sized-card .dd-table-visual{overflow:hidden}
+.dd-card.dd-sized-card .dd-table-wrap{height:auto;overflow:auto}
+.dd-card.dd-sized-card .dd-pager{flex:none}
+.dd-resize-handle{position:absolute;inset-block-end:0;inset-inline-end:0;z-index:2;
+  touch-action:none;cursor:nwse-resize;background:var(--dd-navy);color:white;border-radius:8px 0 0 0;
+  min-width:36px;min-height:33px}
+.dd-resize-handle:hover,.dd-resize-handle:focus-visible{background:var(--dd-blue);color:white}
+.dd-board-picker{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.dd-board-picker .dd-control{width:auto;min-width:min(220px,70vw);max-width:min(350px,80vw)}
+@media(max-width:850px){.dd-grid{grid-template-columns:minmax(0,1fr)}.dd-card{grid-column:1/-1}}

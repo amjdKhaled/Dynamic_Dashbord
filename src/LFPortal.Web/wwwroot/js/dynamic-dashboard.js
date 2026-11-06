@@ -41,17 +41,23 @@
     dateStamp(value)?.toISOString().slice(0,10)===value;
   const tablePages = new Map();
   let rows = [], fields = [], charts = [], instances = [], editing = null;
+  const boards = new Map();
+  const mainBoard = {id:"default",name:"اللوحة الرئيسية",layout:null};
+  let activeBoard = {...mainBoard};
+  const clamp = (value,min,max) => Math.max(min,Math.min(max,value));
   let partial = false, busy = false, editMode = false, revision = 0, savedRevision = 0, saving = false, hasSaved = false, layoutReady = false;
 
   function normalChart(chart) {
     const oldName = chart.dimension==="__name";
     const type = chart.type==="audit" ? "recent-modified" : chart.type;
+    const title = chart.type==="audit" ? "نشاط المستندات الأخير" : String(chart.title||"مؤشر");
     return {
-      id:String(chart.id), title:String(chart.type==="audit" ? "نشاط المستندات الأخير" : chart.title||"شارت").slice(0,90),
+      id:String(chart.id), title:title.replace(/^شارت(?= جديد$| بدون عنوان$|$)/,"مؤشر").slice(0,90),
       type:validTypes.includes(type)?type:"bar",
       dimension:oldName?"__template":String(chart.dimension||"__template"),
-      wide:Boolean(chart.wide),
-      span:chart.wide || Number(chart.span)>6 ? 12 : 6,
+      span:chart.span==null ? (chart.wide || isTable(type)?12:6)
+        : clamp(Math.round(Number(chart.span)||6),4,12),
+      height:chart.height==null ? null : clamp(Math.round(Number(chart.height)||360),240,1100),
       from:validDate(chart.from)?chart.from:"",
       to:validDate(chart.to)?chart.to:"",
       pages:pageCount(chart.pages),
@@ -75,6 +81,8 @@
   }
   function updateSaveBar(message) {
     $("dd-save-layout").disabled=!layoutReady || saving || revision===savedRevision;
+    for(const id of ["dd-board-list","dd-new-board","dd-rename-board"])
+      $(id).disabled=!layoutReady || saving;
     $("dd-layout-status").textContent=message ?? (saving?"جارٍ الحفظ…"
       :revision!==savedRevision?"تغييرات غير محفوظة"
       :hasSaved?"تم الحفظ":"");
@@ -83,29 +91,55 @@
     revision++;
     updateSaveBar();
   }
+  function syncBoardPicker() {
+    const items=[...boards.values()].filter(board=>board.id!==activeBoard.id);
+    items.push(activeBoard);
+    items.sort((a,b)=>a.id==="default"?-1:b.id==="default"?1:a.name.localeCompare(b.name,"ar"));
+    selectOptions($("dd-board-list"),items.map(board=>({value:board.id,label:board.name})),activeBoard.id,null);
+  }
+  function rememberBoard() {
+    const url=new URL(window.location.href);
+    if(activeBoard.id==="default")url.searchParams.delete("board");
+    else url.searchParams.set("board",activeBoard.id);
+    window.history.replaceState(window.history.state,"",url);
+  }
+  function activateBoard(board) {
+    closeEditor();
+    activeBoard={...board};
+    revision=0;
+    savedRevision=0;
+    hasSaved=false;
+    tablePages.clear();
+    loadConfig(board.layout);
+    syncBoardPicker();
+    updateSaveBar();
+    render();
+  }
   async function saveLayout() {
     if(!layoutReady || saving || revision===savedRevision)return;
     saving=true;
     const snapshot=revision;
+    const layout={version:2,name:activeBoard.name,charts:structuredClone(charts),updatedAt:Date.now()};
+    let message;
     updateSaveBar();
     try {
       const token=root.querySelector('input[name="__RequestVerificationToken"]')?.value;
-      const response=await fetch("/DynamicDashboard/SaveLayout",{
+      const response=await fetch("/DynamicDashboard/SaveLayout?boardId="+encodeURIComponent(activeBoard.id),{
         method:"POST",credentials:"same-origin",
         headers:{...requestHeaders,"Content-Type":"application/json","RequestVerificationToken":token||""},
-        body:JSON.stringify({version:2,charts,updatedAt:Date.now()})
+        body:JSON.stringify(layout)
       });
       if(!response.ok)throw new Error("HTTP "+response.status);
       savedRevision=snapshot;
       hasSaved=true;
-      updateSaveBar("تم الحفظ");
-    } catch(error) {
-      updateSaveBar("تعذر الحفظ. حاول مرة أخرى.");
+      boards.set(activeBoard.id,{id:activeBoard.id,name:layout.name,layout});
+      rememberBoard();
+    } catch {
+      message="تعذر الحفظ. حاول مرة أخرى.";
     } finally {
       saving=false;
-      $("dd-save-layout").disabled=revision===savedRevision;
+      updateSaveBar(message);
     }
-    if(savedRevision===snapshot)updateSaveBar();
   }
   async function restoreServerLayout() {
     if(!root.dataset.scope) {
@@ -115,11 +149,16 @@
     try {
       const response=await fetch("/DynamicDashboard/Layout",{credentials:"same-origin",cache:"no-store",headers:requestHeaders});
       if(!response.ok)throw new Error("HTTP "+response.status);
-      loadConfig(await response.json());
+      const result=await response.json();
+      boards.set(mainBoard.id,mainBoard);
+      for(const board of result.boards)boards.set(board.id,board);
+      const id=new URL(window.location.href).searchParams.get("board");
       layoutReady=true;
-      updateSaveBar();
+      activateBoard(boards.get(id)??boards.get(mainBoard.id));
+      rememberBoard();
     } catch {
-      updateSaveBar("تعذر تحميل اللوحة المحفوظة.");
+      layoutReady=false;
+      updateSaveBar("تعذر تحميل لوحات التحكم.");
     }
   }
   const unique = values => [...new Set(values.filter(v => v !== null && v !== undefined && String(v).trim() !== "").map(String))];
@@ -255,9 +294,15 @@
     form.submit();
   }
 
-  function displayType(chart, source=selectedRows(chart)) {
-    if(dateColumn(chart))return isRecent(chart.type)?chart.type:"documents";
-    return isBar(chart.type) && new Set(source.map(row=>row.id)).size>10 ? "documents" : chart.type;
+  function dateColumnsLimited(chart, source=selectedRows(chart)) {
+    return Boolean(dateColumn(chart)) && new Set(source.map(row=>row.id)).size>10;
+  }
+
+  function displayType(chart) {
+    if(isRecent(chart.type))return chart.type;
+    if(dateColumn(chart) && (chart.type==="table" || isBar(chart.type) && dateColumnsLimited(chart)))
+      return "documents";
+    return chart.type;
   }
 
   function documentRows(chart) {
@@ -347,11 +392,12 @@
     b.textContent=symbol;b.title=title;b.setAttribute("aria-label",title);
     b.addEventListener("click",handler);return b;
   }
-  function drawCard(chart, fullWidth) {
+  function drawCard(chart) {
     const type=displayType(chart);
     const ghost=Boolean(chart.hidden);
     const el=document.createElement("article");
-    el.className="dd-card"+(fullWidth?" dd-full-card":"")+(ghost?" dd-ghost":"");
+    el.className="dd-card"+(ghost?" dd-ghost":"");
+    applyCardSize(el,chart.span,chart.height);
     el.classList.toggle("dd-graph",!isTable(type)&&type!=="kpi");
     el.dataset.id=chart.id;el.draggable=editMode;
     const header=document.createElement("header");header.className="dd-card-head";
@@ -363,21 +409,26 @@
     const actions=document.createElement("div");actions.className="dd-card-actions";
     if(editMode) {
       actions.append(
-        iconButton("تعديل الشارت","⚙",()=>openEditor(chart.id)),
-        ...(!isTable(type) ? [iconButton(chart.wide?"نصف العرض":"عرض كامل","⤢",()=>{
-          chart.wide=!chart.wide;chart.span=chart.wide?12:6;markChanged();render();
-        })] : []),
+        iconButton("تعديل المؤشر","⚙",()=>openEditor(chart.id)),
+        iconButton(chart.span===12?"نصف العرض":"عرض كامل","⤢",()=>{
+          chart.span=chart.span===12?6:12;markChanged();render();
+        }),
+        iconButton("ارتفاع تلقائي","↕",()=>{
+          if(chart.height==null)return;
+          chart.height=null;applyCardSize(el,chart.span,null);markChanged();
+        }),
         iconButton("نقل لأعلى","↑",()=>moveCard(chart.id,-1)),
         iconButton("نقل لأسفل","↓",()=>moveCard(chart.id,1)),
-        iconButton(ghost?"إظهار الشارت":"إخفاء الشارت",ghost?"◉":"◌",
+        iconButton(ghost?"إظهار المؤشر":"إخفاء المؤشر",ghost?"◉":"◌",
           ()=>{chart.hidden=!chart.hidden;markChanged();render();}),
-        iconButton("حذف الشارت","×",()=>{if(window.confirm("حذف هذا الشارت من لوحتك؟")){
+        iconButton("حذف المؤشر","×",()=>{if(window.confirm("حذف هذا المؤشر من لوحتك؟")){
           tablePages.delete(chart.id);charts=charts.filter(c=>c.id!==chart.id);markChanged();render();}})
       );
     }
     header.append(headText,actions);el.appendChild(header);
     const body=document.createElement("div");body.className="dd-visual";
     el.appendChild(body);
+    if(editMode)attachResize(el,chart);
     if(ghost) {
       const text=document.createElement("p");text.className="dd-ghost-note";
       text.textContent="العنصر مخفي؛ اضغط زر العين لإظهاره";
@@ -495,19 +546,58 @@
     charts.splice(target,0,charts.splice(index,1)[0]);
     markChanged();render();
   }
-  function arrangedCards() {
-    const visible=charts.filter(chart=>editMode || !chart.hidden);
-    const full=chart=>chart.wide || isTable(displayType(chart));
-    const result=[];
-    for(let index=0;index<visible.length;index++) {
-      const chart=visible[index], next=visible[index+1];
-      if(full(chart) || !next || full(next))result.push(drawCard(chart,true));
-      else {
-        result.push(drawCard(chart,false),drawCard(next,false));
-        index++;
-      }
-    }
-    return result;
+  function applyCardSize(card,span,height) {
+    card.style.setProperty("--dd-card-span",span);
+    card.style.height=height==null?"":height+"px";
+    card.classList.toggle("dd-sized-card",height!=null);
+  }
+  function attachResize(card,chart) {
+    const handle=iconButton("تغيير حجم الكرت بالسحب أو بالأسهم","↔",()=>{});
+    handle.classList.add("dd-resize-handle");
+    card.appendChild(handle);
+    handle.addEventListener("pointerdown",event=>{
+      if(event.button!==0)return;
+      event.preventDefault();
+      handle.focus();
+      handle.setPointerCapture(event.pointerId);
+      const initial=card.getBoundingClientRect();
+      const grid=card.parentElement;
+      const width=grid.getBoundingClientRect().width;
+      const narrow=getComputedStyle(grid).gridTemplateColumns.split(" ").length===1;
+      const direction=getComputedStyle(card).direction==="rtl"?-1:1;
+      let span=chart.span, height=chart.height;
+      const move=next=>{
+        const dx=(next.clientX-event.clientX)*direction;
+        const dy=next.clientY-event.clientY;
+        span=narrow?chart.span:clamp(chart.span+Math.round(dx/(width/12)),4,12);
+        height=Math.abs(dy)<3?chart.height:clamp(Math.round(initial.height+dy),240,1100);
+        applyCardSize(card,span,height);
+      };
+      const finish=next=>{
+        handle.removeEventListener("pointermove",move);
+        handle.removeEventListener("lostpointercapture",finish);
+        handle.removeEventListener("pointerup",finish);
+        handle.removeEventListener("pointercancel",finish);
+        if(next.type==="pointercancel")applyCardSize(card,chart.span,chart.height);
+        else if(span!==chart.span || height!==chart.height) {
+          chart.span=span;chart.height=height;markChanged();
+        }
+      };
+      handle.addEventListener("pointermove",move);
+      handle.addEventListener("pointerup",finish,{once:true});
+      handle.addEventListener("pointercancel",finish,{once:true});
+      handle.addEventListener("lostpointercapture",finish,{once:true});
+    });
+    handle.addEventListener("keydown",event=>{
+      const rtl=getComputedStyle(card).direction==="rtl";
+      if(event.key==="ArrowUp" || event.key==="ArrowDown")
+        chart.height=clamp(Math.round(card.getBoundingClientRect().height)+(event.key==="ArrowDown"?20:-20),240,1100);
+      else if(event.key==="ArrowLeft" || event.key==="ArrowRight")
+        chart.span=clamp(chart.span+((event.key==="ArrowLeft")===rtl?1:-1),4,12);
+      else return;
+      event.preventDefault();
+      applyCardSize(card,chart.span,chart.height);markChanged();
+    });
   }
   function render() {
     instances.forEach(c=>c.destroy());instances=[];
@@ -515,7 +605,7 @@
     $("dd-customize").textContent=editMode?"✓ إنهاء التخصيص":"⚙ تخصيص اللوحة";
     $("dd-customize").setAttribute("aria-pressed",String(editMode));
     $("dd-add").classList.toggle("dd-hidden",!editMode);
-    $("dd-grid").replaceChildren(...arrangedCards());
+    $("dd-grid").replaceChildren(...charts.filter(chart=>editMode || !chart.hidden).map(drawCard));
     $("dd-empty").classList.toggle("dd-hidden",charts.some(c=>!c.hidden)||editMode&&charts.length>0);
   }
   function valueChoices() {
@@ -555,7 +645,7 @@
     const item=charts.find(c=>c.id===id);
     editing=item?structuredClone(item):{
       id:"custom-"+Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,6),
-      title:"شارت جديد",type:"table",dimension:"__template",
+      title:"مؤشر جديد",type:"table",dimension:"__template",
       wide:false,hidden:false,selectedValues:[]
     };
     $("dd-title").value=editing.title;$("dd-type").value=editing.type;
@@ -586,18 +676,17 @@
     $("dd-modified-range").classList.toggle("dd-hidden",!dateKey);
     $("dd-page-count").classList.toggle("dd-hidden",recent || editing.dimension!=="__pages");
     $("dd-category-options").classList.toggle("dd-hidden",recent || Boolean(dateKey) || editing.dimension==="__pages");
-    const draft={...editing,pages:pageCount($("dd-pages").value)};
-    const tooMany=Boolean(editing.dimension) && new Set(selectedRows(draft).map(row=>row.id)).size>10;
+    const draft={...editing,from:$("dd-modified-from").value,to:$("dd-modified-to").value};
+    const tooMany=!recent && dateColumnsLimited(draft);
     for(const option of $("dd-type").options) {
-      option.disabled=(isBar(option.value) && tooMany) ||
-        (Boolean(dateKey) && !isRecent(option.value) && option.value!=="documents");
+      option.disabled=isBar(option.value) && tooMany;
     }
     if($("dd-type").selectedOptions[0]?.disabled) {
       editing.type="documents";
       $("dd-type").value=editing.type;
     }
     const limit=$("dd-display-limit");
-    limit.textContent=tooMany && !dateKey?"الأعمدة متاحة حتى ١٠ وثائق مطابقة.":"";
+    limit.textContent=tooMany?"الأعمدة متاحة حتى ١٠ وثائق ضمن نطاق التاريخ.":"";
     limit.classList.toggle("dd-hidden",!limit.textContent);
     $("dd-save").disabled=!recent&&!editing.dimension;
   }
@@ -613,7 +702,7 @@
   const closeEditor=()=>{$("dd-editoroverlay").classList.add("dd-hidden");editing=null;};
   function saveEditor() {
     if(!editing)return;
-    editing.title=$("dd-title").value.trim()||"شارت بدون عنوان";
+    editing.title=$("dd-title").value.trim()||"مؤشر بدون عنوان";
     editing.type=$("dd-type").value;
     if(!isRecent(editing.type)&&!editing.dimension)return;
     editing.from=dateColumn(editing)?$("dd-modified-from").value:"";
@@ -631,7 +720,7 @@
       editing.selectedValues=[];
       editing.allValues=false;
     }
-    editing.type=displayType(editing);
+    if(isBar(editing.type) && dateColumnsLimited(editing))editing.type="documents";
     tablePages.delete(editing.id);
     // Only store chosen category identifiers; aggregation always counts unique documents.
     const entry=normalChart(editing);
@@ -728,8 +817,55 @@
     });
   }
 
+  function wireBoards() {
+    const dialog=$("dd-board-dialog");
+    const name=$("dd-board-name");
+    const list=$("dd-board-list");
+    let creating=false;
+    const canLeave=()=>!saving && (revision===savedRevision ||
+      window.confirm("توجد تغييرات غير محفوظة. هل تتابع؟"));
+    list.addEventListener("change",()=>{
+      if(!canLeave()) {list.value=activeBoard.id;return;}
+      const board=boards.get(list.value);
+      if(board) {
+        activateBoard(board);
+        rememberBoard();
+      }
+    });
+    const open=create=>{
+      if(create && !canLeave())return;
+      creating=create;
+      $("dd-board-dialog-title").textContent=create?"لوحة جديدة":"تغيير اسم اللوحة";
+      $("dd-board-error").textContent="";
+      name.value=create?"":activeBoard.name;
+      dialog.showModal();
+      name.focus();
+    };
+    $("dd-new-board").addEventListener("click",()=>open(true));
+    $("dd-rename-board").addEventListener("click",()=>open(false));
+    $("dd-board-cancel").addEventListener("click",()=>dialog.close());
+    dialog.querySelector("form").addEventListener("submit",event=>{
+      event.preventDefault();
+      const value=name.value.trim();
+      if(!value) {
+        $("dd-board-error").textContent="أدخل اسم اللوحة.";
+        return;
+      }
+      if(creating) {
+        const id=Array.from(crypto.getRandomValues(new Uint8Array(16)),
+          byte=>byte.toString(16).padStart(2,"0")).join("");
+        editMode=true;
+        activateBoard({id,name:value,layout:{version:2,charts:[]}});
+        hasSaved=false;
+      } else activeBoard.name=value;
+      syncBoardPicker();
+      markChanged();
+      dialog.close();
+    });
+  }
   function wire() {
     wireRepositorySwitch();
+    wireBoards();
     $("dd-save-layout").addEventListener("click",saveLayout);
     window.addEventListener("pageshow",event=>{if(event.persisted)window.location.reload();});
     $("dd-refresh").addEventListener("click",refresh);
@@ -757,7 +893,8 @@
     $("dd-dimension").addEventListener("change",changeDimension);
     $("dd-field").addEventListener("change",changeDimension);
     $("dd-value-search").addEventListener("input",valueChoices);
-    $("dd-pages").addEventListener("input",()=>{if(editing)updateEditorSource();});
+    for(const id of ["dd-modified-from","dd-modified-to"])
+      $(id).addEventListener("input",()=>{if(editing)updateEditorSource();});
     $("dd-clear-values").addEventListener("click",()=>{
       if(!editing||!editing.dimension)return;
       editing.allValues=true;

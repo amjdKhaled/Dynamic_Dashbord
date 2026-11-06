@@ -57,15 +57,14 @@ public sealed class ArchiveController : Controller
     [Authorize]
     [HttpPost]
     [ValidateAntiForgeryToken]
-    [RequestSizeLimit(64 * 1024)]
+    [RequestSizeLimit(1024 * 1024)]
     public async Task<IActionResult> OpenDashboardSelection(
         [FromForm] string title, [FromForm] string entryIds, [FromForm] string repository, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(entryIds) || entryIds.Length > 22_000 || !ModelState.IsValid)
+        if (string.IsNullOrWhiteSpace(entryIds) || entryIds.Length > 300_000 || !ModelState.IsValid)
             return BadRequest();
 
         var parts = entryIds.Split(',');
-        if (parts.Length > 2000) return BadRequest();
 
         var ids = new HashSet<int>();
         foreach (var part in parts)

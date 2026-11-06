@@ -18,7 +18,6 @@ namespace LFPortal.Web.Controllers;
 [ResponseCache(Location = ResponseCacheLocation.None, NoStore = true)]
 public sealed class DynamicDashboardController : Controller
 {
-    private const int MaxDocuments = 2000;
     private readonly ILaserficheEntryService _entries;
     private readonly ILaserficheFieldDefinitionService _fields;
     private readonly IRepositoryContext _repository;
@@ -214,8 +213,7 @@ public sealed class DynamicDashboardController : Controller
     }
 
     /// <summary>
-    /// Bounded, permission-aware document scan. A partial result is clearly flagged;
-    /// it must never be presented as an exhaustive repository total.
+    /// Scans all readable documents. Reports fields the repository could not return.
     /// </summary>
     [HttpGet]
     public async Task<IActionResult> Rows(CancellationToken cancellationToken)
@@ -224,17 +222,28 @@ public sealed class DynamicDashboardController : Controller
         {
             var repo = await _repository.GetActiveRepositoryAsync(cancellationToken);
             if (!IsCurrentRepository(repo.RepositoryId)) return StatusCode(409);
-            var definitions = await _fields.GetFieldDefinitionsAsync(cancellationToken);
-            var idsByName = definitions.Values.Where(f => !string.IsNullOrWhiteSpace(f.Name))
-                .GroupBy(f => f.Name.Trim(), StringComparer.OrdinalIgnoreCase)
-                .Where(group => group.Count() == 1)
-                .ToDictionary(group => group.Key, group => group.Single().Id, StringComparer.OrdinalIgnoreCase);
+            var scope = GetLayoutScope(repo.ServerUrl, repo.RepositoryId);
+            if (scope is not null && !MatchesLayoutScope(scope)) return StatusCode(409);
+
+            var catalog = new Dictionary<string, DashboardField>();
+            try
+            {
+                var definitions = await _fields.GetFieldDefinitionsAsync(cancellationToken);
+                foreach (var field in definitions.Values)
+                {
+                    var key = FieldKey(field.Id);
+                    catalog[key] = new DashboardField(key, field.Name, field.FieldType, field.IsMultiValue);
+                }
+            }
+            catch (LaserficheException ex) when (ex.StatusCode is 403 or 404)
+            {
+                // The catalog can be unavailable even when entry metadata is readable.
+            }
             var rootId = await _entries.GetRootEntryIdAsync(cancellationToken);
             var folders = new Queue<int>();
             var seenFolders = new HashSet<int>();
             var seenDocuments = new HashSet<int>();
             var documents = new List<LFEntry>();
-            var partial = false;
             folders.Enqueue(rootId);
 
             while (folders.Count > 0)
@@ -259,66 +268,79 @@ public sealed class DynamicDashboardController : Controller
                     if (child.EntryType is LFEntryType.Folder or LFEntryType.RecordSeries)
                         folders.Enqueue(child.Id);
                     else if (child.EntryType == LFEntryType.Document && seenDocuments.Add(child.Id))
-                    {
-                        if (documents.Count >= MaxDocuments)
-                        {
-                            partial = true;
-                            break;
-                        }
                         documents.Add(child);
-                    }
                 }
-
-                if (partial) break;
             }
 
-            // Reaching the safety ceiling is always reported as partial.
-            partial |= documents.Count >= MaxDocuments;
-
             var results = new List<object>();
-            // Respect the connected user's authorization for every document's metadata.
-            // Throttle concurrent requests so large repositories are not flooded.
-            using var gate = new SemaphoreSlim(6);
             var rows = new (LFEntry? Entry, IReadOnlyList<LFFieldValue>? Fields)[documents.Count];
-            await Task.WhenAll(documents.Select(async (entry, index) =>
-            {
-                await gate.WaitAsync(cancellationToken);
-                try
+            await Parallel.ForEachAsync(Enumerable.Range(0, documents.Count),
+                new ParallelOptions { MaxDegreeOfParallelism = 6, CancellationToken = cancellationToken },
+                async (index, token) =>
                 {
-                    // Require a per-document read, not merely visibility in a parent listing.
-                    var visibleEntry = await _entries.GetEntryAsync(entry.Id, cancellationToken);
-                    if (visibleEntry.Id != entry.Id)
-                        throw new InvalidOperationException("Laserfiche returned an unexpected entry identifier.");
-                    rows[index] = (visibleEntry, null);
+                    var entry = documents[index];
                     try
                     {
-                        rows[index] = (visibleEntry,
-                            await _entries.GetEntryFieldsAsync(entry.Id, cancellationToken));
+                        var visibleEntry = await _entries.GetEntryAsync(entry.Id, token);
+                        if (visibleEntry.Id != entry.Id)
+                            throw new InvalidOperationException("Laserfiche returned an unexpected entry identifier.");
+                        rows[index] = (visibleEntry, null);
+                        try
+                        {
+                            rows[index] = (visibleEntry, await _entries.GetEntryFieldsAsync(entry.Id, token));
+                        }
+                        catch (LaserficheException ex) when (ex.StatusCode is 403 or 404)
+                        {
+                            // Read access to the entry and to its metadata are separate.
+                        }
+                        catch (JsonException ex)
+                        {
+                            _logger.LogWarning(ex, "Could not decode metadata for entry {EntryId}.", entry.Id);
+                        }
                     }
                     catch (LaserficheException ex) when (ex.StatusCode is 403 or 404)
                     {
-                        // A readable document may have separately restricted field metadata.
+                        // An unreadable document is excluded entirely.
                     }
-                }
-                catch (LaserficheException ex) when (ex.StatusCode is 403 or 404)
-                {
-                    // A document that cannot be read must not appear in the dashboard.
-                }
-                finally { gate.Release(); }
-            }));
+                });
 
+            // Add fields returned by actual entries, even if the definition catalog omitted them.
+            foreach (var field in rows.Where(row => row.Fields is not null).SelectMany(row => row.Fields!))
+            {
+                if (field.FieldDefinitionId <= 0 || string.IsNullOrWhiteSpace(field.FieldName)) continue;
+                var key = FieldKey(field.FieldDefinitionId);
+                if (!catalog.TryGetValue(key, out var known) || string.IsNullOrWhiteSpace(known.Name))
+                    catalog[key] = new DashboardField(key, field.FieldName.Trim(), field.FieldType, field.IsMultiValue);
+            }
+
+            var knownNames = catalog.Values.Where(field => !string.IsNullOrWhiteSpace(field.Name))
+                .GroupBy(field => NormalizeFieldName(field.Name), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.OrdinalIgnoreCase);
+            var namesWithoutIds = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var fieldDataIncomplete = false;
             foreach (var row in rows)
             {
                 if (row.Entry is null) continue;
-                var values = row.Fields?
-                    .Select(f => (Id: definitions.ContainsKey(f.FieldDefinitionId)
-                        ? f.FieldDefinitionId : idsByName.GetValueOrDefault(f.FieldName.Trim()), Field: f))
-                    .Where(f => f.Id > 0)
-                    .GroupBy(f => f.Id.ToString(System.Globalization.CultureInfo.InvariantCulture))
-                    .ToDictionary(g => g.Key, g => g.SelectMany(f => f.Field.Values.Count > 0
-                        ? f.Field.Values : string.IsNullOrWhiteSpace(f.Field.Value)
-                            ? Array.Empty<string>() : new[] { f.Field.Value! })
-                        .Distinct(StringComparer.Ordinal).ToArray());
+                var values = row.Fields is null ? null : new Dictionary<string, HashSet<string>>();
+                if (row.Fields is null) fieldDataIncomplete = true;
+                foreach (var field in row.Fields ?? Array.Empty<LFFieldValue>())
+                {
+                    fieldDataIncomplete |= field.HasMoreValues;
+                    var key = ResolveFieldKey(field);
+                    if (key is null)
+                    {
+                        fieldDataIncomplete = true;
+                        continue;
+                    }
+
+                    if (field.HasMoreValues && field.Values.Count == 0 && string.IsNullOrWhiteSpace(field.Value))
+                        continue;
+                    if (!values!.TryGetValue(key, out var distinct))
+                        values[key] = distinct = new HashSet<string>(StringComparer.Ordinal);
+                    distinct.UnionWith(field.Values.Where(value => !string.IsNullOrWhiteSpace(value)));
+                    if (field.Values.Count == 0 && !string.IsNullOrWhiteSpace(field.Value))
+                        distinct.Add(field.Value);
+                }
                 results.Add(new
                 {
                     id = row.Entry.Id,
@@ -336,11 +358,34 @@ public sealed class DynamicDashboardController : Controller
             return Json(new
             {
                 rows = results,
-                partial,
+                fields = catalog.Values.OrderBy(field => field.Name).ThenBy(field => field.Id),
+                fieldDataIncomplete,
                 examined = documents.Count,
-                visible = results.Count,
-                warning = partial ? "البيانات جزئية: وصل التحليل للحد الآمن (2000 مستند). لا تُعدّ النتائج إجمالي المستودع." : null
+                visible = results.Count
             });
+
+            string? ResolveFieldKey(LFFieldValue field)
+            {
+                if (field.FieldDefinitionId > 0)
+                {
+                    var id = FieldKey(field.FieldDefinitionId);
+                    if (!catalog.ContainsKey(id))
+                        catalog[id] = new DashboardField(id, $"حقل {id}", field.FieldType, field.IsMultiValue);
+                    return id;
+                }
+
+                if (string.IsNullOrWhiteSpace(field.FieldName)) return null;
+                var name = NormalizeFieldName(field.FieldName);
+                if (knownNames.TryGetValue(name, out var matches))
+                    return matches.Length == 1 ? matches[0].Id : null;
+                if (!namesWithoutIds.TryGetValue(name, out var key))
+                {
+                    key = "field:" + name.ToUpperInvariant();
+                    namesWithoutIds.Add(name, key);
+                    catalog[key] = new DashboardField(key, field.FieldName.Trim(), field.FieldType, field.IsMultiValue);
+                }
+                return key;
+            }
         }
         catch (LaserficheException ex) when (ex.StatusCode is 401 or 403)
         {
@@ -352,4 +397,10 @@ public sealed class DynamicDashboardController : Controller
             return StatusCode(503, new { error = "تعذر قراءة البيانات. لم يتم عرض نتائج ناقصة على أنها كاملة." });
         }
     }
+
+    private sealed record DashboardField(string Id, string Name, string? Type, bool Multi);
+
+    private static string FieldKey(int id) => id.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    private static string NormalizeFieldName(string name) => name.Trim().Normalize();
 }

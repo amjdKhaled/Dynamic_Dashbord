@@ -1,3 +1,7 @@
+using LFPortal.Application.DTOs;
+using LFPortal.Application.Interfaces;
+using LFPortal.Infrastructure.Services;
+using Microsoft.Extensions.Logging.Abstractions;
 using LFPortal.Infrastructure.Adapters;
 using LFPortal.Infrastructure.Options;
 using Microsoft.Extensions.Options;
@@ -13,6 +17,56 @@ namespace LFPortal.Infrastructure.Tests;
 /// </summary>
 public sealed class LaserficheApiAdapterUrlTests
 {
+    [Theory]
+    [InlineData("v1", "fields?formatValue=false")]
+    [InlineData("v2", "Fields")]
+    public async Task EntryFields_ReadEveryPageAndPreserveRawValues(string version, string route)
+    {
+        using var handler = new FieldPages();
+        var service = new LaserficheEntryService(handler, new FieldRepository(),
+            CreateAdapter("https://lf-server.corp.local", apiVersion: version),
+            NullLogger<LaserficheEntryService>.Instance);
+        var fields = await service.GetEntryFieldsAsync(42);
+
+        Assert.Equal(new[] { $"/LFRepositoryAPI/{version}/Repositories/Documents/Entries/42/{route}", "/fields-next" }, handler.Requests);
+        Assert.Equal(17, fields[0].FieldDefinitionId);
+        Assert.Equal(new[] { "First", "Second", "0" }, fields[0].Values);
+        Assert.Equal(22, fields[1].FieldDefinitionId);
+        Assert.Equal(new[] { "False", "Third" }, fields[1].Values);
+        Assert.True(fields[1].HasMoreValues);
+    }
+
+    private sealed class FieldPages : HttpMessageHandler, IHttpClientFactory
+    {
+        public List<string> Requests { get; } = [];
+        public HttpClient CreateClient(string name)
+        {
+            Assert.Equal("LaserficheAuthenticated", name);
+            return new HttpClient(this, disposeHandler: false);
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Requests.Add(request.RequestUri!.PathAndQuery);
+            var json = Requests.Count == 1
+                ? """{"Value":[{"fieldId":17,"fieldName":"Subject","values":[{"value":"First"},{"value":["Second",0]}]}],"@odata.nextLink":"/fields-next"}"""
+                : """{"value":[{"id":22,"name":"List","values":[false,"Third",null],"hasMoreValues":true}]}""";
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent(json)
+            });
+        }
+    }
+
+    private sealed class FieldRepository : IRepositoryContext
+    {
+        private static readonly RepositoryDescriptor Repo = new("Documents", "https://lf-server.corp.local", "Documents", "Documents");
+        public Task<RepositoryDescriptor> GetActiveRepositoryAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(Repo);
+        public Task<IReadOnlyList<RepositoryDescriptor>> GetAllRepositoriesAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<RepositoryDescriptor>>(new[] { Repo });
+    }
+
     private static LaserficheApiAdapter CreateAdapter(
         string serverUrl,
         string apiBasePath = "/LFRepositoryAPI",

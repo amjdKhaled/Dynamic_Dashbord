@@ -71,15 +71,16 @@ internal sealed class LaserficheEntryService : ILaserficheEntryService
         string? nextUrl = url;
         while (nextUrl is not null)
         {
-            if (!visited.Add(nextUrl) || visited.Count > 100)
-                throw new JsonException("Entry fields pagination exceeded the safe limit.");
+            if (!visited.Add(nextUrl))
+                throw new JsonException("Entry fields pagination repeated a continuation URL.");
 
             using var response = await client.GetAsync(nextUrl, cancellationToken).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
                 throw new LaserficheException($"Laserfiche field request returned HTTP {(int)response.StatusCode}.",
                     (int)response.StatusCode);
             var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-            if (string.IsNullOrWhiteSpace(body)) break;
+            if (response.StatusCode == System.Net.HttpStatusCode.NoContent) break;
+            if (string.IsNullOrWhiteSpace(body)) throw new JsonException("Entry fields response was empty.");
             var (resources, nextLink) = ParseFieldResources(body);
             results.AddRange(resources.Select(MapFieldValue));
             nextUrl = string.IsNullOrWhiteSpace(nextLink) ? null : ResolveNextLink(nextUrl, nextLink)
@@ -596,10 +597,9 @@ internal sealed class LaserficheEntryService : ILaserficheEntryService
         var resources = new List<FieldResource>();
         foreach (var item in array.EnumerateArray())
         {
-            if (item.ValueKind == JsonValueKind.Object)
-            {
-                resources.Add(ParseFieldResource(item));
-            }
+            if (item.ValueKind != JsonValueKind.Object)
+                throw new JsonException("Entry field record was not an object.");
+            resources.Add(ParseFieldResource(item));
         }
 
         var nextLink = root.ValueKind == JsonValueKind.Object
@@ -612,7 +612,7 @@ internal sealed class LaserficheEntryService : ILaserficheEntryService
         string propertyName,
         out JsonElement array)
     {
-        if (objectElement.TryGetProperty(propertyName, out array) &&
+        if (TryGetPropertyIgnoreCase(objectElement, propertyName, out array) &&
             array.ValueKind == JsonValueKind.Array)
         {
             return true;
@@ -645,14 +645,25 @@ internal sealed class LaserficheEntryService : ILaserficheEntryService
             fieldType ??= ReadString(definition, "fieldType");
         }
 
-        var value = ReadValue(item);
+        var hasMoreValues = ReadBool(item, "hasMoreValues");
+        IReadOnlyList<string> values;
+        try
+        {
+            values = ReadValues(item);
+        }
+        catch (JsonException)
+        {
+            values = Array.Empty<string>();
+            hasMoreValues = true;
+        }
 
         return new FieldResource
         {
             FieldDefinitionId = definitionId ?? 0,
             Name              = inlineName ?? string.Empty,
-            Value             = value,
-            Values            = ReadValues(item),
+            Value             = values.Count == 0 ? null : string.Join(", ", values),
+            Values            = values,
+            HasMoreValues     = hasMoreValues,
             FieldType         = fieldType,
             IsRequired         = ReadBool(item, "isRequired"),
             IsMultiValue       = ReadBool(item, "isMultiValue")
@@ -667,6 +678,7 @@ internal sealed class LaserficheEntryService : ILaserficheEntryService
         FieldName         = resource.Name,
         Value             = resource.Value,
         Values            = resource.Values,
+        HasMoreValues     = resource.HasMoreValues,
         FieldType         = resource.FieldType,
         IsRequired        = resource.IsRequired,
         IsMultiValue      = resource.IsMultiValue
@@ -674,79 +686,39 @@ internal sealed class LaserficheEntryService : ILaserficheEntryService
 
     private static IReadOnlyList<string> ReadValues(JsonElement item)
     {
-        if (TryGetPropertyIgnoreCase(item, "values", out var values) &&
-            values.ValueKind == JsonValueKind.Array)
-            return values.EnumerateArray()
-                .Select(valueItem => valueItem.ValueKind == JsonValueKind.Object &&
-                    TryGetPropertyIgnoreCase(valueItem, "value", out var nestedValue)
-                    ? JsonElementToString(nestedValue) : JsonElementToString(valueItem))
-                .Where(v => !string.IsNullOrWhiteSpace(v))
-                .Select(v => v!)
-                .ToArray();
-
-        if (TryGetPropertyIgnoreCase(item, "value", out var value))
+        foreach (var property in new[] { "values", "value", "valueText" })
         {
-            if (value.ValueKind == JsonValueKind.Array)
-                return value.EnumerateArray().Select(JsonElementToString)
-                    .Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v!).ToArray();
-            var scalar = JsonElementToString(value);
-            return string.IsNullOrWhiteSpace(scalar) ? Array.Empty<string>() : new[] { scalar };
+            if (!TryGetPropertyIgnoreCase(item, property, out var value)) continue;
+            var values = FlattenValues(value).Where(text => !string.IsNullOrWhiteSpace(text)).ToArray();
+            if (values.Length > 0) return values;
         }
-        var text = ReadString(item, "valueText");
-        return string.IsNullOrWhiteSpace(text) ? Array.Empty<string>() : new[] { text };
+
+        return Array.Empty<string>();
     }
 
-    private static string? ReadValue(JsonElement item)
+    private static IEnumerable<string> FlattenValues(JsonElement value)
     {
-        // Confirmed response shape:
-        // "values": [{ "value": "..." , "position": 0 }]
-        // A document field can have multiple values, so preserve all of them
-        // in display order instead of reading only the first one.
-        if (TryGetPropertyIgnoreCase(item, "values", out var values) &&
-            values.ValueKind == JsonValueKind.Array)
+        switch (value.ValueKind)
         {
-            var valuesList = values.EnumerateArray()
-                .Select(valueItem =>
+            case JsonValueKind.Array:
+                return value.EnumerateArray().SelectMany(FlattenValues);
+            case JsonValueKind.Object:
+                var recognized = false;
+                foreach (var property in new[] { "value", "valueText", "formattedValue" })
                 {
-                    if (valueItem.ValueKind == JsonValueKind.Object &&
-                        TryGetPropertyIgnoreCase(valueItem, "value", out var nestedValue))
-                    {
-                        return JsonElementToString(nestedValue);
-                    }
-
-                    return JsonElementToString(valueItem);
-                })
-                .ToList();
-
-            return valuesList.Count == 0
-                ? null
-                : string.Join(", ", valuesList);
+                    if (!TryGetPropertyIgnoreCase(value, property, out var nested)) continue;
+                    recognized = true;
+                    var values = FlattenValues(nested).Where(text => !string.IsNullOrWhiteSpace(text)).ToArray();
+                    if (values.Length > 0) return values;
+                }
+                if (!recognized) throw new JsonException("Unrecognized structured field value.");
+                return Array.Empty<string>();
+            case JsonValueKind.Null:
+            case JsonValueKind.Undefined:
+                return Array.Empty<string>();
+            default:
+                return new[] { value.ToString() };
         }
-
-        if (!TryGetPropertyIgnoreCase(item, "value", out var value))
-        {
-            if (TryGetPropertyIgnoreCase(item, "valueText", out var valueText))
-            {
-                return valueText.ValueKind == JsonValueKind.Null
-                    ? null
-                    : valueText.ToString();
-            }
-
-            return null;
-        }
-
-        return JsonElementToString(value);
-    }
-
-    private static string? JsonElementToString(JsonElement value)
-    {
-        return value.ValueKind switch
-        {
-            JsonValueKind.Null      => null,
-            JsonValueKind.Array     => string.Join(", ", value.EnumerateArray().Select(v => v.ToString())),
-            JsonValueKind.Object    => value.GetRawText(),
-            _                       => value.ToString()
-        };
     }
 
     private static int? ReadInt(JsonElement item, string propertyName)
@@ -912,6 +884,8 @@ internal sealed class LaserficheEntryService : ILaserficheEntryService
 
     private sealed record FieldResource
     {
+        public bool HasMoreValues { get; init; }
+
         /// <summary>
         /// Numeric field definition ID. Matches <c>id</c> in the repository-wide
         /// FieldDefinitions list. Used as the join key when resolving human-readable names.
@@ -942,3 +916,4 @@ internal sealed class LaserficheEntryService : ILaserficheEntryService
         public bool IsMultiValue { get; init; }
     }
 }
+

@@ -151,3 +151,5 @@ body:has(.dd-page.dd-is-loading) > :is(.site-header,.site-footer){display:none}
 .dd-board-picker{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .dd-board-picker .dd-control{width:auto;min-width:min(220px,70vw);max-width:min(350px,80vw)}
 @media(max-width:850px){.dd-grid{grid-template-columns:minmax(0,1fr)}.dd-card{grid-column:1/-1}}
+
+#dd-board-dialog:modal{position:fixed;inset:0;margin:auto;max-height:calc(100dvh - 32px);overflow:auto}

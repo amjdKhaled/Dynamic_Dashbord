@@ -6,12 +6,13 @@
 @section Styles {
     <link rel="stylesheet" href="~/css/dynamic-dashboard.css" asp-append-version="true" />
 }
-<div class="dd-page" id="dynamicDashboard" dir="rtl" data-scope="@scope" data-repository="@ViewBag.RepositoryId" data-archive-url="@Url.Action("OpenDashboardSelection", "Archive")">
+<div class="dd-page dd-is-loading" id="dynamicDashboard" dir="rtl" data-scope="@scope" data-repository="@ViewBag.RepositoryId" data-archive-url="@Url.Action("OpenDashboardSelection", "Archive")">
     @Html.AntiForgeryToken()
+    <div id="dd-loading" class="dd-loading" role="status" aria-label="تحميل بيانات Laserfiche"><span></span></div>
+    <div class="dd-content" inert>
     <header class="dd-header">
         <div class="dd-headline">
             <h1>لوحة المعلومات <span>الديناميكية</span></h1>
-            <p>أنشئ مؤشراتك وشارتاتك من بيانات وحقول Laserfiche المباشرة</p>
         </div>
         <div class="dd-head-actions">
             <button type="button" class="dd-btn" id="dd-repository">تبديل المستودع · @ViewBag.RepositoryId</button>
@@ -22,15 +23,18 @@
     </header>
     <div class="dd-layout">
         <section class="dd-workspace" aria-label="محتوى اللوحة">
-            <div class="dd-workspace-top">
-                <div><strong>التحليلات والمؤشرات</strong><small id="dd-workspace-help">اضغط «تخصيص اللوحة» لإضافة الشارتات أو تعديلها</small></div>
-                <div class="dd-hint">يُحفظ التخصيص لكل مستخدم ومستودع على خادم اللوحة</div>
+            <div class="dd-layout-bar" aria-label="حفظ اللوحة">
+                <strong>لوحتي المحفوظة</strong>
+                <div class="dd-save-actions">
+                    <span id="dd-layout-status" role="status"></span>
+                    <button type="button" class="dd-btn dd-btn-primary" id="dd-save-layout" disabled>حفظ ترتيب اللوحة</button>
+                </div>
             </div>
             <p id="dd-warning" class="dd-warning dd-hidden" role="alert"></p>
-            <div id="dd-loading" class="dd-loading" role="status" aria-label="تحميل بيانات Laserfiche"><span></span></div>
             <div class="dd-grid" id="dd-grid"></div>
-            <div id="dd-empty" class="dd-empty dd-hidden">لا توجد شارتات ظاهرة. اضغط «إضافة شارت» لبدء إنشاء تحليلك.</div>
+            <div id="dd-empty" class="dd-empty dd-hidden">لا توجد كروت ظاهرة.</div>
         </section>
+    </div>
     </div>
     <dialog id="dd-repository-dialog" class="dd-repository-dialog">
         <form method="post" action="@Url.Action("SwitchRepository", "Login")">
@@ -63,11 +67,13 @@
                 <option value="line">خطي</option>
                 <option value="doughnut">دائري مجوف</option>
                 <option value="pie">دائري</option>
-                <option value="table">جدول</option>
+                <option value="table">جدول التجميع</option>
+                <option value="documents">جدول الوثائق</option>
                 <option value="recent-created">جدول المستندات المنشأة حديثًا</option>
                 <option value="recent-modified">جدول نشاط المستندات الأخير</option>
                 <option value="kpi">بطاقة رقم</option>
             </select>
+            <p id="dd-display-limit" class="dd-warning dd-hidden" role="status"></p>
             <div id="dd-axis-options">
             <label class="dd-label" for="dd-dimension">البيانات / المحور التصنيفي</label>
             <select class="dd-control" id="dd-dimension"></select>
@@ -82,17 +88,15 @@
             </div>
             <div id="dd-page-count" class="dd-hidden">
                 <label class="dd-label" for="dd-pages">عدد الصفحات (مطابقة الرقم)</label>
-                <input type="number" min="0" step="1" max="2147483647" id="dd-pages" class="dd-control" />
+                <input type="text" inputmode="decimal" maxlength="24" id="dd-pages" class="dd-control" />
             </div>
             <div id="dd-category-options">
             <label class="dd-label" for="dd-value-search">القيم الموجودة في الوثائق (اختياري)</label>
-            <p class="dd-values-help">القيم مأخوذة من حقول الوثائق التي يحق لك قراءتها في Laserfiche. اختر قيمة أو أكثر، أو اترك الاختيار فارغًا لعرض جميع القيم. عدد الوثائق يُحسب تلقائيًا.</p>
             <div class="dd-values-actions">
                 <input type="search" id="dd-value-search" class="dd-control" placeholder="البحث عن قيمة..." autocomplete="off" />
                 <button type="button" id="dd-clear-values" class="dd-btn">عرض جميع القيم</button>
             </div>
             <div id="dd-value-list" class="dd-value-list" aria-live="polite"></div>
-            <div id="dd-value-summary" class="dd-value-summary"></div>
             </div>
             <p id="dd-filter-error" class="dd-warning dd-hidden" role="alert"></p>
             <div class="dd-editor-actions">

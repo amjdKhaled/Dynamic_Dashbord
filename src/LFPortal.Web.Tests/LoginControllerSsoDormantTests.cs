@@ -92,6 +92,28 @@ public sealed class LoginControllerSsoDormantTests
         Assert.Equal(1, auth.TryAuthenticateCallCount);
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("not-an-absolute-url")]
+    [InlineData("file:///C:/Laserfiche")]
+    public async Task Login_Post_UnconfiguredLaserficheServer_ShowsSettingsGuidanceWithoutRequest(string url)
+    {
+        var options = DefaultOptions();
+        options.ServerUrl = url;
+        var (controller, auth, _) = Build(options);
+
+        var result = await controller.Index(new LoginInputModel
+        {
+            Username = "admin", Repository = "TestRepo"
+        }, CancellationToken.None);
+
+        var view = Assert.IsType<ViewResult>(result);
+        var model = Assert.IsType<LoginViewModel>(view.Model);
+        Assert.Contains("Settings", model.ErrorMessage);
+        Assert.Contains("Laserfiche API Server URL", model.ErrorMessage);
+        Assert.Equal(0, auth.TryAuthenticateCallCount);
+    }
+
     [Fact]
     public async Task Login_Post_Forbidden_ShowsRepositoryAccessFailureInsteadOfWrongPassword()
     {

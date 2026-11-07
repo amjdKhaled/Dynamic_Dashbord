@@ -495,13 +495,27 @@
             btn.type="button";btn.className="dd-legend-row";
             const dot=document.createElement("span");dot.className="dd-legend-dot";
             dot.style.backgroundColor=palette[i%palette.length];
-            const label=document.createElement("span");label.textContent=group.label;
+            const label=document.createElement("span");label.textContent=group.label;label.title=group.label;
             const count=document.createElement("strong");count.textContent=group.value.toLocaleString("ar-SA");
             btn.append(dot,label,count);
             btn.addEventListener("click",()=>openArchive(group.label,group.docs));
             legend.appendChild(btn);
           }
-          body.appendChild(legend);
+          const shell=document.createElement("div");
+          shell.className="dd-legend-shell";
+          if(data.groups.length>4) {
+            const scroll=direction=>legend.scrollBy({top:direction*legend.clientHeight,behavior:"smooth"});
+            const up=iconButton("تمرير القائمة لأعلى","▲",()=>scroll(-1));
+            const down=iconButton("تمرير القائمة لأسفل","▼",()=>scroll(1));
+            const updateArrows=()=>{
+              up.disabled=legend.scrollTop<=1;
+              down.disabled=legend.scrollTop+legend.clientHeight>=legend.scrollHeight-1;
+            };
+            legend.addEventListener("scroll",updateArrows,{passive:true});
+            shell.append(up,legend,down);
+            requestAnimationFrame(updateArrows);
+          } else shell.appendChild(legend);
+          body.appendChild(shell);
         }
         const config={
           type,

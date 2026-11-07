@@ -44,8 +44,12 @@
   const boards = new Map();
   const mainBoard = {id:"default",name:"اللوحة الرئيسية",layout:null};
   let activeBoard = {...mainBoard};
-  const clamp = (value,min,max) => Math.max(min,Math.min(max,value));
   let partial = false, busy = false, editMode = false, revision = 0, savedRevision = 0, saving = false, hasSaved = false, layoutReady = false;
+
+  function cardSpan(chart) {
+    if(chart.span==null)return chart.wide || isTable(chart.type)?12:6;
+    return Number(chart.span)>=9?12:6;
+  }
 
   function normalChart(chart) {
     const oldName = chart.dimension==="__name";
@@ -55,9 +59,7 @@
       id:String(chart.id), title:title.replace(/^شارت(?= جديد$| بدون عنوان$|$)/,"مؤشر").slice(0,90),
       type:validTypes.includes(type)?type:"bar",
       dimension:oldName?"__template":String(chart.dimension||"__template"),
-      span:chart.span==null ? (chart.wide || isTable(type)?12:6)
-        : clamp(Math.round(Number(chart.span)||6),4,12),
-      height:chart.height==null ? null : clamp(Math.round(Number(chart.height)||360),240,1100),
+      span:cardSpan({...chart,type}),
       from:validDate(chart.from)?chart.from:"",
       to:validDate(chart.to)?chart.to:"",
       pages:pageCount(chart.pages),
@@ -273,7 +275,7 @@
     if(chart.dimension==="__created"||chart.dimension==="__modified")
       list.sort((a,b)=>a.label.localeCompare(b.label));
     else list.sort((a,b)=>b.value-a.value||a.label.localeCompare(b.label,"ar"));
-    const isChart=!isTable(chart.type);
+    const isChart=!isTable(chart.type) && !["doughnut","pie"].includes(chart.type);
     return {groups:isChart?list.slice(0,30):list,extra:isChart?Math.max(0,list.length-30):0,
       totalGroups:list.length,items:source};
   }
@@ -350,7 +352,13 @@
       }
       for(const item of rows.slice((page-1)*size,page*size)) {
         const row=tbody.insertRow();
-        for(const value of cells(item))row.insertCell().textContent=value;
+        cells(item).forEach((value,index)=>{
+          const cell=row.insertCell();
+          cell.dataset.label=headers[index];
+          const text=document.createElement("span");
+          text.textContent=value;
+          cell.appendChild(text);
+        });
         row.tabIndex=0;row.style.cursor="pointer";
         row.addEventListener("click",()=>activate(item));
         row.addEventListener("keydown",event=>{
@@ -387,6 +395,7 @@
   }
 
   function drawDocumentTable(body,chart) {
+    body.classList.add("dd-document-table");
     const modified=dateColumn(chart)==="modified" || !dateColumn(chart);
     const headers=["اسم المستند","المجلد","القالب","تاريخ الإنشاء",
       ...(modified?["تاريخ التعديل"]:[]),"أنشأه","عدد الصفحات"];
@@ -406,7 +415,8 @@
     const ghost=Boolean(chart.hidden);
     const el=document.createElement("article");
     el.className="dd-card"+(ghost?" dd-ghost":"");
-    applyCardSize(el,chart.span,chart.height);
+    const documentTable=type==="documents" || isRecent(type);
+    el.classList.toggle("dd-full-card",documentTable || chart.span===12);
     el.classList.toggle("dd-graph",!isTable(type)&&type!=="kpi");
     el.dataset.id=chart.id;el.draggable=editMode;
     const header=document.createElement("header");header.className="dd-card-head";
@@ -419,13 +429,8 @@
     if(editMode) {
       actions.append(
         iconButton("تعديل المؤشر","⚙",()=>openEditor(chart.id)),
-        iconButton(chart.span===12?"نصف العرض":"عرض كامل","⤢",()=>{
-          chart.span=chart.span===12?6:12;markChanged();render();
-        }),
-        iconButton("ارتفاع تلقائي","↕",()=>{
-          if(chart.height==null)return;
-          chart.height=null;applyCardSize(el,chart.span,null);markChanged();
-        }),
+        ...(!documentTable?[iconButton("تبديل عرض الكرت","⤢",
+          ()=>setCardSpan(el,chart,chart.span===12?6:12))]:[]),
         iconButton("نقل لأعلى","↑",()=>moveCard(chart.id,-1)),
         iconButton("نقل لأسفل","↓",()=>moveCard(chart.id,1)),
         iconButton(ghost?"إظهار المؤشر":"إخفاء المؤشر",ghost?"◉":"◌",
@@ -437,7 +442,7 @@
     header.append(headText,actions);el.appendChild(header);
     const body=document.createElement("div");body.className="dd-visual";
     el.appendChild(body);
-    if(editMode)attachResize(el,chart);
+    if(editMode && !documentTable)attachResize(el,chart);
     if(ghost) {
       const text=document.createElement("p");text.className="dd-ghost-note";
       text.textContent="العنصر مخفي؛ اضغط زر العين لإظهاره";
@@ -496,19 +501,7 @@
             btn.addEventListener("click",()=>openArchive(group.label,group.docs));
             legend.appendChild(btn);
           }
-          const shell=document.createElement("div");
-          shell.className="dd-legend-shell";
-          const scroll=direction=>legend.scrollBy({top:direction*48,behavior:"smooth"});
-          const up=iconButton("تمرير القيم لأعلى","▲",()=>scroll(-1));
-          const down=iconButton("تمرير القيم لأسفل","▼",()=>scroll(1));
-          const updateArrows=()=>{
-            up.disabled=legend.scrollTop<=1;
-            down.disabled=legend.scrollTop+legend.clientHeight>=legend.scrollHeight-1;
-          };
-          legend.addEventListener("scroll",updateArrows,{passive:true});
-          shell.append(up,legend,down);
-          body.appendChild(shell);
-          requestAnimationFrame(updateArrows);
+          body.appendChild(legend);
         }
         const config={
           type,
@@ -555,57 +548,39 @@
     charts.splice(target,0,charts.splice(index,1)[0]);
     markChanged();render();
   }
-  function applyCardSize(card,span,height) {
-    card.style.setProperty("--dd-card-span",span);
-    card.style.height=height==null?"":height+"px";
-    card.classList.toggle("dd-sized-card",height!=null);
+  function setCardSpan(card,chart,span) {
+    if(chart.span===span)return;
+    chart.span=span;
+    card.classList.toggle("dd-full-card",span===12);
+    markChanged();
   }
   function attachResize(card,chart) {
-    const handle=iconButton("تغيير حجم الكرت بالسحب أو بالأسهم","↔",()=>{});
+    const handle=iconButton("تغيير العرض إلى نصف الصف أو عرضه الكامل","↔",
+      event=>{if(event.detail===0)setCardSpan(card,chart,chart.span===12?6:12);});
     handle.classList.add("dd-resize-handle");
     card.appendChild(handle);
     handle.addEventListener("pointerdown",event=>{
-      if(event.button!==0)return;
+      if(event.button!==0 || !event.isPrimary)return;
       event.preventDefault();
-      handle.focus();
+      handle.focus({preventScroll:true});
       handle.setPointerCapture(event.pointerId);
-      const initial=card.getBoundingClientRect();
-      const grid=card.parentElement;
-      const width=grid.getBoundingClientRect().width;
-      const narrow=getComputedStyle(grid).gridTemplateColumns.split(" ").length===1;
-      const direction=getComputedStyle(card).direction==="rtl"?-1:1;
-      let span=chart.span, height=chart.height;
-      const move=next=>{
-        const dx=(next.clientX-event.clientX)*direction;
-        const dy=next.clientY-event.clientY;
-        span=narrow?chart.span:clamp(chart.span+Math.round(dx/(width/12)),4,12);
-        height=Math.abs(dy)<3?chart.height:clamp(Math.round(initial.height+dy),240,1100);
-        applyCardSize(card,span,height);
-      };
+      const rtl=getComputedStyle(card).direction==="rtl";
       const finish=next=>{
-        handle.removeEventListener("pointermove",move);
-        handle.removeEventListener("lostpointercapture",finish);
         handle.removeEventListener("pointerup",finish);
-        handle.removeEventListener("pointercancel",finish);
-        if(next.type==="pointercancel")applyCardSize(card,chart.span,chart.height);
-        else if(span!==chart.span || height!==chart.height) {
-          chart.span=span;chart.height=height;markChanged();
-        }
+        handle.removeEventListener("lostpointercapture",cancel);
+        const distance=(next.clientX-event.clientX)*(rtl?-1:1);
+        // Keep the canvas and its labels stable until the resize is committed.
+        if(Math.abs(distance)>=24)setCardSpan(card,chart,distance>0?12:6);
       };
-      handle.addEventListener("pointermove",move);
+      const cancel=()=>handle.removeEventListener("pointerup",finish);
       handle.addEventListener("pointerup",finish,{once:true});
-      handle.addEventListener("pointercancel",finish,{once:true});
-      handle.addEventListener("lostpointercapture",finish,{once:true});
+      handle.addEventListener("lostpointercapture",cancel,{once:true});
     });
     handle.addEventListener("keydown",event=>{
-      const rtl=getComputedStyle(card).direction==="rtl";
-      if(event.key==="ArrowUp" || event.key==="ArrowDown")
-        chart.height=clamp(Math.round(card.getBoundingClientRect().height)+(event.key==="ArrowDown"?20:-20),240,1100);
-      else if(event.key==="ArrowLeft" || event.key==="ArrowRight")
-        chart.span=clamp(chart.span+((event.key==="ArrowLeft")===rtl?1:-1),4,12);
-      else return;
+      if(!["ArrowLeft","ArrowRight"].includes(event.key))return;
       event.preventDefault();
-      applyCardSize(card,chart.span,chart.height);markChanged();
+      const rtl=getComputedStyle(card).direction==="rtl";
+      setCardSpan(card,chart,(event.key==="ArrowLeft")===rtl?12:6);
     });
   }
   function render() {

@@ -42,7 +42,7 @@
 .dd-editor-head h2{font-size:17px;margin:0}.dd-editor-subtitle{font-size:12px}.dd-editor-actions{display:flex;gap:10px;margin-top:20px;justify-content:flex-end}
 .dd-heightlabel{font-size:11px;color:#7d8985}.dd-editor input[type=range]{width:100%}
 .dd-table{width:100%;border-collapse:collapse;font-size:11px}.dd-table td,.dd-table th{border-bottom:1px solid #e8ecf0;text-align:right;padding:8px}
-.dd-table td a{color:#0b438a;text-decoration:none}.dd-table-wrap{height:100%;overflow:auto}
+.dd-table td a{color:#0b438a;text-decoration:none}
 @media(max-width:860px){.dd-layout{grid-template-columns:1fr}.dd-sidebar{position:static;max-height:unset}.dd-grid{grid-template-columns:1fr}.dd-card.wide{grid-column:span 1}.dd-hint{display:none}}
 
 
@@ -69,24 +69,19 @@
 .dd-visual{display:flex;flex-direction:column;flex:1;min-height:0;height:auto;overflow:hidden}
 .dd-chart-stage{position:relative;min-height:130px;flex:1 1 auto}
 .dd-circular-visual .dd-chart-stage{flex:1 1 150px;min-height:130px}
-.dd-chart-legend{flex:0 1 auto;max-height:105px;min-height:0;overflow-y:auto;overscroll-behavior:contain;border-top:1px solid #edf0f4;margin-top:7px}
+.dd-chart-legend{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));
+  flex:none;gap:0 14px;border-top:1px solid #edf0f4;margin-top:7px}
 .dd-legend-row{width:100%;display:flex;align-items:center;gap:8px;text-align:right;border:0;border-bottom:1px solid #eff1f4;background:#fff;cursor:pointer;padding:6px 8px;color:#506172;font:inherit;font-size:11px}
 .dd-legend-row span:nth-child(2){overflow-wrap:anywhere;min-width:0;flex:1}
 .dd-legend-row strong{font-variant-numeric:tabular-nums;font-size:10px}
 .dd-legend-dot{height:9px;width:9px;flex:none;border-radius:2px}
 .dd-chart-note{font-size:10px;line-height:1.5;color:#647487;flex:none}
 .dd-partial-note{color:#8b6328}
-.dd-table-wrap{min-height:0;flex:1;overflow:auto;overscroll-behavior:contain}
+.dd-table-wrap{min-width:0;flex:none}
 .dd-kpi{padding-top:0;align-self:center;margin:auto;font-size:clamp(28px,4vw,52px)}
 @media(max-width:1000px){.dd-grid{grid-template-columns:1fr}.dd-card.wide{grid-column:span 1}}
 @media(max-width:520px){.dd-values-actions{flex-wrap:wrap}.dd-values-actions .dd-btn{width:100%}}
 
-
-.dd-legend-shell{display:grid;grid-template-rows:18px minmax(0,1fr) 18px;min-height:0;flex:0 1 142px;margin-top:7px}
-.dd-legend-shell .dd-chart-legend{margin-top:0;max-height:none;scrollbar-width:none}
-.dd-legend-shell .dd-chart-legend::-webkit-scrollbar{display:none}
-.dd-legend-shell > button{height:18px;width:100%;padding:0;border:0;background:transparent;font-size:12px;line-height:1;color:#0b1c49}
-.dd-legend-shell > button:disabled{visibility:hidden}
 
 /* Match the main dashboard's width, typography and ISB card treatment. */
 main:has(> .dd-page){width:100%;max-width:1800px;padding:24px clamp(16px,4vw,76px)}
@@ -116,7 +111,7 @@ main:has(> .dd-page){width:100%;max-width:1800px;padding:24px clamp(16px,4vw,76p
 .dd-kpi{min-height:128px;display:grid;align-content:center}
 .dd-table-visual{overflow:visible}
 .dd-table-wrap{border:1px solid var(--dd-border);border-radius:10px}
-.dd-table{font-size:15px}
+.dd-table{font-size:15px;table-layout:fixed;overflow-wrap:anywhere}
 .dd-table th{background:#eef3f7}
 .dd-table th,.dd-table td{padding:10px 14px}
 .dd-table tbody tr:hover,.dd-table tbody tr:focus{background:#eef3f7}
@@ -135,21 +130,31 @@ body:has(.dd-page.dd-is-loading) > :is(.site-header,.site-footer){display:none}
 .dd-repository-dialog{width:min(460px,92vw);border:1px solid var(--dd-border);border-radius:16px;color:inherit;padding:22px}
 .dd-repository-dialog::backdrop{background:#102a3d70}
 .dd-repository-dialog p{color:var(--dd-muted)}
-.dd-legend-shell{flex:none;grid-template-rows:18px minmax(0,1fr) 18px;height:142px}
-
-.dd-grid{grid-template-columns:repeat(12,minmax(0,1fr));align-items:start}
-.dd-card{grid-column:span var(--dd-card-span,6);position:relative}
-.dd-card.dd-sized-card .dd-chart-stage{height:auto;flex:1 1 0;min-height:72px}
-.dd-card.dd-sized-card .dd-circular-visual .dd-legend-shell{height:clamp(45px,25%,142px)}
-.dd-card.dd-sized-card .dd-table-visual{overflow:hidden}
-.dd-card.dd-sized-card .dd-table-wrap{height:auto;overflow:auto}
-.dd-card.dd-sized-card .dd-pager{flex:none}
+/* Cards use whole columns. The content determines the row height. */
+.dd-grid{grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch}
+.dd-card{position:relative;grid-column:auto}
+.dd-card.dd-full-card{grid-column:1/-1}
+.dd-edit-mode .dd-card:has(.dd-resize-handle) .dd-visual{padding-block-end:48px}
+.dd-circular-visual .dd-chart-stage{width:100%;max-width:460px;align-self:center}
+.dd-document-table .dd-table th:nth-child(-n+2){width:20%}
 .dd-resize-handle{position:absolute;inset-block-end:0;inset-inline-end:0;z-index:2;
-  touch-action:none;cursor:nwse-resize;background:var(--dd-navy);color:white;border-radius:8px 0 0 0;
+  touch-action:none;cursor:ew-resize;background:var(--dd-navy);color:white;border-radius:8px 0 0 0;
   min-width:36px;min-height:33px}
 .dd-resize-handle:hover,.dd-resize-handle:focus-visible{background:var(--dd-blue);color:white}
 .dd-board-picker{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .dd-board-picker .dd-control{width:auto;min-width:min(220px,70vw);max-width:min(350px,80vw)}
-@media(max-width:850px){.dd-grid{grid-template-columns:minmax(0,1fr)}.dd-card{grid-column:1/-1}}
+@media(max-width:1000px){
+  .dd-grid{grid-template-columns:minmax(0,1fr)}
+  .dd-card{grid-column:1/-1}
+  .dd-resize-handle{display:none}
+}
+@media(max-width:700px){
+  .dd-document-table thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+  .dd-document-table .dd-table,.dd-document-table tbody,.dd-document-table tr{display:block;width:100%}
+  .dd-document-table td{display:grid;grid-template-columns:minmax(85px,1fr) minmax(0,2fr);gap:8px;padding:6px 12px}
+  .dd-document-table td[data-label]::before{content:attr(data-label);font-weight:600;color:var(--dd-muted)}
+  .dd-document-table td:not([data-label]){display:block}
+  .dd-document-table tr + tr{border-top:2px solid var(--dd-border)}
+}
 
 #dd-board-dialog:modal{position:fixed;inset:0;margin:auto;max-height:calc(100dvh - 32px);overflow:auto}

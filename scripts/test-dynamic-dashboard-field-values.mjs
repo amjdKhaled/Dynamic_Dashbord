@@ -17,7 +17,8 @@ assert.ok(valuesStart>=0 && valuesEnd>valuesStart && groupStart>=0 && groupEnd>g
 
 const documentStart=source.indexOf("  function dateColumnsLimited(");
 const documentEnd=source.indexOf("  function drawTable(",documentStart);
-const implementation=source.slice(valuesStart,valuesEnd)+"\n"+source.slice(utilitiesStart,utilitiesEnd)
+const sizing=source.slice(source.indexOf("  function cardSpan("),source.indexOf("  function normalChart("));
+const implementation=sizing+source.slice(valuesStart,valuesEnd)+"\n"+source.slice(utilitiesStart,utilitiesEnd)
   +source.slice(dayStart,groupEnd)+source.slice(documentStart,documentEnd);
 const make=new Function("seedRows",[
   'const EMPTY_VALUE="\\u0000no-value";',
@@ -25,7 +26,7 @@ const make=new Function("seedRows",[
   'const dateStamp=value=>{const time=Date.parse(value);return Number.isFinite(time)?new Date(time):null;};',
   'let rows=seedRows;',
   implementation,
-  'return {observedValues,selectedRows,summary,pageCount,displayType,documentRows};'
+  'return {observedValues,selectedRows,summary,pageCount,displayType,documentRows,cardSpan};'
 ].join("\n"));
 const rows=[
   {id:1,template:"Contracts",fields:{"123":["High","Medium"]},created:"2026-01-11T12:00:00",modified:"2026-02-01T00:00:00",pages:0},
@@ -124,4 +125,19 @@ test("metadata counts include assigned blank fields but exclude unavailable and 
   assert.deepEqual(dashboard.summary(chart("field:SUBJECT")).items.map(row=>row.id),[1,2]);
   assert.equal(dashboard.observedValues("field:SUBJECT").find(value=>value.label==="بدون قيمة").count,1);
   assert.equal(dashboard.observedValues("field:SUBJECT").length,3);
+});
+
+test("legacy card widths snap to whole columns",()=>{
+  for(const span of [4,6,8])assert.equal(engine.cardSpan({span}),6);
+  for(const span of [9,11,12,20])assert.equal(engine.cardSpan({span}),12);
+  assert.equal(engine.cardSpan({type:"documents"}),12);
+});
+
+test("circular charts keep every matching template and its label",()=>{
+  const dashboard=make(Array.from({length:35},(_,i)=>({id:i,template:"Template "+i})));
+  for(const type of ["doughnut","pie"]){
+    const result=dashboard.summary(chart("__template",[],type));
+    assert.equal(result.groups.length,35);
+    assert.equal(result.extra,0);
+  }
 });

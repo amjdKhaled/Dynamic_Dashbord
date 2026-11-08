@@ -521,7 +521,7 @@
             btn.addEventListener("click",()=>openArchive(group.label,group.docs));
             legend.appendChild(btn);
           }
-          layout.append(stage,legend);
+          layout.append(stage,window.dashboardRoundScroll(legend,arabic));
           body.appendChild(layout);
         }
         const config={

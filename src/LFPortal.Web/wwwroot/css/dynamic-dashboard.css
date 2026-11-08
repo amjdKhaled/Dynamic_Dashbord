@@ -150,7 +150,7 @@ body:has(.dd-page.dd-is-loading) > :is(.site-header,.site-footer){display:none}
   .dd-document-table tr + tr{border-top:2px solid var(--dd-border)}
 }
 
-#dd-board-dialog:modal{position:fixed;inset:0;margin:auto;max-height:calc(100dvh - 32px);overflow:auto}
+.dd-repository-dialog:modal{position:fixed;inset:0;margin:auto;max-height:calc(100dvh - 32px);overflow:auto}
 
 /* Keep the overview tables readable without widening the page on small screens. */
 #dd-main-overview .d-grid-2 > * { min-width: 0; }

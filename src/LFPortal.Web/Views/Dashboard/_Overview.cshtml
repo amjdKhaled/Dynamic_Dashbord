@@ -627,6 +627,7 @@ if(tmplEl){
 
     const legendList = document.getElementById("templateLegendList");
     if(legendList){
+        window.dashboardRoundScroll(legendList, @Html.Raw(JsonSerializer.Serialize(isArabic)));
         templateLabels.forEach((label,index)=>{
             const item = document.createElement("button");
             item.type = "button";

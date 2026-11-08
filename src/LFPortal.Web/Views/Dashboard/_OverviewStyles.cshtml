@@ -153,12 +153,32 @@ body:has(.dashboard-overview-standalone) footer.site-footer { background: #F7F8F
 }
 .dashboard-round-stage { position:relative; min-width:0; height:100%; }
 .dashboard-round-stage canvas { width:100% !important; height:100% !important; }
+.dashboard-round-scroll {
+    display:grid;
+    grid-template-rows:24px minmax(0,1fr) 24px;
+    min-width:0;
+    min-height:0;
+    height:100%;
+}
+.dashboard-round-arrow {
+    border:0;
+    border-radius:4px;
+    background:transparent;
+    color:var(--isb-blue);
+    font:inherit;
+    line-height:1;
+    cursor:pointer;
+}
+.dashboard-round-arrow:hover,
+.dashboard-round-arrow:focus-visible { background:var(--isb-field); }
 .dashboard-round-results {
     min-width:0;
     max-height:100%;
     overflow:auto;
     overscroll-behavior-y:contain;
+    scrollbar-width:none;
 }
+.dashboard-round-results::-webkit-scrollbar { display:none; }
 .dashboard-round-results[dir="rtl"] { direction:rtl; }
 .dashboard-round-row {
     display:flex;

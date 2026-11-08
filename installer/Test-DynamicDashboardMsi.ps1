@@ -14,7 +14,12 @@ if (Test-Path -LiteralPath $installDir) {
 
 function Invoke-Setup([string]$Mode, [string]$LogName) {
     $log = Join-Path $logs $LogName
-    $process = Start-Process $setup -ArgumentList "$Mode /quiet /norestart /log `"$log`"" -Wait -PassThru
+    $process = Start-Process $setup -ArgumentList "$Mode /quiet /norestart /log `"$log`"" -PassThru
+    Write-Host "Running Dynamic Dashboard setup $Mode (PID $($process.Id))."
+    if (-not $process.WaitForExit(12 * 60 * 1000)) {
+        & taskkill.exe /PID $process.Id /T /F | Out-Host
+        throw "Dynamic Dashboard setup $Mode exceeded 12 minutes. See $log"
+    }
     if ($process.ExitCode -ne 0) { throw "Dynamic Dashboard setup $Mode failed: $($process.ExitCode). See $log" }
 }
 

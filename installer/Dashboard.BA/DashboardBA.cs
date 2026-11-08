@@ -92,9 +92,12 @@ namespace Dashboard.BA
         // Passive/None/Unknown DIRECT launches remain interactive as before --
         // a headless first-time install would produce a broken configuration
         // because required wizard values would never be collected.
+        // Dynamic Dashboard does not require wizard input, so direct /quiet
+        // and /passive installs can run the same headless Burn chain.
         private bool IsSilentExecution =>
             _command.Relation != RelationType.None ||
-            _command.Display  == Display.Embedded;
+            _command.Display  == Display.Embedded ||
+            (IsDynamicDashboard && (_command.Display == Display.None || _command.Display == Display.Passive));
 
         // Signalled when the headless (silent) chain finishes.
         private System.Threading.ManualResetEvent? _silentDone;
@@ -121,10 +124,12 @@ namespace Dashboard.BA
         protected override void Run()
         {
             StartupLogger.Log("DashboardBA.Run entered");
-            RuntimeLog.Log("Run.Entry",
-                $"Silent={IsSilentExecution} Action={_command.Action} Display={_command.Display} Relation={_command.Relation}");
             try
             {
+                IsDynamicDashboard = string.Equals(_engine.GetVariableString("WixBundleName"),
+                    "Dynamic Dashboard", StringComparison.Ordinal);
+                RuntimeLog.Log("Run.Entry",
+                    $"Silent={IsSilentExecution} Action={_command.Action} Display={_command.Display} Relation={_command.Relation}");
                 if (IsSilentExecution)
                 {
                     // HARD INVARIANT: no WizardForm, no message loop, no UI of
@@ -164,8 +169,6 @@ namespace Dashboard.BA
                 Application.SetCompatibleTextRenderingDefault(false);
 
                 StartupLogger.Log("  Creating ProfessionalWizardForm...");
-                IsDynamicDashboard = string.Equals(_engine.GetVariableString("WixBundleName"),
-                    "Dynamic Dashboard", StringComparison.Ordinal);
                 _form = new ProfessionalWizardForm(this);
                 StartupLogger.Log("  ProfessionalWizardForm created successfully");
 

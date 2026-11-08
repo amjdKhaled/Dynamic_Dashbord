@@ -86,10 +86,9 @@
 @media(max-width:520px){.dd-values-actions{flex-wrap:wrap}.dd-values-actions .dd-btn{width:100%}}
 
 
-/* Match the main dashboard's width, typography and ISB card treatment. */
-main:has(> .dd-page){width:100%;max-width:1800px;padding:24px clamp(16px,4vw,76px)}
+/* Use the regular dashboard sizing and the shared ISB theme tokens. */
 .dd-page{--dd-navy:#0d3850;--dd-blue:#156083;--dd-border:#dce5ed;--dd-muted:#506678;color:#102a3d}
-.dd-headline h1{font-size:clamp(25px,2.2vw,34px)}
+.dd-headline h1{font-size:1.5rem}
 .dd-headline p,.dd-btn,.dd-label,.dd-control,.dd-value-option,.dd-legend-row{font-size:15px}
 .dd-card-sub,.dd-workspace-top small,.dd-hint,.dd-values-help,.dd-value-summary,.dd-value-option small,.dd-chart-note{font-size:13px;color:var(--dd-muted)}
 .dd-card-head strong,.dd-workspace-top strong,.dd-editor-head h2{font-size:20px}
@@ -106,17 +105,19 @@ main:has(> .dd-page){width:100%;max-width:1800px;padding:24px clamp(16px,4vw,76p
 #dd-layout-status{font-size:14px;color:var(--dd-muted)}
 .dd-save-actions button:disabled{opacity:.6;cursor:default}
 @media(max-width:850px){.dd-grid{grid-template-columns:minmax(0,1fr)}.dd-card-head{flex-wrap:wrap}}
-.dd-card{border-radius:18px;min-height:0;box-shadow:0 3px 10px #102a3d0d}
-.dd-card-head{padding:16px 20px}
+.dd-card{border:1px solid var(--isb-border-soft);border-radius:var(--isb-radius);min-height:0;box-shadow:var(--isb-card-shadow)}
+.dd-card-head{padding:18px 18px 10px}
+.dd-card-head strong{font-size:1rem;font-weight:600}
 .dd-card-head strong{border-inline-start:4px solid #bf972c;padding-inline-start:9px}
-.dd-visual{padding:14px 20px}
+.dd-visual{padding:10px 18px 18px}
 .dd-graph .dd-chart-stage{height:280px;flex:none}
-.dd-kpi{min-height:128px;display:grid;align-content:center}
+.dd-kpi{min-height:128px;display:grid;align-content:center;font-size:2rem}
+.dd-kpi small{font-size:.8rem}
 .dd-table-visual{overflow:visible}
-.dd-table-wrap{border:1px solid var(--dd-border);border-radius:10px}
-.dd-table{font-size:15px;table-layout:fixed;overflow-wrap:anywhere}
-.dd-table th{background:#eef3f7}
-.dd-table th,.dd-table td{padding:10px 14px}
+.dd-table-wrap{border:1px solid var(--isb-border-soft);border-radius:8px}
+.dd-table{font-size:.82rem;table-layout:fixed;overflow-wrap:anywhere}
+.dd-table th{background:var(--isb-field);color:var(--isb-slate)}
+.dd-table th,.dd-table td{padding:7px 11px}
 .dd-table tbody tr:hover,.dd-table tbody tr:focus{background:#eef3f7}
 .dd-pager{display:flex;justify-content:center;align-items:center;gap:7px;flex-wrap:wrap;margin-top:12px;color:var(--dd-muted)}
 .dd-pager[hidden]{display:none}
@@ -161,3 +162,47 @@ body:has(.dd-page.dd-is-loading) > :is(.site-header,.site-footer){display:none}
 }
 
 #dd-board-dialog:modal{position:fixed;inset:0;margin:auto;max-height:calc(100dvh - 32px);overflow:auto}
+
+/* Keep the overview tables readable without widening the page on small screens. */
+#dd-main-overview .d-grid-2 > * { min-width: 0; }
+#dd-main-overview .d-tbl-wrap { overflow-x: auto; }
+
+.dd-card-actions { gap: 6px; }
+.dd-card-actions .dd-icon-btn,
+.dd-editor-head .dd-icon-btn,
+.dd-resize-handle {
+  display: inline-grid;
+  place-items: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 6px;
+  border: 1px solid var(--dd-border);
+  font-size: 20px;
+  line-height: 1;
+}
+.dd-card-actions .dd-icon-btn,
+.dd-editor-head .dd-icon-btn {
+  border-radius: 8px;
+  background: var(--dd-soft, #f3f6f8);
+  color: var(--dd-navy);
+}
+.dd-card-actions .dd-icon-btn:is(:hover, :focus-visible),
+.dd-editor-head .dd-icon-btn:is(:hover, :focus-visible) {
+  background: var(--dd-navy);
+  color: white;
+}
+.dd-edit-mode .dd-card:has(.dd-resize-handle) .dd-visual { padding-block-end: 54px; }
+.dd-card.dd-quarter-card .dd-card-head { flex-wrap: wrap; }
+
+@media (min-width: 1200px) {
+  .dd-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .dd-card { grid-column: span 2; }
+  .dd-card.dd-quarter-card { grid-column: span 1; }
+}
+@media (min-width: 700px) and (max-width: 1000px) {
+  .dd-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dd-card.dd-quarter-card { grid-column: span 1; }
+}
+@media (max-width: 1000px) {
+  .dd-resize-handle { display: none; }
+}

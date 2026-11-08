@@ -1,9 +1,11 @@
-@using System.Text.Json
+@model DashboardViewModel
 @{
+    ViewData["EmbedDashboardOverview"] = true;
     ViewData["Title"] = "لوحة المعلومات الديناميكية";
     var scope = (string?)ViewBag.StorageScope ?? string.Empty;
 }
 @section Styles {
+    <partial name="~/Views/Dashboard/_OverviewStyles.cshtml" />
     <link rel="stylesheet" href="~/css/dynamic-dashboard.css" asp-append-version="true" />
 }
 <div class="dd-page dd-is-loading" id="dynamicDashboard" dir="rtl" data-scope="@scope" data-repository="@ViewBag.RepositoryId" data-archive-url="@Url.Action("OpenDashboardSelection", "Archive")">
@@ -36,6 +38,9 @@
                 </div>
             </div>
             <p id="dd-warning" class="dd-warning dd-hidden" role="alert"></p>
+            <section id="dd-main-overview" aria-label="إحصائيات اللوحة الرئيسية">
+                <partial name="~/Views/Dashboard/_Overview.cshtml" model="Model" />
+            </section>
             <div class="dd-grid" id="dd-grid"></div>
             <div id="dd-empty" class="dd-empty dd-hidden">لا توجد كروت ظاهرة.</div>
         </section>
@@ -73,7 +78,7 @@
         <section class="dd-editor" role="dialog" aria-modal="true" aria-labelledby="dd-editor-title">
             <div class="dd-editor-head">
                 <h2 id="dd-editor-title">إعدادات المؤشر</h2>
-                <button type="button" id="dd-closeeditor" class="dd-icon-btn" aria-label="إغلاق">✕</button>
+                <button type="button" id="dd-closeeditor" class="dd-icon-btn" title="إغلاق" aria-label="إغلاق">✕</button>
             </div>
             <label class="dd-label" for="dd-title">العنوان</label>
             <input class="dd-control" id="dd-title" maxlength="90" placeholder="مثال: المعاملات حسب الإدارة" />
@@ -88,7 +93,7 @@
                 <option value="documents">جدول الوثائق</option>
                 <option value="recent-created">جدول المستندات المنشأة حديثًا</option>
                 <option value="recent-modified">جدول نشاط المستندات الأخير</option>
-                <option value="kpi">بطاقة رقم</option>
+                <option value="kpi">بطاقة الأرقام</option>
             </select>
             <p id="dd-display-limit" class="dd-warning dd-hidden" role="status"></p>
             <div id="dd-axis-options">

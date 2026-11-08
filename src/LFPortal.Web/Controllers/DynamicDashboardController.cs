@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Security.Claims;
 using LFPortal.Web.Authentication;
+using LFPortal.Application.DTOs;
 using LFPortal.Application.Interfaces;
 using LFPortal.Infrastructure.Configuration;
 using LFPortal.Domain.Entities;
@@ -36,12 +37,23 @@ public sealed class DynamicDashboardController : Controller
     }
 
     [HttpGet]
-    public async Task<IActionResult> Index(CancellationToken cancellationToken)
+    public async Task<IActionResult> Index([FromServices] ILaserficheDashboardService dashboard, CancellationToken cancellationToken)
     {
         var repo = await _repository.GetActiveRepositoryAsync(cancellationToken);
         ViewBag.RepositoryId = repo.RepositoryId;
         ViewBag.StorageScope = GetLayoutScope(repo.ServerUrl, repo.RepositoryId);
-        return View();
+        // The main board uses the same permission-scoped statistics as the existing overview.
+        DashboardStatsDto stats;
+        try
+        {
+            stats = await dashboard.GetDashboardStatsAsync(cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning("Could not load the main overview ({ErrorType}).", ex.GetType().Name);
+            stats = new() { ErrorMessage = "تعذر تحميل إحصائيات اللوحة الرئيسية." };
+        }
+        return View(new DashboardViewModel { Stats = stats });
     }
 
     [HttpGet]

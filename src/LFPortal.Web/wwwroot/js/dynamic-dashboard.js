@@ -47,7 +47,9 @@
   let partial = false, busy = false, editMode = false, revision = 0, savedRevision = 0, saving = false, hasSaved = false, layoutReady = false;
 
   function cardSpan(chart) {
-    if(chart.span==null)return chart.wide || isTable(chart.type)?12:6;
+    if(chart.span==null)return chart.wide || isTable(chart.type)?12:chart.type==="kpi"?3:6;
+    // Keep saved half/full widths; only number cards can occupy a quarter row.
+    if(chart.type==="kpi" && Number(chart.span)===3)return 3;
     return Number(chart.span)>=9?12:6;
   }
 
@@ -79,7 +81,7 @@
             charts.push(normalChart(card));
         }
       }
-    } else charts=defaults.map(normalChart);
+    } else charts=defaults.filter(card=>activeBoard.id!=="default" || !isRecent(card.type)).map(normalChart);
   }
   function updateSaveBar(message) {
     $("dd-save-layout").disabled=!layoutReady || saving || revision===savedRevision;
@@ -417,6 +419,7 @@
     el.className="dd-card"+(ghost?" dd-ghost":"");
     const documentTable=type==="documents" || isRecent(type);
     el.classList.toggle("dd-full-card",documentTable || chart.span===12);
+    el.classList.toggle("dd-quarter-card",type==="kpi" && chart.span===3);
     el.classList.toggle("dd-graph",!isTable(type)&&type!=="kpi");
     el.dataset.id=chart.id;el.draggable=editMode;
     const header=document.createElement("header");header.className="dd-card-head";
@@ -430,7 +433,7 @@
       actions.append(
         iconButton("تعديل المؤشر","⚙",()=>openEditor(chart.id)),
         ...(!documentTable?[iconButton("تبديل عرض الكرت","⤢",
-          ()=>setCardSpan(el,chart,chart.span===12?6:12))]:[]),
+          ()=>setCardSpan(el,chart,nextCardSpan(chart)))]:[]),
         iconButton("نقل لأعلى","↑",()=>moveCard(chart.id,-1)),
         iconButton("نقل لأسفل","↓",()=>moveCard(chart.id,1)),
         iconButton(ghost?"إظهار المؤشر":"إخفاء المؤشر",ghost?"◉":"◌",
@@ -562,15 +565,22 @@
     charts.splice(target,0,charts.splice(index,1)[0]);
     markChanged();render();
   }
+  function nextCardSpan(chart) {
+    return chart.span===12?(chart.type==="kpi"?3:6):chart.span===3?6:12;
+  }
+  function narrowerCardSpan(chart) {
+    return chart.type==="kpi" && chart.span<=6?3:6;
+  }
   function setCardSpan(card,chart,span) {
     if(chart.span===span)return;
     chart.span=span;
     card.classList.toggle("dd-full-card",span===12);
+    card.classList.toggle("dd-quarter-card",chart.type==="kpi" && span===3);
     markChanged();
   }
   function attachResize(card,chart) {
-    const handle=iconButton("تغيير العرض إلى نصف الصف أو عرضه الكامل","↔",
-      event=>{if(event.detail===0)setCardSpan(card,chart,chart.span===12?6:12);});
+    const handle=iconButton(chart.type==="kpi"?"تغيير عرض بطاقة الأرقام":"تغيير العرض إلى نصف الصف أو عرضه الكامل","↔",
+      event=>{if(event.detail===0)setCardSpan(card,chart,nextCardSpan(chart));});
     handle.classList.add("dd-resize-handle");
     card.appendChild(handle);
     handle.addEventListener("pointerdown",event=>{
@@ -584,7 +594,7 @@
         handle.removeEventListener("lostpointercapture",cancel);
         const distance=(next.clientX-event.clientX)*(rtl?-1:1);
         // Keep the canvas and its labels stable until the resize is committed.
-        if(Math.abs(distance)>=24)setCardSpan(card,chart,distance>0?12:6);
+        if(Math.abs(distance)>=24)setCardSpan(card,chart,distance>0?(chart.span===3?6:12):narrowerCardSpan(chart));
       };
       const cancel=()=>handle.removeEventListener("pointerup",finish);
       handle.addEventListener("pointerup",finish,{once:true});
@@ -594,7 +604,7 @@
       if(!["ArrowLeft","ArrowRight"].includes(event.key))return;
       event.preventDefault();
       const rtl=getComputedStyle(card).direction==="rtl";
-      setCardSpan(card,chart,(event.key==="ArrowLeft")===rtl?12:6);
+      setCardSpan(card,chart,(event.key==="ArrowLeft")===rtl?(chart.span===3?6:12):narrowerCardSpan(chart));
     });
   }
   function render() {
@@ -603,8 +613,9 @@
     $("dd-customize").textContent=editMode?"✓ إنهاء التخصيص":"⚙ تخصيص اللوحة";
     $("dd-customize").setAttribute("aria-pressed",String(editMode));
     $("dd-add").classList.toggle("dd-hidden",!editMode);
+    $("dd-main-overview").hidden=activeBoard.id!=="default";
     $("dd-grid").replaceChildren(...charts.filter(chart=>editMode || !chart.hidden).map(drawCard));
-    $("dd-empty").classList.toggle("dd-hidden",charts.some(c=>!c.hidden)||editMode&&charts.length>0);
+    $("dd-empty").classList.toggle("dd-hidden",activeBoard.id==="default" || charts.some(c=>!c.hidden)||editMode&&charts.length>0);
   }
   function valueChoices() {
     const target=$("dd-value-list");target.replaceChildren();

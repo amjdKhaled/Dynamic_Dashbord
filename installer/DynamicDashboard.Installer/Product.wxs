@@ -123,8 +123,8 @@
     </InstallUISequence>
 
     <SetProperty Id="DYNAMIC_WEB_URL" Value="http://127.0.0.1:5190" Before="InstallInitialize" Sequence="execute" Action="SetDynamicDefaultWebUrl" Condition="DYNAMIC_WEB_PATH AND NOT DYNAMIC_WEB_URL" />
-    <CustomAction Id="StopOwnedDynamicDashboard" Directory="System64Folder"
-                  ExeCommand='"[System64Folder]WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -Command "$target = Join-Path $env:ProgramFiles &apos;Dynamic Dashboard\LFPortal.Web.exe&apos;; Get-Process -Name LFPortal.Web -ErrorAction SilentlyContinue | Where-Object Path -eq $target | Stop-Process -Force -ErrorAction Stop"'
+    <CustomAction Id="StopOwnedDynamicDashboard" BinaryRef="DynamicSetupHelper"
+                  ExeCommand="--stop-dynamic-dashboard --variant dynamic"
                   Execute="deferred" Impersonate="no" Return="check" />
     <InstallExecuteSequence>
       <Custom Action="StopOwnedDynamicDashboard" Before="RemoveFiles" Condition="Installed OR WIX_UPGRADE_DETECTED" />

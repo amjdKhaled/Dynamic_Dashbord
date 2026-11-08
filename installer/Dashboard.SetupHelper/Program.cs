@@ -125,6 +125,10 @@ namespace Dashboard.SetupHelper
                         rc = TlsSetupAction.Execute(opts);
                         break;
 
+                    case "--stop-dynamic-dashboard":
+                        rc = StopDynamicDashboard();
+                        break;
+
                     case "--remove-data":
                         rc = RemoveDataAction.Execute();
                         break;
@@ -148,6 +152,37 @@ namespace Dashboard.SetupHelper
             return rc;
         }
 
+        private static int StopDynamicDashboard()
+        {
+            var target = System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                "Dynamic Dashboard", "LFPortal.Web.exe");
+            InstallerFileSafety.EnsureNoReparsePoints(target);
+
+            foreach (var process in System.Diagnostics.Process.GetProcessesByName("LFPortal.Web"))
+            {
+                using (process)
+                {
+                    string? executable;
+                    try { executable = process.MainModule?.FileName; }
+                    catch (InvalidOperationException) { continue; }
+                    catch (System.ComponentModel.Win32Exception) { continue; }
+
+                    if (!string.Equals(target, executable, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    SetupLog.Info($"Stopping installed Dynamic Dashboard process {process.Id}.");
+                    try { process.Kill(); }
+                    catch (InvalidOperationException) when (process.HasExited) { continue; }
+                    if (!process.WaitForExit(15000))
+                        throw new TimeoutException("Dynamic Dashboard did not stop within 15 seconds.");
+                }
+            }
+
+            // A stopped dashboard is already in the required state.
+            return 0;
+        }
+
         // Single source of truth for the action verbs the dispatcher below
         // handles. --help/--list-actions print this list; keep it in sync
         // with the switch statement.
@@ -162,6 +197,7 @@ namespace Dashboard.SetupHelper
             "--rollback-webclient",
             "--prepare-tls",
             "--remove-data",
+            "--stop-dynamic-dashboard",
         };
 
         // Parses "--key value" pairs from args starting at startIndex.

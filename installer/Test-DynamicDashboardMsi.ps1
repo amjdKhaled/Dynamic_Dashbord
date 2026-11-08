@@ -33,6 +33,7 @@ $original = '<html><head><script src="assets/custom/lf-dashboard-button.js"></sc
 [IO.File]::WriteAllText($browse, $original)
 $webButton = Join-Path $webRoot 'assets\custom\lf-dynamic-dashboard-button.js'
 Invoke-Setup '/i' 'msi-dynamic-install.log'
+$app = $null
 try {
     if (-not (Test-Path -LiteralPath $connectionKey)) {
         throw 'MSI did not register its connection defaults.'
@@ -84,7 +85,6 @@ try {
         if ($login.StatusCode -ne 200) { throw 'Installed Dynamic Dashboard login did not load.' }
     }
     finally {
-        if ($null -ne $app -and -not $app.HasExited) { Stop-Process -Id $app.Id -Force }
         $env:DASHBOARD_STANDALONE_DATA_DIR = $previousData
     }
 
@@ -93,7 +93,15 @@ try {
     }
 }
 finally {
-    Invoke-Setup '/x' 'msi-dynamic-uninstall.log'
+    try {
+        Invoke-Setup '/x' 'msi-dynamic-uninstall.log'
+        if ($null -ne $app -and -not $app.HasExited) {
+            throw 'MSI did not stop the running Dynamic Dashboard process.'
+        }
+    }
+    finally {
+        if ($null -ne $app -and -not $app.HasExited) { Stop-Process -Id $app.Id -Force }
+    }
 }
 if (Test-Path -LiteralPath (Join-Path $installDir 'LFPortal.Web.exe')) {
     throw 'Dynamic Dashboard payload remains after uninstall.'

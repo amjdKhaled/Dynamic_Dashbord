@@ -45,6 +45,9 @@ namespace Dashboard.BA
         // Window handle used for Detect / Apply calls.
         private IntPtr _hwnd;
 
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern IntPtr GetDesktopWindow();
+
         // Action currently being applied. This keeps completion text accurate
         // for install, repair, and uninstall maintenance operations.
         private LaunchAction _activeAction = LaunchAction.Install;
@@ -139,7 +142,9 @@ namespace Dashboard.BA
                     _silentDone = new System.Threading.ManualResetEvent(false);
                     try
                     {
-                        _engine.Detect(IntPtr.Zero);
+                        // Burn 4 requires a non-null parent HWND for Apply even in /quiet mode.
+                        _hwnd = GetDesktopWindow();
+                        _engine.Detect(_hwnd);
                     }
                     catch (Exception ex)
                     {

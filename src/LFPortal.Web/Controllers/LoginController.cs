@@ -281,14 +281,24 @@ public sealed class LoginController : Controller
 
         if (!string.Equals(Request.Headers["X-Dashboard-Repository"].ToString(),
                 active.RepositoryId, StringComparison.OrdinalIgnoreCase)) return StatusCode(409);
-        if (string.IsNullOrWhiteSpace(repository)) return BadRequest();
+        repository = repository?.Trim() ?? "";
+        if (repository.Length is 0 or > 200 || repository.Any(char.IsControl)) return BadRequest();
+        bool arabic = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "ar";
+        string T(string ar, string en) => arabic ? ar : en;
         var method = User.FindFirstValue(ClaimTypes.AuthenticationMethod);
         try
         {
-            var choices = await repositories.ListRepositoriesAsync(cancellationToken);
-            var targetId = choices.FirstOrDefault(choice => string.Equals(
-                choice.RepositoryId, repository, StringComparison.OrdinalIgnoreCase))?.RepositoryId;
-            if (string.IsNullOrWhiteSpace(targetId)) return NotFound();
+            // Password sign-in validates the destination directly on the same server.
+            // Some Laserfiche accounts cannot enumerate the server's repository catalog.
+            var targetId = repository;
+            if (method != DashboardAuthenticationDefaults.PasswordAuthenticationMethod)
+            {
+                var choices = await repositories.ListRepositoriesAsync(cancellationToken);
+                var match = choices.FirstOrDefault(choice => string.Equals(
+                    choice.RepositoryId, repository, StringComparison.OrdinalIgnoreCase));
+                if (match is null) return NotFound();
+                targetId = match.RepositoryId;
+            }
             if (string.Equals(active.RepositoryId, targetId, StringComparison.OrdinalIgnoreCase))
                 return Ok(new { url = Url.Action("Index", "DynamicDashboard") });
 
@@ -304,11 +314,11 @@ public sealed class LoginController : Controller
                 string.IsNullOrWhiteSpace(username))
                 return Forbid();
             if (string.IsNullOrEmpty(password))
-                return BadRequest(new { error = "أدخل كلمة مرور حسابك الحالي." });
+                return BadRequest(new { error = T("أدخل كلمة مرور حسابك الحالي.", "Enter your current account password.") });
 
             var target = active with { Key = targetId, RepositoryId = targetId, DisplayName = targetId };
             if (!await _authService.TryAuthenticateAsync(target, username, password, cancellationToken))
-                return StatusCode(403, new { error = "تعذر دخول حسابك إلى المستودع المحدد. تحقق من كلمة المرور والصلاحية." });
+                return StatusCode(403, new { error = T("تعذر دخول حسابك إلى المستودع المحدد. تحقق من كلمة المرور والصلاحية.", "Could not sign in to the selected repository. Check your password and access.") });
 
             HttpContext.Session.SetString(RepositorySessionMiddleware.SessionKeyRepositoryId, targetId);
             HttpContext.Session.SetString(SessionAuthGuardMiddleware.SessionKeyAuthenticatedRepoId, targetId);
@@ -319,12 +329,12 @@ public sealed class LoginController : Controller
         }
         catch (LaserficheException ex) when (ex.StatusCode is 401 or 403 or 404)
         {
-            return StatusCode(ex.StatusCode, new { error = "تعذر دخول حسابك إلى المستودع المحدد." });
+            return StatusCode(ex.StatusCode, new { error = T("تعذر دخول حسابك إلى المستودع المحدد.", "Could not sign in to the selected repository.") });
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning("Repository switch failed ({ErrorType}).", ex.GetType().Name);
-            return StatusCode(503, new { error = "تعذر تبديل المستودع. حاول مرة أخرى." });
+            return StatusCode(503, new { error = T("تعذر تبديل المستودع. حاول مرة أخرى.", "Could not switch repositories. Try again.") });
         }
     }
 

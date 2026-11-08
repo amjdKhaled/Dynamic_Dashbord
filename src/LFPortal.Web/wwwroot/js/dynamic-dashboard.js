@@ -3,25 +3,41 @@
   "use strict";
   const root = document.getElementById("dynamicDashboard");
   if (!root) return;
+  const arabic = root.dataset.language === "ar";
+  const locale = arabic ? "ar-SA" : "en";
+  const T = (ar,en) => arabic ? ar : en;
   const $ = id => document.getElementById(id);
   const requestHeaders = {"X-Dashboard-Repository":root.dataset.repository,"X-Dashboard-Layout-Scope":root.dataset.scope,"X-Requested-With":"XMLHttpRequest"};
   const BUILTIN = [
-    {id:"__template",name:"القالب",type:"list"},
-    {id:"__creator",name:"المستخدم / المنشئ",type:"list"},
-    {id:"__created",name:"تاريخ الإضافة",type:"date"},
-    {id:"__modified",name:"تاريخ التعديل",type:"date"},
-    {id:"__folder",name:"المجلد",type:"list"},
-    {id:"__pages",name:"عدد الصفحات",type:"number"}
+    {id:"__template",name:T("القالب","Template"),type:"list"},
+    {id:"__creator",name:T("المستخدم / المنشئ","User / creator"),type:"list"},
+    {id:"__created",name:T("تاريخ الإضافة","Date added"),type:"date"},
+    {id:"__modified",name:T("تاريخ التعديل","Date modified"),type:"date"},
+    {id:"__folder",name:T("المجلد","Folder"),type:"list"},
+    {id:"__pages",name:T("عدد الصفحات","Page count"),type:"number"}
   ];
   const palette = ["#0d3850","#60a2c4","#bf972c","#156083","#2b795b","#9eb0c1","#dcb455"];
   const defaults = [
-    {id:"base-docs",title:"إجمالي الوثائق الظاهرة",type:"kpi",dimension:"__template",wide:false,hidden:false,selectedValues:[]},
-    {id:"base-templates",title:"توزيع الوثائق حسب القالب",type:"doughnut",dimension:"__template",wide:false,hidden:false,selectedValues:[]},
-    {id:"base-months",title:"الوثائق حسب تاريخ الإضافة",type:"line",dimension:"__created",wide:true,hidden:false,selectedValues:[]},
-    {id:"base-users",title:"الوثائق حسب المستخدم",type:"bar",dimension:"__creator",wide:false,hidden:false,selectedValues:[]},
-    {id:"base-recent-created",title:"المستندات المنشأة حديثًا",type:"recent-created",wide:true},
-    {id:"base-recent-modified",title:"نشاط المستندات الأخير",type:"recent-modified",wide:true}
+    {id:"base-docs",title:T("إجمالي الوثائق الظاهرة","Total visible documents"),type:"kpi",dimension:"__template",wide:false,hidden:false,selectedValues:[]},
+    {id:"base-templates",title:T("توزيع الوثائق حسب القالب","Documents by template"),type:"doughnut",dimension:"__template",wide:false,hidden:false,selectedValues:[]},
+    {id:"base-months",title:T("الوثائق حسب تاريخ الإضافة","Documents by date added"),type:"line",dimension:"__created",wide:true,hidden:false,selectedValues:[]},
+    {id:"base-users",title:T("الوثائق حسب المستخدم","Documents by user"),type:"bar",dimension:"__creator",wide:false,hidden:false,selectedValues:[]},
+    {id:"base-recent-created",title:T("المستندات المنشأة حديثًا","Recently created documents"),type:"recent-created",wide:true},
+    {id:"base-recent-modified",title:T("نشاط المستندات الأخير","Recent document activity"),type:"recent-modified",wide:true}
   ];
+  const presetTitles = new Map([
+    ["إجمالي الوثائق الظاهرة", "Total visible documents"],
+    ["توزيع الوثائق حسب القالب", "Documents by template"],
+    ["الوثائق حسب تاريخ الإضافة", "Documents by date added"],
+    ["الوثائق حسب المستخدم", "Documents by user"],
+    ["المستندات المنشأة حديثًا", "Recently created documents"],
+    ["نشاط المستندات الأخير", "Recent document activity"],
+    ["اللوحة الرئيسية", "Main dashboard"]
+  ]);
+  const presetTitle = value => {
+    for (const [ar,en] of presetTitles) if (value === ar || value === en) return T(ar,en);
+    return value;
+  };
   const EMPTY_VALUE = "\u0000no-value";
   const validTypes = ["bar","horizontal","line","doughnut","pie","table","documents","kpi","recent-created","recent-modified"];
   const isRecent = type => type==="recent-created" || type==="recent-modified";
@@ -42,7 +58,7 @@
   const tablePages = new Map();
   let rows = [], fields = [], charts = [], instances = [], editing = null;
   const boards = new Map();
-  const mainBoard = {id:"default",name:"اللوحة الرئيسية",layout:null};
+  const mainBoard = {id:"default",name:T("اللوحة الرئيسية","Main dashboard"),layout:null};
   let activeBoard = {...mainBoard};
   let partial = false, busy = false, editMode = false, revision = 0, savedRevision = 0, saving = false, hasSaved = false, layoutReady = false;
 
@@ -56,9 +72,9 @@
   function normalChart(chart) {
     const oldName = chart.dimension==="__name";
     const type = chart.type==="audit" ? "recent-modified" : chart.type;
-    const title = chart.type==="audit" ? "نشاط المستندات الأخير" : String(chart.title||"مؤشر");
+    const title = chart.type==="audit" ? T("نشاط المستندات الأخير","Recent document activity") : String(chart.title||T("مؤشر","Widget"));
     return {
-      id:String(chart.id), title:title.replace(/^شارت(?= جديد$| بدون عنوان$|$)/,"مؤشر").slice(0,90),
+      id:String(chart.id), title:title.replace(/^شارت(?= جديد$| بدون عنوان$|$)/,T("مؤشر","Widget")).slice(0,90),
       type:validTypes.includes(type)?type:"bar",
       dimension:oldName?"__template":String(chart.dimension||"__template"),
       span:cardSpan({...chart,type}),
@@ -87,9 +103,9 @@
     $("dd-save-layout").disabled=!layoutReady || saving || revision===savedRevision;
     for(const id of ["dd-board-list","dd-new-board","dd-rename-board"])
       $(id).disabled=!layoutReady || saving;
-    $("dd-layout-status").textContent=message ?? (saving?"جارٍ الحفظ…"
-      :revision!==savedRevision?"تغييرات غير محفوظة"
-      :hasSaved?"تم الحفظ":"");
+    $("dd-layout-status").textContent=message ?? (saving?T("جارٍ الحفظ…","Saving…")
+      :revision!==savedRevision?T("تغييرات غير محفوظة","Unsaved changes")
+      :hasSaved?T("تم الحفظ","Saved"):"");
   }
   function markChanged() {
     revision++;
@@ -98,8 +114,8 @@
   function syncBoardPicker() {
     const items=[...boards.values()].filter(board=>board.id!==activeBoard.id);
     items.push(activeBoard);
-    items.sort((a,b)=>a.id==="default"?-1:b.id==="default"?1:a.name.localeCompare(b.name,"ar"));
-    selectOptions($("dd-board-list"),items.map(board=>({value:board.id,label:board.name})),activeBoard.id,null);
+    items.sort((a,b)=>a.id==="default"?-1:b.id==="default"?1:a.name.localeCompare(b.name,locale));
+    selectOptions($("dd-board-list"),items.map(board=>({value:board.id,label:board.id==="default"?presetTitle(board.name):board.name})),activeBoard.id,null);
   }
   function rememberBoard() {
     const url=new URL(window.location.href);
@@ -139,7 +155,7 @@
       boards.set(activeBoard.id,{id:activeBoard.id,name:layout.name,layout});
       rememberBoard();
     } catch {
-      message="تعذر الحفظ. حاول مرة أخرى.";
+      message=T("تعذر الحفظ. حاول مرة أخرى.","Could not save. Try again.");
     } finally {
       saving=false;
       updateSaveBar(message);
@@ -147,7 +163,7 @@
   }
   async function restoreServerLayout() {
     if(!root.dataset.scope) {
-      updateSaveBar("الحفظ يتطلب حساب Laserfiche معروف الهوية.");
+      updateSaveBar(T("الحفظ يتطلب حساب Laserfiche معروف الهوية.","Saving requires an identified Laserfiche account."));
       return;
     }
     try {
@@ -162,7 +178,7 @@
       rememberBoard();
     } catch {
       layoutReady=false;
-      updateSaveBar("تعذر تحميل لوحات التحكم.");
+      updateSaveBar(T("تعذر تحميل لوحات التحكم.","Could not load dashboards."));
     }
   }
   const unique = values => [...new Set(values.filter(v => v !== null && v !== undefined && String(v).trim() !== "").map(String))];
@@ -234,8 +250,8 @@
       for(const value of new Set(categoryKeys(row,dimension)))
         counts.set(value,(counts.get(value)||0)+1);
     return [...counts.entries()]
-      .map(([value,count])=>({value,count,label:value===EMPTY_VALUE?"بدون قيمة":value}))
-      .sort((a,b)=>b.count-a.count||a.label.localeCompare(b.label,"ar"));
+      .map(([value,count])=>({value,count,label:value===EMPTY_VALUE?T("بدون قيمة","No value"):value}))
+      .sort((a,b)=>b.count-a.count||a.label.localeCompare(b.label,locale));
   }
   function isFieldDimension(dimension) {
     return /^(?:\d+$|field:)/.test(dimension);
@@ -268,7 +284,7 @@
     for(const row of source) {
       for(const key of new Set(categoryKeys(row,chart.dimension))) {
         if(selected.size&&selected.has(key)===Boolean(chart.allValues))continue;
-        if(!map.has(key))map.set(key,{key,label:key===EMPTY_VALUE?"بدون قيمة":key,docs:[],ids:new Set()});
+        if(!map.has(key))map.set(key,{key,label:key===EMPTY_VALUE?T("بدون قيمة","No value"):key,docs:[],ids:new Set()});
         const g=map.get(key);
         if(!g.ids.has(row.id)){g.ids.add(row.id);g.docs.push(row);}
       }
@@ -276,7 +292,7 @@
     const list=[...map.values()].map(g=>({...g,value:g.ids.size}));
     if(chart.dimension==="__created"||chart.dimension==="__modified")
       list.sort((a,b)=>a.label.localeCompare(b.label));
-    else list.sort((a,b)=>b.value-a.value||a.label.localeCompare(b.label,"ar"));
+    else list.sort((a,b)=>b.value-a.value||a.label.localeCompare(b.label,locale));
     const isChart=!isTable(chart.type) && !["doughnut","pie"].includes(chart.type);
     return {groups:isChart?list.slice(0,30):list,extra:isChart?Math.max(0,list.length-30):0,
       totalGroups:list.length,items:source};
@@ -286,7 +302,7 @@
     if (!ids.length) return;
     const entryIds=ids.join(",");
     if(entryIds.length>300000) {
-      window.alert("عدد النتائج أكبر من سعة فتح الأرشيف دفعة واحدة. ضيّق التصفية.");
+      window.alert(T("عدد النتائج أكبر من سعة فتح الأرشيف دفعة واحدة. ضيّق التصفية.","Too many results to open at once. Narrow the filters."));
       return;
     }
     const form = document.createElement("form");
@@ -339,7 +355,7 @@
     wrap.appendChild(table);
     const nav=document.createElement("nav");
     nav.className="dd-pager";
-    nav.setAttribute("aria-label","صفحات الجدول");
+    nav.setAttribute("aria-label",T("صفحات الجدول","Table pagination"));
     body.append(wrap,nav);
     const size=10;
     const total=Math.max(1,Math.ceil(rows.length/size));
@@ -350,7 +366,7 @@
       nav.replaceChildren();
       if(!rows.length) {
         const cell=tbody.insertRow().insertCell();
-        cell.colSpan=headers.length;cell.textContent="لا توجد مستندات مطابقة.";
+        cell.colSpan=headers.length;cell.textContent=T("لا توجد مستندات مطابقة.","No matching documents.");
       }
       for(const item of rows.slice((page-1)*size,page*size)) {
         const row=tbody.insertRow();
@@ -376,22 +392,22 @@
         nav.appendChild(control);
         return control;
       }
-      button("السابق",page-1,page===1);
+      button(T("السابق","Previous"),page-1,page===1);
       const first=Math.max(1,Math.min(page-2,total-4));
       for(let index=first;index<=Math.min(total,first+4);index++) {
         const control=button(String(index),index,index===page);
         if(index===page)control.setAttribute("aria-current","page");
       }
-      button("التالي",page+1,page===total);
+      button(T("التالي","Next"),page+1,page===total);
       const input=document.createElement("input");
       input.type="number";input.min="1";input.max=String(total);input.value=String(page);
-      input.setAttribute("aria-label","رقم الصفحة");
+      input.setAttribute("aria-label",T("رقم الصفحة","Page number"));
       const go=()=>{if(input.checkValidity() && input.value)show(Number(input.value));};
-      const submit=iconButton("انتقال","انتقال",go);
+      const submit=iconButton(T("انتقال","Go"),T("انتقال","Go"),go);
       submit.className="dd-btn";
       input.addEventListener("keydown",event=>{if(event.key==="Enter")go();});
       nav.append(input,submit);
-      nav.append("من "+total);
+      nav.append(T("من ","of ")+total);
     }
     show(tablePages.get(chart.id)||1);
   }
@@ -399,9 +415,9 @@
   function drawDocumentTable(body,chart) {
     body.classList.add("dd-document-table");
     const modified=dateColumn(chart)==="modified" || !dateColumn(chart);
-    const headers=["اسم المستند","المجلد","القالب","تاريخ الإنشاء",
-      ...(modified?["تاريخ التعديل"]:[]),"أنشأه","عدد الصفحات"];
-    const format=value=>dateStamp(value)?.toLocaleString("ar-SA",{calendar:"gregory"})||"—";
+    const headers=[T("اسم المستند","Document name"),T("المجلد","Folder"),T("القالب","Template"),T("تاريخ الإنشاء","Date created"),
+      ...(modified?[T("تاريخ التعديل","Date modified")]:[]),T("أنشأه","Created by"),T("عدد الصفحات","Page count")];
+    const format=value=>dateStamp(value)?.toLocaleString(locale,{calendar:"gregory"})||"—";
     drawTable(body,chart,headers,documentRows(chart),row=>[row.name,row.folder||"—",row.template||"—",
       format(row.created),...(modified?[format(row.modified)]:[]),row.creator||"—",row.pages??"—"],
       row=>openArchive(row.name,[row]));
@@ -424,21 +440,21 @@
     el.dataset.id=chart.id;el.draggable=editMode;
     const header=document.createElement("header");header.className="dd-card-head";
     const headText=document.createElement("div"),title=document.createElement("strong");
-    title.textContent=chart.title;headText.appendChild(title);
+    title.textContent=chart.id.startsWith("base-")?presetTitle(chart.title):chart.title;headText.appendChild(title);
     const sub=document.createElement("small");sub.className="dd-card-sub";
-    sub.textContent=isTable(type)&&type!=="table"?"جدول الوثائق":(fieldMeta(chart.dimension)?.name||"الوثائق")+" · عدد الوثائق";
+    sub.textContent=isTable(type)&&type!=="table"?T("جدول الوثائق","Document table"):(fieldMeta(chart.dimension)?.name||T("الوثائق","Documents"))+T(" · عدد الوثائق"," · Document count");
     headText.appendChild(sub);
     const actions=document.createElement("div");actions.className="dd-card-actions";
     if(editMode) {
       actions.append(
-        iconButton("تعديل المؤشر","⚙",()=>openEditor(chart.id)),
-        ...(!documentTable?[iconButton("تبديل عرض الكرت","⤢",
+        iconButton(T("تعديل المؤشر","Edit widget"),"⚙",()=>openEditor(chart.id)),
+        ...(!documentTable?[iconButton(T("تبديل عرض الكرت","Change card width"),"⤢",
           ()=>setCardSpan(el,chart,nextCardSpan(chart)))]:[]),
-        iconButton("نقل لأعلى","↑",()=>moveCard(chart.id,-1)),
-        iconButton("نقل لأسفل","↓",()=>moveCard(chart.id,1)),
-        iconButton(ghost?"إظهار المؤشر":"إخفاء المؤشر",ghost?"◉":"◌",
+        iconButton(T("نقل لأعلى","Move up"),"↑",()=>moveCard(chart.id,-1)),
+        iconButton(T("نقل لأسفل","Move down"),"↓",()=>moveCard(chart.id,1)),
+        iconButton(ghost?T("إظهار المؤشر","Show widget"):T("إخفاء المؤشر","Hide widget"),ghost?"◉":"◌",
           ()=>{chart.hidden=!chart.hidden;markChanged();render();}),
-        iconButton("حذف المؤشر","×",()=>{if(window.confirm("حذف هذا المؤشر من لوحتك؟")){
+        iconButton(T("حذف المؤشر","Delete widget"),"×",()=>{if(window.confirm(T("حذف هذا المؤشر من لوحتك؟","Delete this widget from your dashboard?"))){
           tablePages.delete(chart.id);charts=charts.filter(c=>c.id!==chart.id);markChanged();render();}})
       );
     }
@@ -448,16 +464,16 @@
     if(editMode && !documentTable)attachResize(el,chart);
     if(ghost) {
       const text=document.createElement("p");text.className="dd-ghost-note";
-      text.textContent="العنصر مخفي؛ اضغط زر العين لإظهاره";
+      text.textContent=T("العنصر مخفي؛ اضغط زر العين لإظهاره","This widget is hidden. Use the visibility button to show it.");
       body.appendChild(text);
     } else if(type==="documents" || isRecent(type)) {
       drawDocumentTable(body,chart);
     } else {
       const data=summary(chart);
-      const partialText=partial && isFieldDimension(chart.dimension)?"قد تكون بعض قيم الحقول غير متاحة.":"";
+      const partialText=partial && isFieldDimension(chart.dimension)?T("قد تكون بعض قيم الحقول غير متاحة.","Some field values may be unavailable."):"";
       if(data.extra) {
         const note=document.createElement("small");note.className="dd-chart-note";
-        note.textContent="عرض أول 30 فئة من "+data.totalGroups+"؛ اختر قيمًا محددة لعرض المزيد.";
+        note.textContent=T("عرض أول 30 فئة من ","Showing the first 30 of ")+data.totalGroups+T("؛ اختر قيمًا محددة لعرض المزيد."," categories. Select specific values to see more.");
         body.appendChild(note);
       }
       if(partialText) {
@@ -466,9 +482,9 @@
       }
       if(chart.type==="kpi") {
         const k=document.createElement("div");k.className="dd-kpi";
-        k.textContent=Number(data.kpi).toLocaleString("ar-SA");
+        k.textContent=Number(data.kpi).toLocaleString(locale);
         const small=document.createElement("small");
-        small.textContent="وثيقة مطابقة للقيم المعروضة";
+        small.textContent=T("وثيقة مطابقة للقيم المعروضة","documents matching the displayed values");
         k.appendChild(small);body.appendChild(k);
         if(data.items.length) {
           k.tabIndex=0;
@@ -480,11 +496,11 @@
           });
         }
       } else if(chart.type==="table") {
-        drawTable(body,chart,[fieldMeta(chart.dimension)?.name||"القيمة","عدد الوثائق"],data.groups,
-          group=>[group.label,group.value.toLocaleString("ar-SA")],
+        drawTable(body,chart,[fieldMeta(chart.dimension)?.name||T("القيمة","Value"),T("عدد الوثائق","Document count")],data.groups,
+          group=>[group.label,group.value.toLocaleString(locale)],
           group=>openArchive(group.label,group.docs));
       } else if(!window.Chart) {
-        const p=document.createElement("p");p.textContent="مكتبة الرسم المحلي غير متاحة";body.appendChild(p);
+        const p=document.createElement("p");p.textContent=T("مكتبة الرسم المحلي غير متاحة","The local chart library is unavailable.");body.appendChild(p);
       } else {
         const stage=document.createElement("div");stage.className="dd-chart-stage";
         const canvas=document.createElement("canvas");stage.appendChild(canvas);body.appendChild(stage);
@@ -493,14 +509,14 @@
         if(circ) {
           const layout=document.createElement("div");layout.className="dashboard-round-layout";
           stage.className="dashboard-round-stage";
-          const legend=document.createElement("div");legend.className="dashboard-round-results";legend.dir="rtl";
+          const legend=document.createElement("div");legend.className="dashboard-round-results";legend.dir=arabic?"rtl":"ltr";
           for(let i=0;i<data.groups.length;i++) {
             const group=data.groups[i],btn=document.createElement("button");
             btn.type="button";btn.className="dashboard-round-row";
             const dot=document.createElement("span");dot.className="dashboard-round-dot";
             dot.style.backgroundColor=palette[i%palette.length];
             const label=document.createElement("span");label.className="dashboard-round-label";label.textContent=group.label;label.title=group.label;
-            const count=document.createElement("strong");count.textContent=group.value.toLocaleString("ar-SA");
+            const count=document.createElement("strong");count.textContent=group.value.toLocaleString(locale);
             btn.append(dot,label,count);
             btn.addEventListener("click",()=>openArchive(group.label,group.docs));
             legend.appendChild(btn);
@@ -511,7 +527,7 @@
         const config={
           type,
           data:{labels:data.groups.map(g=>g.label),datasets:[{
-            label:"عدد الوثائق",data:data.groups.map(g=>g.value),
+            label:T("عدد الوثائق","Document count"),data:data.groups.map(g=>g.value),
             borderColor:palette[0],backgroundColor:type==="line"?palette[0]:data.groups.map((_,i)=>palette[i%palette.length]),
             ...(circ?{radius:"96%"}:{}),
             fill:false,borderWidth:type==="line"?2:0,tension:.27,borderRadius:type==="bar"?4:0
@@ -568,7 +584,7 @@
     markChanged();
   }
   function attachResize(card,chart) {
-    const handle=iconButton(chart.type==="kpi"?"تغيير عرض بطاقة الأرقام":"تغيير العرض إلى نصف الصف أو عرضه الكامل","↔",
+    const handle=iconButton(chart.type==="kpi"?T("تغيير عرض بطاقة الأرقام","Resize number card"):T("تغيير العرض إلى نصف الصف أو عرضه الكامل","Resize to half or full row width"),"↔",
       event=>{if(event.detail===0)setCardSpan(card,chart,nextCardSpan(chart));});
     handle.classList.add("dd-resize-handle");
     card.appendChild(handle);
@@ -599,7 +615,7 @@
   function render() {
     instances.forEach(c=>c.destroy());instances=[];
     root.classList.toggle("dd-edit-mode",editMode);
-    $("dd-customize").textContent=editMode?"✓ إنهاء التخصيص":"⚙ تخصيص اللوحة";
+    $("dd-customize").textContent=editMode?T("✓ إنهاء التخصيص","✓ Finish customizing"):T("⚙ تخصيص اللوحة","⚙ Customize dashboard");
     $("dd-customize").setAttribute("aria-pressed",String(editMode));
     $("dd-add").classList.toggle("dd-hidden",!editMode);
     $("dd-main-overview").hidden=activeBoard.id!=="default";
@@ -616,9 +632,9 @@
     const selected=new Set(editing.selectedValues);
     if(!visible.length) {
       const p=document.createElement("p");p.className="dd-values-help";
-      p.textContent=term?"لا توجد قيم تطابق البحث."
-        :partial && isFieldDimension(editing.dimension)?"لم تصل قيم قابلة للعرض لهذا الحقل. بعض بيانات الحقول غير مكتملة."
-        :"لم يُرجع Laserfiche قيماً لهذا الحقل ضمن الوثائق المقروءة.";
+      p.textContent=term?T("لا توجد قيم تطابق البحث.","No values match your search.")
+        :partial && isFieldDimension(editing.dimension)?T("لم تصل قيم قابلة للعرض لهذا الحقل. بعض بيانات الحقول غير مكتملة.","No values are available for this field. Some field data is incomplete.")
+        :T("لم يُرجع Laserfiche قيماً لهذا الحقل ضمن الوثائق المقروءة.","Laserfiche returned no values for this field in the readable documents.");
       target.appendChild(p);
     }
     for(const category of visible) {
@@ -632,7 +648,7 @@
       });
       const text=document.createElement("span");text.textContent=category.label;
       const count=document.createElement("small");
-      count.textContent=category.count.toLocaleString("ar-SA")+" وثيقة";
+      count.textContent=category.count.toLocaleString(locale)+T(" وثيقة"," documents");
       label.append(check,text,count);target.appendChild(label);
     }
   }
@@ -641,10 +657,10 @@
     const item=charts.find(c=>c.id===id);
     editing=item?structuredClone(item):{
       id:"custom-"+Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,6),
-      title:"مؤشر جديد",type:"table",dimension:"__template",
+      title:T("مؤشر جديد","New widget"),type:"table",dimension:"__template",
       wide:false,hidden:false,selectedValues:[]
     };
-    $("dd-title").value=editing.title;$("dd-type").value=editing.type;
+    $("dd-title").value=editing.id.startsWith("base-")?presetTitle(editing.title):editing.title;$("dd-type").value=editing.type;
     $("dd-modified-from").value=editing.from||"";
     $("dd-modified-to").value=editing.to||"";
     $("dd-pages").value=editing.pages??"";
@@ -652,12 +668,12 @@
     const isField=Boolean(editing.dimension) && !BUILTIN.some(f=>f.id===editing.dimension);
     selectOptions($("dd-dimension"),[
       ...BUILTIN.map(f=>({value:f.id,label:f.name})),
-      {value:"__fields",label:"حقول"}
+      {value:"__fields",label:T("حقول","Fields")}
     ],isField?"__fields":editing.dimension,null);
-    const fieldOptions=fields.map(f=>({value:String(f.id),label:f.name+(f.multi?" (قيم متعددة)":"")}));
+    const fieldOptions=fields.map(f=>({value:String(f.id),label:f.name+(f.multi?T(" (قيم متعددة)"," (multiple values)"):"")}));
     if(isField&&!fieldOptions.some(f=>f.value===editing.dimension))
-      fieldOptions.push({value:editing.dimension,label:"حقل محفوظ ("+editing.dimension+")"});
-    selectOptions($("dd-field"),fieldOptions,isField?editing.dimension:"","اختر الحقل");
+      fieldOptions.push({value:editing.dimension,label:T("حقل محفوظ (","Saved field (")+editing.dimension+")"});
+    selectOptions($("dd-field"),fieldOptions,isField?editing.dimension:"",T("اختر الحقل","Select a field"));
     $("dd-value-search").value="";
     updateEditorSource();
     valueChoices();
@@ -682,7 +698,7 @@
       $("dd-type").value=editing.type;
     }
     const limit=$("dd-display-limit");
-    limit.textContent=tooMany?"الأعمدة متاحة حتى ١٠ وثائق ضمن نطاق التاريخ.":"";
+    limit.textContent=tooMany?T("الأعمدة متاحة حتى ١٠ وثائق ضمن نطاق التاريخ.","Bar charts are available for up to 10 documents in the date range."):"";
     limit.classList.toggle("dd-hidden",!limit.textContent);
     $("dd-save").disabled=!recent&&!editing.dimension;
   }
@@ -698,7 +714,7 @@
   const closeEditor=()=>{$("dd-editoroverlay").classList.add("dd-hidden");editing=null;};
   function saveEditor() {
     if(!editing)return;
-    editing.title=$("dd-title").value.trim()||"مؤشر بدون عنوان";
+    editing.title=$("dd-title").value.trim()||T("مؤشر بدون عنوان","Untitled widget");
     editing.type=$("dd-type").value;
     if(!isRecent(editing.type)&&!editing.dimension)return;
     editing.from=dateColumn(editing)?$("dd-modified-from").value:"";
@@ -708,7 +724,7 @@
     const invalidPages=!isRecent(editing.type) && editing.dimension==="__pages" && $("dd-pages").value.trim()!=="" && editing.pages===null;
     if(invalidRange || invalidPages) {
       const error=$("dd-filter-error");
-      error.textContent=invalidRange?"تاريخ البداية يجب أن يسبق تاريخ النهاية أو يطابقه.":"أدخل رقمًا عشريًا أو صحيحًا يبدأ من صفر.";
+      error.textContent=invalidRange?T("تاريخ البداية يجب أن يسبق تاريخ النهاية أو يطابقه.","The start date must be on or before the end date."):T("أدخل رقمًا عشريًا أو صحيحًا يبدأ من صفر.","Enter a nonnegative number.");
       error.classList.remove("dd-hidden");
       return;
     }
@@ -735,15 +751,15 @@
     $("dd-warning").classList.add("dd-hidden");
     try {
       const records=await fetch("/DynamicDashboard/Rows",{credentials:"same-origin",cache:"no-store",headers:requestHeaders});
-      if(records.status===409)throw new Error("تغيّرت الجلسة أو المستودع. أعد تحميل الصفحة.");
+      if(records.status===409)throw new Error(T("تغيّرت الجلسة أو المستودع. أعد تحميل الصفحة.","The session or repository changed. Reload the page."));
       if(!records.ok)throw new Error([401,403].includes(records.status)
-        ?"لا توجد صلاحية لقراءة بيانات هذه الجلسة. سجل الدخول من جديد."
-        :"تعذر إكمال قراءة الوثائق والحقول من Laserfiche.");
+        ?T("لا توجد صلاحية لقراءة بيانات هذه الجلسة. سجل الدخول من جديد.","You cannot read data in this session. Sign in again.")
+        :T("تعذر إكمال قراءة الوثائق والحقول من Laserfiche.","Could not finish reading documents and fields from Laserfiche."));
       const result=await records.json();
-      if(!Array.isArray(result.fields)||!Array.isArray(result.rows))throw new Error("استجابة غير متوقعة من Laserfiche.");
+      if(!Array.isArray(result.fields)||!Array.isArray(result.rows))throw new Error(T("استجابة غير متوقعة من Laserfiche.","Unexpected response from Laserfiche."));
       fields=result.fields;rows=result.rows;partial=Boolean(result.fieldDataIncomplete);
       if(partial){
-        $("dd-warning").textContent="بعض بيانات الحقول لم ترجع كاملة من Laserfiche. تعرض المؤشرات القيم المتاحة فقط.";
+        $("dd-warning").textContent=T("بعض بيانات الحقول لم ترجع كاملة من Laserfiche. تعرض المؤشرات القيم المتاحة فقط.","Laserfiche returned incomplete field data. Widgets show available values only.");
         $("dd-warning").classList.remove("dd-hidden");
       }
       render();
@@ -762,13 +778,24 @@
     const dialog=$("dd-repository-dialog"), form=dialog.querySelector("form");
     const select=$("dd-repository-list"), submit=$("dd-repository-submit");
     const password=$("dd-repository-password"), message=$("dd-repository-message");
+    const manual=$("dd-repository-manual"), manualWrap=$("dd-repository-manual-wrap");
+    function showManual() {
+      if(root.dataset.passwordSwitch!=="true")return;
+      select.hidden=true;select.disabled=true;
+      manualWrap.hidden=false;manual.disabled=false;manual.required=true;
+      $("dd-repository-password-wrap").hidden=false;
+      password.required=true;submit.disabled=false;
+      message.textContent+=" "+T("أدخل معرّف المستودع وكلمة مرور حسابك.", "Enter the repository ID and your account password.");
+    }
     $("dd-repository").addEventListener("click",async()=>{
       password.value="";
+      manual.value="";manual.disabled=true;manual.required=false;manualWrap.hidden=true;
+      select.hidden=false;select.disabled=false;
       password.required=false;
       $("dd-repository-password-wrap").hidden=true;
       select.replaceChildren();
       submit.disabled=true;
-      message.textContent="جارٍ قراءة المستودعات…";
+      message.textContent=T("جارٍ قراءة المستودعات…","Loading repositories…");
       dialog.showModal();
       try {
         const response=await fetch("/DynamicDashboard/Repositories",
@@ -778,20 +805,22 @@
         const choices=result.repositories.filter(item=>
           item.id.toLowerCase()!==root.dataset.repository.toLowerCase());
         selectOptions(select,choices.map(item=>({value:item.id,label:item.name||item.id})),
-          "","اختر المستودع");
+          "",T("اختر المستودع","Select a repository"));
         $("dd-repository-password-wrap").hidden=!result.requiresPassword;
         password.required=Boolean(result.requiresPassword);
-        message.textContent=choices.length?"":"لا توجد مستودعات أخرى في القائمة التي أعادها Laserfiche.";
+        message.textContent=choices.length?"":T("لا توجد مستودعات أخرى في القائمة التي أعادها Laserfiche.","Laserfiche returned no other repositories.");
         submit.disabled=!choices.length;
+        if(!choices.length)showManual();
       } catch {
-        message.textContent="تعذر قراءة المستودعات من Laserfiche.";
+        message.textContent=T("تعذر قراءة المستودعات من Laserfiche.","Could not load repositories from Laserfiche.");
+        showManual();
       }
     });
     $("dd-repository-cancel").addEventListener("click",()=>dialog.close());
     dialog.addEventListener("close",()=>{password.value="";});
     form.addEventListener("submit",async event=>{
       event.preventDefault();
-      if(saving || revision!==savedRevision && !window.confirm("توجد تغييرات غير محفوظة. تبديل المستودع؟"))return;
+      if(saving || revision!==savedRevision && !window.confirm(T("توجد تغييرات غير محفوظة. تبديل المستودع؟","There are unsaved changes. Switch repositories?")))return;
       submit.disabled=true;
       message.textContent="";
       try {
@@ -799,7 +828,7 @@
           method:"POST",credentials:"same-origin",headers:requestHeaders,body:new FormData(form)
         });
         const result=await response.json().catch(()=>({}));
-        if(!response.ok || !result.url)throw new Error(result.error||"تعذر تبديل المستودع.");
+        if(!response.ok || !result.url)throw new Error(result.error||T("تعذر تبديل المستودع.","Could not switch repositories."));
         window.location.assign(result.url);
       } catch(error) {
         password.value="";
@@ -815,7 +844,7 @@
     const list=$("dd-board-list");
     let creating=false;
     const canLeave=()=>!saving && (revision===savedRevision ||
-      window.confirm("توجد تغييرات غير محفوظة. هل تتابع؟"));
+      window.confirm(T("توجد تغييرات غير محفوظة. هل تتابع؟","There are unsaved changes. Continue?")));
     list.addEventListener("change",()=>{
       if(!canLeave()) {list.value=activeBoard.id;return;}
       const board=boards.get(list.value);
@@ -827,7 +856,7 @@
     const open=create=>{
       if(create && !canLeave())return;
       creating=create;
-      $("dd-board-dialog-title").textContent=create?"لوحة جديدة":"تغيير اسم اللوحة";
+      $("dd-board-dialog-title").textContent=create?T("لوحة جديدة","New dashboard"):T("تغيير اسم اللوحة","Rename dashboard");
       $("dd-board-error").textContent="";
       name.value=create?"":activeBoard.name;
       dialog.showModal();
@@ -840,7 +869,7 @@
       event.preventDefault();
       const value=name.value.trim();
       if(!value) {
-        $("dd-board-error").textContent="أدخل اسم اللوحة.";
+        $("dd-board-error").textContent=T("أدخل اسم اللوحة.","Enter a dashboard name.");
         return;
       }
       if(creating) {

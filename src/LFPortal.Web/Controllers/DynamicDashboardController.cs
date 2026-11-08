@@ -41,6 +41,8 @@ public sealed class DynamicDashboardController : Controller
     {
         var repo = await _repository.GetActiveRepositoryAsync(cancellationToken);
         ViewBag.RepositoryId = repo.RepositoryId;
+        ViewBag.PasswordSwitch = User.FindFirstValue(ClaimTypes.AuthenticationMethod) ==
+            DashboardAuthenticationDefaults.PasswordAuthenticationMethod ? "true" : "false";
         ViewBag.StorageScope = GetLayoutScope(repo.ServerUrl, repo.RepositoryId);
         // The main board uses the same permission-scoped statistics as the existing overview.
         DashboardStatsDto stats;
@@ -51,7 +53,8 @@ public sealed class DynamicDashboardController : Controller
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning("Could not load the main overview ({ErrorType}).", ex.GetType().Name);
-            stats = new() { ErrorMessage = "تعذر تحميل إحصائيات اللوحة الرئيسية." };
+            stats = new() { ErrorMessage = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "ar"
+                ? "تعذر تحميل إحصائيات اللوحة الرئيسية." : "Could not load the main dashboard statistics." };
         }
         return View(new DashboardViewModel { Stats = stats });
     }
@@ -79,7 +82,7 @@ public sealed class DynamicDashboardController : Controller
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning("Could not list repositories ({ErrorType}).", ex.GetType().Name);
+            _logger.LogWarning(ex, "Could not list repositories for {RepositoryId}.", active.RepositoryId);
             return StatusCode(503);
         }
     }
@@ -382,7 +385,7 @@ public sealed class DynamicDashboardController : Controller
                 {
                     var id = FieldKey(field.FieldDefinitionId);
                     if (!catalog.ContainsKey(id))
-                        catalog[id] = new DashboardField(id, $"حقل {id}", field.FieldType, field.IsMultiValue);
+                        catalog[id] = new DashboardField(id, System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "ar" ? $"حقل {id}" : $"Field {id}", field.FieldType, field.IsMultiValue);
                     return id;
                 }
 

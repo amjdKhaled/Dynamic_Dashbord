@@ -72,9 +72,20 @@ internal sealed class LaserficheRepositoryService : ILaserficheRepositoryService
     public async Task<IReadOnlyList<RepositoryInfo>> ListRepositoriesAsync(
         CancellationToken cancellationToken = default)
     {
-        var url = _adapter.BuildRepositoriesUrl();
+        var active = await _repositoryContext.GetActiveRepositoryAsync(cancellationToken).ConfigureAwait(false);
+        var url = _adapter.BuildRepositoriesUrlFor(active.ServerUrl);
         using var client = _httpClientFactory.CreateClient("LaserficheAuthenticated");
         using var response = await client.GetAsync(url, cancellationToken).ConfigureAwait(false);
+        const string legacyRoute = "/v1/Repositories";
+        if (url.EndsWith(legacyRoute, StringComparison.OrdinalIgnoreCase) &&
+            (int)response.StatusCode is 403 or 404 or 405)
+        {
+            var v2Url = url[..^legacyRoute.Length] + "/v2/Repositories";
+            using var v2Response = await client.GetAsync(v2Url, cancellationToken).ConfigureAwait(false);
+            var v2Body = await ReadRepositoryJsonAsync(v2Response, v2Url, cancellationToken).ConfigureAwait(false);
+            return DeserializeRepositories(v2Body, v2Url).Select(r => ToRepositoryInfo(r)).ToArray();
+        }
+
         var body = await ReadRepositoryJsonAsync(response, url, cancellationToken).ConfigureAwait(false);
         return DeserializeRepositories(body, url).Select(r => ToRepositoryInfo(r)).ToArray();
     }

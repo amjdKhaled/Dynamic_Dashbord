@@ -216,14 +216,10 @@
         }
         else
         {
-            <div class="chart-container chart-h280 donut-wrap">
-                <div class="template-distribution-layout">
-                    <div class="template-doughnut-canvas"><canvas id="chartTemplates"></canvas></div>
-                    <div class="template-legend-shell" id="templateLegendShell">
-                        <button type="button" class="template-legend-scroll" id="templateLegendUp" aria-label="Scroll template names up" title="Scroll up">▲</button>
-                        <div class="template-legend-list" id="templateLegendList" role="list"></div>
-                        <button type="button" class="template-legend-scroll" id="templateLegendDown" aria-label="Scroll template names down" title="Scroll down">▼</button>
-                    </div>
+            <div class="chart-container chart-h280">
+                <div class="dashboard-round-layout">
+                    <div class="dashboard-round-stage"><canvas id="chartTemplates"></canvas></div>
+                    <div class="dashboard-round-results" id="templateLegendList" dir="auto"></div>
                 </div>
             </div>
         }
@@ -604,14 +600,12 @@ document.querySelectorAll(".totalPercent").forEach((canvas, index) => {
 
 const tmplEl = document.getElementById("chartTemplates");
 if(tmplEl){
-    const templateCount = templateLabels.length;
-    const doughnutRadius = templateCount > 35 ? "52%" : templateCount > 24 ? "60%" : templateCount > 14 ? "70%" : "82%";
     makeChart(tmplEl, {
         type:"doughnut",
         data:{labels:templateLabels,datasets:[{
             data:templateData,
             backgroundColor:templateLabels.map((_,i)=>PALETTE[i%PALETTE.length]),
-            radius:doughnutRadius,
+            radius:"96%",
             borderWidth:0
         }]},
         options:{
@@ -632,44 +626,28 @@ if(tmplEl){
     });
 
     const legendList = document.getElementById("templateLegendList");
-    const legendUp = document.getElementById("templateLegendUp");
-    const legendDown = document.getElementById("templateLegendDown");
-    if(legendList && legendUp && legendDown){
+    if(legendList){
         templateLabels.forEach((label,index)=>{
             const item = document.createElement("button");
             item.type = "button";
-            item.className = "template-legend-item";
-            item.setAttribute("role","listitem");
+            item.className = "dashboard-round-row";
             item.title = label;
             item.addEventListener("click",()=>goToArchive(templateUrls[index]));
 
             const color = document.createElement("span");
-            color.className = "template-legend-color";
+            color.className = "dashboard-round-dot";
             color.style.backgroundColor = PALETTE[index%PALETTE.length];
             color.setAttribute("aria-hidden","true");
 
             const text = document.createElement("span");
-            text.className = "template-legend-label";
+            text.className = "dashboard-round-label";
             text.textContent = label;
-            item.append(color,text);
+            const count = document.createElement("strong");
+            count.textContent = Number(templateData[index]).toLocaleString();
+            item.append(color,text,count);
             legendList.appendChild(item);
         });
 
-        const updateLegendArrows = ()=>{
-            const maxScroll = Math.max(0,legendList.scrollHeight-legendList.clientHeight);
-            legendUp.disabled = legendList.scrollTop <= 1;
-            legendDown.disabled = legendList.scrollTop >= maxScroll-1;
-        };
-        const scrollLegend = direction=>{
-            const row = legendList.querySelector(".template-legend-item");
-            const step = Math.max(72,(row?.getBoundingClientRect().height||24)*3);
-            legendList.scrollBy({top:direction*step,behavior:"smooth"});
-        };
-        legendUp.addEventListener("click",()=>scrollLegend(-1));
-        legendDown.addEventListener("click",()=>scrollLegend(1));
-        legendList.addEventListener("scroll",updateLegendArrows,{passive:true});
-        window.addEventListener("resize",updateLegendArrows);
-        requestAnimationFrame(updateLegendArrows);
     }
 }
 

@@ -491,40 +491,29 @@
         const type=chart.type==="horizontal"?"bar":chart.type, axis=chart.type==="horizontal";
         const circ=["doughnut","pie"].includes(type);
         if(circ) {
-          body.classList.add("dd-circular-visual");
-          const legend=document.createElement("div");legend.className="dd-chart-legend";
+          const layout=document.createElement("div");layout.className="dashboard-round-layout";
+          stage.className="dashboard-round-stage";
+          const legend=document.createElement("div");legend.className="dashboard-round-results";legend.dir="rtl";
           for(let i=0;i<data.groups.length;i++) {
             const group=data.groups[i],btn=document.createElement("button");
-            btn.type="button";btn.className="dd-legend-row";
-            const dot=document.createElement("span");dot.className="dd-legend-dot";
+            btn.type="button";btn.className="dashboard-round-row";
+            const dot=document.createElement("span");dot.className="dashboard-round-dot";
             dot.style.backgroundColor=palette[i%palette.length];
-            const label=document.createElement("span");label.textContent=group.label;label.title=group.label;
+            const label=document.createElement("span");label.className="dashboard-round-label";label.textContent=group.label;label.title=group.label;
             const count=document.createElement("strong");count.textContent=group.value.toLocaleString("ar-SA");
             btn.append(dot,label,count);
             btn.addEventListener("click",()=>openArchive(group.label,group.docs));
             legend.appendChild(btn);
           }
-          const shell=document.createElement("div");
-          shell.className="dd-legend-shell";
-          if(data.groups.length>4) {
-            const scroll=direction=>legend.scrollBy({top:direction*legend.clientHeight,behavior:"smooth"});
-            const up=iconButton("تمرير القائمة لأعلى","▲",()=>scroll(-1));
-            const down=iconButton("تمرير القائمة لأسفل","▼",()=>scroll(1));
-            const updateArrows=()=>{
-              up.disabled=legend.scrollTop<=1;
-              down.disabled=legend.scrollTop+legend.clientHeight>=legend.scrollHeight-1;
-            };
-            legend.addEventListener("scroll",updateArrows,{passive:true});
-            shell.append(up,legend,down);
-            requestAnimationFrame(updateArrows);
-          } else shell.appendChild(legend);
-          body.appendChild(shell);
+          layout.append(stage,legend);
+          body.appendChild(layout);
         }
         const config={
           type,
           data:{labels:data.groups.map(g=>g.label),datasets:[{
             label:"عدد الوثائق",data:data.groups.map(g=>g.value),
             borderColor:palette[0],backgroundColor:type==="line"?palette[0]:data.groups.map((_,i)=>palette[i%palette.length]),
+            ...(circ?{radius:"96%"}:{}),
             fill:false,borderWidth:type==="line"?2:0,tension:.27,borderRadius:type==="bar"?4:0
           }]},
           options:{

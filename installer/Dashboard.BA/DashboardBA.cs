@@ -40,6 +40,7 @@ namespace Dashboard.BA
 
         // The wizard form. Created on the UI thread in Run().
         private ProfessionalWizardForm? _form;
+        internal bool IsDynamicDashboard { get; private set; }
 
         // Window handle used for Detect / Apply calls.
         private IntPtr _hwnd;
@@ -163,6 +164,8 @@ namespace Dashboard.BA
                 Application.SetCompatibleTextRenderingDefault(false);
 
                 StartupLogger.Log("  Creating ProfessionalWizardForm...");
+                IsDynamicDashboard = string.Equals(_engine.GetVariableString("WixBundleName"),
+                    "Dynamic Dashboard", StringComparison.Ordinal);
                 _form = new ProfessionalWizardForm(this);
                 StartupLogger.Log("  ProfessionalWizardForm created successfully");
 
@@ -198,6 +201,12 @@ namespace Dashboard.BA
             _hwnd = hwnd;
             _activeAction = _command.Action;
 
+            if (IsDynamicDashboard)
+            {
+                _engine.Plan(LaunchAction.Install);
+                return;
+            }
+
             _engine.SetVariableString("DashboardUrl",     config.DashboardUrl,     false);
             _engine.SetVariableString("LaserficheApiUrl", config.LaserficheApiUrl, false);
             _engine.SetVariableString("LaserficheServerUrl", config.LaserficheServerUrl, false);
@@ -231,7 +240,8 @@ namespace Dashboard.BA
         {
             _hwnd = hwnd;
             _activeAction = LaunchAction.Uninstall;
-            _engine.SetVariableNumeric("RemoveUserData", removeUserData ? 1L : 0L);
+            if (!IsDynamicDashboard)
+                _engine.SetVariableNumeric("RemoveUserData", removeUserData ? 1L : 0L);
             _engine.Plan(LaunchAction.Uninstall);
         }
 

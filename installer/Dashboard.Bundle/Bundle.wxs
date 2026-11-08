@@ -35,12 +35,22 @@
      xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal"
      xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
 
-  <Bundle Name="Laserfiche Dashboard"
+  <?ifdef DynamicDashboardBundle ?>
+    <?define SetupName = "Dynamic Dashboard" ?>
+    <?define SetupUpgradeCode = "{F2B22D9D-C3B9-4F24-A80B-A237AC3C4447}" ?>
+    <?define SetupRepository = "Dynamic_Dashbord" ?>
+  <?else?>
+    <?define SetupName = "Laserfiche Dashboard" ?>
+    <?define SetupUpgradeCode = "{B8E4D3C2-A5F6-4782-0BCD-E23456789012}" ?>
+    <?define SetupRepository = "Asset-Manager-1zip" ?>
+  <?endif?>
+
+  <Bundle Name="$(var.SetupName)"
           Version="$(BundleVersion)"
           Manufacturer="Dashboard"
-          UpgradeCode="{B8E4D3C2-A5F6-4782-0BCD-E23456789012}"
-          AboutUrl="https://github.com/amjdKhaled/Asset-Manager-1zip"
-          HelpUrl="https://github.com/amjdKhaled/Asset-Manager-1zip/issues"
+          UpgradeCode="$(var.SetupUpgradeCode)"
+          AboutUrl="https://github.com/amjdKhaled/$(var.SetupRepository)"
+          HelpUrl="https://github.com/amjdKhaled/$(var.SetupRepository)/issues"
           Copyright="Copyright (c) 2026 Dashboard">
 
     <!--
@@ -306,6 +316,7 @@
           Vital="yes"
           ForcePerMachine="yes">
 
+        <?ifndef DynamicDashboardBundle ?>
         <!-- Wizard-collected values passed through to MSI custom actions -->
         <MsiProperty Name="DASHBOARD_URL"          Value="[DashboardUrl]" />
         <MsiProperty Name="LF_API_URL"             Value="[LaserficheApiUrl]" />
@@ -323,6 +334,7 @@
         <MsiProperty Name="DASHBOARD_PORT"         Value="[DashboardPort]" />
         <MsiProperty Name="TRUST_LF_CERT"          Value="[TrustLFCertificate]" />
         <MsiProperty Name="REMOVE_USER_DATA"       Value="[RemoveUserData]" />
+        <?endif?>
 
       </MsiPackage>
 

@@ -54,6 +54,7 @@ namespace Dashboard.BA
         };
 
         private readonly DashboardBA _ba;
+        private bool IsDynamic => _ba.IsDynamicDashboard;
         private readonly InstallConfig _config = new InstallConfig();
         private DetectionResult _detection = new DetectionResult();
         private bool _detectionDone;
@@ -135,7 +136,7 @@ namespace Dashboard.BA
 
         private void BuildForm()
         {
-            Text = "Laserfiche Dashboard Setup";
+            Text = IsDynamic ? "Dynamic Dashboard Setup" : "Laserfiche Dashboard Setup";
             StartPosition = FormStartPosition.CenterScreen;
             ClientSize = new Size(920, 620);
             MinimumSize = new Size(840, 590);
@@ -181,7 +182,7 @@ namespace Dashboard.BA
             {
                 NavigateTo(PAGE_WELCOME);
                 _ba.StartDetect(Handle);
-                StartDetection();
+                if (!IsDynamic) StartDetection();
             };
         }
 
@@ -213,7 +214,7 @@ namespace Dashboard.BA
             sidebar.Controls.Add(brandMark);
             sidebar.Controls.Add(new Label
             {
-                Text = "Laserfiche\nDashboard",
+                Text = IsDynamic ? "Dynamic\nDashboard" : "Laserfiche\nDashboard",
                 Location = new Point(64, 23),
                 Size = new Size(130, 46),
                 ForeColor = Color.White,
@@ -228,7 +229,8 @@ namespace Dashboard.BA
                 Font = new Font("Segoe UI", 7.5F, FontStyle.Bold)
             });
 
-            string[] names = { "Welcome", "Connection", "Deployment", "Install" };
+            string[] names = IsDynamic ? new[] { "Welcome", "Review", "Install", "Finish" }
+                : new[] { "Welcome", "Connection", "Deployment", "Install" };
             for (int i = 0; i < names.Length; i++)
             {
                 int y = 122 + (i * 58);
@@ -354,7 +356,7 @@ namespace Dashboard.BA
             var page = new Panel { BackColor = Canvas };
             _welcomeHeading = new Label
             {
-                Text = "Set up Dashboard in a few steps",
+                Text = IsDynamic ? "Set up Dynamic Dashboard" : "Set up Dashboard in a few steps",
                 Location = new Point(0, 2),
                 AutoSize = true,
                 ForeColor = TextColor,
@@ -362,7 +364,9 @@ namespace Dashboard.BA
             };
             _welcomeBody = new Label
             {
-                Text = "Setup will install the web application, configure IIS, save the Laserfiche connection, " +
+                Text = IsDynamic
+                    ? "Install Dynamic Dashboard for this computer. After opening it from Start, configure the Laserfiche connection in Settings."
+                    : "Setup will install the web application, configure IIS, save the Laserfiche connection, " +
                        "secure the service credentials, and add the client integrations you select.",
                 Location = new Point(2, 44),
                 Size = new Size(610, 48),
@@ -372,6 +376,7 @@ namespace Dashboard.BA
             };
             page.Controls.Add(_welcomeHeading);
             page.Controls.Add(_welcomeBody);
+            if (IsDynamic) return page;
 
             var features = new TableLayoutPanel
             {
@@ -600,7 +605,8 @@ namespace Dashboard.BA
             {
                 Dock = DockStyle.Bottom,
                 Height = 52,
-                Text = "Your Laserfiche password is transferred only as a temporary DPAPI-encrypted package and is never written to setup logs or JSON files.",
+                Text = IsDynamic ? "Configure your Laserfiche connection in Settings after installation."
+                    : "Your Laserfiche password is transferred only as a temporary DPAPI-encrypted package and is never written to setup logs or JSON files.",
                 BackColor = PaleBlue,
                 ForeColor = Navy,
                 Padding = new Padding(12, 9, 12, 6)
@@ -697,7 +703,7 @@ namespace Dashboard.BA
             };
             _launchDashboard = new CheckBox
             {
-                Text = "Launch Laserfiche Dashboard when setup closes",
+                Text = IsDynamic ? "Launch Dynamic Dashboard when setup closes" : "Launch Laserfiche Dashboard when setup closes",
                 Location = new Point(118, 228),
                 AutoSize = true,
                 Checked = true,
@@ -725,14 +731,21 @@ namespace Dashboard.BA
             _pages[page].Visible = true;
             _pages[page].BringToFront();
             _headerTitle.Text = _titles[page];
-            _headerSubtitle.Text = _subtitles[page];
+            _headerSubtitle.Text = IsDynamic && (page == PAGE_WELCOME || page == PAGE_COMPLETE)
+                ? "Dynamic Dashboard runs locally from the Start menu."
+                : _subtitles[page];
             UpdateStepRail();
             UpdateButtons();
 
             if ((page == PAGE_CONNECTION || page == PAGE_DEPLOYMENT) && _detectionDone)
                 ApplyDetection();
             if (page == PAGE_READY)
-                UpdateReadySummary();
+            {
+                if (IsDynamic)
+                    _readySummary.Text = "Dynamic Dashboard will be installed as a separate Windows application. A shortcut will be added to Start.";
+                else
+                    UpdateReadySummary();
+            }
             if (page == PAGE_PROGRESS)
                 StartInstallation();
             if (page == PAGE_COMPLETE)
@@ -744,6 +757,8 @@ namespace Dashboard.BA
             int active = _pageIndex switch
             {
                 PAGE_WELCOME => 0,
+                PAGE_READY when IsDynamic => 1,
+                PAGE_PROGRESS when IsDynamic => 2,
                 PAGE_CONNECTION => 1,
                 PAGE_DEPLOYMENT => 2,
                 _ => 3
@@ -810,6 +825,12 @@ namespace Dashboard.BA
                 return;
             }
 
+            if (IsDynamic && _pageIndex == PAGE_WELCOME)
+            {
+                NavigateTo(PAGE_READY);
+                return;
+            }
+
             if (_pageIndex == PAGE_CONNECTION && !ValidateConnectionPage()) return;
             if (_pageIndex == PAGE_DEPLOYMENT)
             {
@@ -832,7 +853,12 @@ namespace Dashboard.BA
         {
             if (_maintenanceMode && _pageIndex == PAGE_WELCOME)
             {
-                if (ConfirmUninstall(out bool removeData))
+                bool removeData = false;
+                bool confirmed = IsDynamic
+                    ? MessageBox.Show(this, "Remove Dynamic Dashboard?", "Dynamic Dashboard Setup",
+                        MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes
+                    : ConfirmUninstall(out removeData);
+                if (confirmed)
                 {
                     _removeUserData = removeData;
                     _operation = SetupOperation.Uninstall;
@@ -842,7 +868,7 @@ namespace Dashboard.BA
             }
 
             if (_pageIndex > PAGE_WELCOME && _pageIndex < PAGE_PROGRESS)
-                NavigateTo(_pageIndex - 1);
+                NavigateTo(IsDynamic && _pageIndex == PAGE_READY ? PAGE_WELCOME : _pageIndex - 1);
         }
 
         private void CancelSetup()
@@ -961,9 +987,10 @@ namespace Dashboard.BA
             if (!installed || _installDone || _pageIndex >= PAGE_PROGRESS) return;
             _maintenanceMode = true;
             _operation = SetupOperation.Repair;
-            _welcomeHeading.Text = "Laserfiche Dashboard is installed";
-            _welcomeBody.Text =
-                "Repair restores application files and integrations while preserving settings. " +
+            _welcomeHeading.Text = IsDynamic ? "Dynamic Dashboard is installed" : "Laserfiche Dashboard is installed";
+            _welcomeBody.Text = IsDynamic
+                ? "Repair restores the application files. Uninstall removes the application and keeps its settings."
+                : "Repair restores application files and integrations while preserving settings. " +
                 "Uninstall removes Dashboard. Optional cleanup removes only known Dashboard settings and credentials; logs, other files and Laserfiche Web Client files are preserved.";
             _headerTitle.Text = "Dashboard maintenance";
             _headerSubtitle.Text = "Repair or remove the existing installation.";
@@ -1235,7 +1262,13 @@ namespace Dashboard.BA
                 _completeTitle.Text = _operation == SetupOperation.Uninstall
                     ? "Dashboard removed"
                     : _operation == SetupOperation.Repair ? "Repair complete" : "Dashboard is ready";
-                if (_operation == SetupOperation.Uninstall)
+                if (IsDynamic)
+                {
+                    _completeDetail.Text = _operation == SetupOperation.Uninstall
+                        ? "Dynamic Dashboard was removed. Your settings were kept."
+                        : "Open Dynamic Dashboard from Start and configure Laserfiche in Settings.";
+                }
+                else if (_operation == SetupOperation.Uninstall)
                 {
                     _completeDetail.Text = _removeUserData
                         ? "The application was removed. Cleanup of known Dashboard settings and credentials was requested. Logs, other files and Laserfiche Web Client files were preserved; check the setup log for cleanup failures."
@@ -1282,7 +1315,10 @@ namespace Dashboard.BA
             {
                 Process.Start(new ProcessStartInfo
                 {
-                    FileName = _config.DashboardUrl,
+                    FileName = IsDynamic
+                        ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms),
+                            "Dynamic Dashboard", "Dynamic Dashboard.lnk")
+                        : _config.DashboardUrl,
                     UseShellExecute = true
                 });
             }
@@ -1298,7 +1334,7 @@ namespace Dashboard.BA
         {
             try
             {
-                string path = Path.Combine(
+                string path = IsDynamic ? Path.GetTempPath() : Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
                     "Dashboard", "Logs");
                 Directory.CreateDirectory(path);

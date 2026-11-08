@@ -25,6 +25,40 @@ try {
             throw "Independent Dynamic Dashboard payload missing: $file"
         }
     }
+    $shortcut = Join-Path ([Environment]::GetFolderPath('CommonPrograms')) 'Dynamic Dashboard\Dynamic Dashboard.lnk'
+    if (-not (Test-Path -LiteralPath $shortcut -PathType Leaf)) {
+        throw 'Dynamic Dashboard Start menu shortcut is missing.'
+    }
+
+    # Prove the installed payload starts and serves the real Dashboard sign-in route.
+    $previousData = $env:DASHBOARD_STANDALONE_DATA_DIR
+    $env:DASHBOARD_STANDALONE_DATA_DIR = Join-Path $logs 'dynamic-smoke-data'
+    $url = 'http://127.0.0.1:15989'
+    $app = $null
+    try {
+        $app = Start-Process (Join-Path $installDir 'LFPortal.Web.exe') -WorkingDirectory $installDir `
+            -ArgumentList @('--urls', $url) -PassThru
+        $ready = $null
+        for ($attempt = 0; $attempt -lt 40; $attempt++) {
+            if ($app.HasExited) { throw "Installed Dashboard exited: $($app.ExitCode)." }
+            try {
+                $ready = Invoke-RestMethod "$url/_standalone/ready" -TimeoutSec 2
+                break
+            }
+            catch { Start-Sleep -Milliseconds 500 }
+        }
+        if ($null -eq $ready -or $ready.application -ne 'Dynamic_Dashbord' -or
+            $ready.mode -ne 'standalone' -or $ready.dashboardPath -ne '/DynamicDashboard') {
+            throw 'Installed Dynamic Dashboard did not pass readiness verification.'
+        }
+        $login = Invoke-WebRequest "$url/Login" -UseBasicParsing -TimeoutSec 5
+        if ($login.StatusCode -ne 200) { throw 'Installed Dynamic Dashboard login did not load.' }
+    }
+    finally {
+        if ($null -ne $app -and -not $app.HasExited) { Stop-Process -Id $app.Id -Force }
+        $env:DASHBOARD_STANDALONE_DATA_DIR = $previousData
+    }
+
     if ((Test-Path -LiteralPath $legacyDir) -ne $legacyPresent) {
         throw 'The legacy install directory changed during Dynamic Dashboard install.'
     }

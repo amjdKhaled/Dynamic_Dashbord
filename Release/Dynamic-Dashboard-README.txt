@@ -1,7 +1,7 @@
 Dynamic Dashboard - Windows x64
 ===============================
 
-1. Open Dynamic-Dashboard-Setup.exe and select Install in the setup wizard.
+1. Open Dynamic-Dashboard-Setup.exe and select Continue, review the installation, then select Install.
 2. Launch Dynamic Dashboard from the Start menu.
 3. Open Settings, configure the Laserfiche server and repository, then sign in.
 

@@ -2115,9 +2115,8 @@ if ($IsWindowsOS) {
 Copy-Item (Join-Path $RepoRoot 'scripts\Start-Standalone.ps1') (Join-Path $webAppDst 'Start-Dashboard.ps1') -Force
 # Package the independent desktop-launched web app before adding the portable ZIP launcher.
 if (-not $SkipMsi) {
-    $dynamicMsi = Join-Path $ArtifactsDir 'Dynamic-Dashboard-Setup.msi'
+    $dynamicMsi = Join-Path $ArtifactsDir 'obj\DynamicMSI\Dynamic-Dashboard-Setup.msi'
     $dynamicExe = Join-Path $ReleaseDir 'Dynamic-Dashboard-Setup.exe'
-    $dynamicBundle = Join-Path $RepoRoot 'installer\DynamicDashboard.Installer\Bundle.wxs'
     $dynamicBundleInterm = Join-Path $ArtifactsDir 'obj\DynamicBundle'
     $dynamicHarvest = Join-Path $StagingDir 'Harvest\DynamicDashboardFiles.wxs'
     $dynamicSource = Join-Path $RepoRoot 'installer\DynamicDashboard.Installer\Product.wxs'
@@ -2133,12 +2132,13 @@ if (-not $SkipMsi) {
             '-arch', 'x64', '-d', "ProductVersion=$Version",
             '-intermediatefolder', $dynamicInterm, '-pdbtype', 'none', '-out', $dynamicMsi
         )
-        Invoke-NativeCommand -Stage 'wix build (Dynamic Dashboard EXE)' -FilePath 'dotnet' -Arguments @(
-            'tool', 'run', 'wix', '--', 'build', $dynamicBundle,
-            '-ext', "WixToolset.Bal.wixext/$WixPinnedVersion",
-            '-d', "BundleVersion=$Version", '-d', "MsiPath=$dynamicMsi",
-            '-intermediatefolder', $dynamicBundleInterm, '-pdbtype', 'none', '-out', $dynamicExe
-        )
+        # Reuse the standard managed wizard and offline prerequisite payload.
+        $dynamicBundleArgs = $wixBundleArgs.Clone()
+        $dynamicBundleArgs[[Array]::IndexOf($dynamicBundleArgs, "MsiPath=$msiPath")] = "MsiPath=$dynamicMsi"
+        $dynamicBundleArgs[[Array]::IndexOf($dynamicBundleArgs, $bundleIntermDir)] = $dynamicBundleInterm
+        $dynamicBundleArgs[[Array]::IndexOf($dynamicBundleArgs, $bundleExe)] = $dynamicExe
+        $dynamicBundleArgs += @('-d', 'DynamicDashboardBundle=1')
+        Invoke-NativeCommand -Stage 'wix build (Dynamic Dashboard EXE)' -FilePath 'dotnet' -Arguments $dynamicBundleArgs
     }
     finally { Pop-Location }
 

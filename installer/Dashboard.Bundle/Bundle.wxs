@@ -316,7 +316,11 @@
           Vital="yes"
           ForcePerMachine="yes">
 
-        <?ifndef DynamicDashboardBundle ?>
+        <?ifdef DynamicDashboardBundle ?>
+        <MsiProperty Name="DYNAMIC_LF_SERVER" Value="[LaserficheServerUrl]" Condition="LaserficheServerUrl &lt;&gt; &quot;&quot;" />
+        <MsiProperty Name="DYNAMIC_LF_API_PATH" Value="[LaserficheApiBasePath]" Condition="LaserficheServerUrl &lt;&gt; &quot;&quot;" />
+        <MsiProperty Name="DYNAMIC_LF_API_VERSION" Value="[LaserficheApiVersion]" Condition="LaserficheServerUrl &lt;&gt; &quot;&quot;" />
+        <?else?>
         <!-- Wizard-collected values passed through to MSI custom actions -->
         <MsiProperty Name="DASHBOARD_URL"          Value="[DashboardUrl]" />
         <MsiProperty Name="LF_API_URL"             Value="[LaserficheApiUrl]" />

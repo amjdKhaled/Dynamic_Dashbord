@@ -23,8 +23,14 @@ function Invoke-Setup([string]$Mode, [string]$LogName) {
     if ($process.ExitCode -ne 0) { throw "Dynamic Dashboard setup $Mode failed: $($process.ExitCode). See $log" }
 }
 
+$connectionKey = 'HKLM:\Software\ISB\DynamicDashboard\Installer'
+$unrelated = Join-Path $installDir 'ci-unowned-file.txt'
 Invoke-Setup '/install' 'msi-dynamic-install.log'
 try {
+    if (-not (Test-Path -LiteralPath $connectionKey)) {
+        throw 'MSI did not register its connection defaults.'
+    }
+    Set-Content -LiteralPath $unrelated -Value 'This file is not owned by MSI.'
     foreach ($file in @('LFPortal.Web.exe', 'Start-Dashboard.ps1', 'coreclr.dll')) {
         if (-not (Test-Path -LiteralPath (Join-Path $installDir $file) -PathType Leaf)) {
             throw "Independent Dynamic Dashboard payload missing: $file"
@@ -76,4 +82,14 @@ if (Test-Path -LiteralPath (Join-Path $installDir 'LFPortal.Web.exe')) {
 }
 if ((Test-Path -LiteralPath $legacyDir) -ne $legacyPresent) {
     throw 'The legacy install directory changed during Dynamic Dashboard uninstall.'
+}
+
+if (-not (Test-Path -LiteralPath $unrelated -PathType Leaf)) {
+    throw 'Uninstall removed a file that it did not install.'
+}
+Remove-Item -LiteralPath $unrelated
+foreach ($value in @('ServerUrl', 'ApiBasePath', 'ApiVersion')) {
+    if ($null -ne (Get-ItemProperty -LiteralPath $connectionKey -Name $value -ErrorAction SilentlyContinue)) {
+        throw "Uninstall left MSI-owned registry value $value."
+    }
 }

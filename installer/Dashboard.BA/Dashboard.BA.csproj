@@ -113,4 +113,7 @@
   <ItemGroup>
     <Compile Include="..\Dashboard.SetupHelper\InstallerFileSafety.cs" Link="InstallerFileSafety.cs" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="IsbLogo.jpg" LogicalName="Dashboard.BA.IsbLogo.jpg" />
+  </ItemGroup>
 </Project>

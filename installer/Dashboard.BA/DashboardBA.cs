@@ -211,6 +211,9 @@ namespace Dashboard.BA
 
             if (IsDynamicDashboard)
             {
+                _engine.SetVariableString("LaserficheServerUrl", config.LaserficheServerUrl, false);
+                _engine.SetVariableString("LaserficheApiBasePath", config.LaserficheApiBasePath, false);
+                _engine.SetVariableString("LaserficheApiVersion", config.LaserficheApiVersion, false);
                 _engine.Plan(LaunchAction.Install);
                 return;
             }

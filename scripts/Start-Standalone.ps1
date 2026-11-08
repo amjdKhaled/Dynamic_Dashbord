@@ -21,6 +21,9 @@ if ([string]::IsNullOrWhiteSpace($localAppData)) {
 }
 
 # Standalone settings/credentials/logs/keys never touch the installed Dashboard.
+if ($InstalledDynamic) {
+    $env:DASHBOARD_INSTALLED_DYNAMIC = '1'
+}
 $dataFolder = if ($InstalledDynamic) { 'Dynamic Dashboard' } else { 'Dynamic_Dashbord\Standalone' }
 $env:DASHBOARD_STANDALONE_DATA_DIR = Join-Path $localAppData $dataFolder
 New-Item -ItemType Directory -Path $env:DASHBOARD_STANDALONE_DATA_DIR -Force | Out-Null

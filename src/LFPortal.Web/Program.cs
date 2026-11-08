@@ -50,6 +50,20 @@ try
             reloadOnChange: true);
     }
 
+    // MSI owns only these machine defaults; personal Settings still override them.
+    if (OperatingSystem.IsWindows() && DashboardConfigPaths.IsStandalone &&
+        Environment.GetEnvironmentVariable("DASHBOARD_INSTALLED_DYNAMIC") == "1")
+    {
+        using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"Software\ISB\DynamicDashboard\Installer");
+        var defaults = new Dictionary<string, string?>();
+        foreach (var name in new[] { "ServerUrl", "ApiBasePath", "ApiVersion" })
+        {
+            if (key?.GetValue(name) is string value && !string.IsNullOrWhiteSpace(value))
+                defaults[$"Laserfiche:{name}"] = value;
+        }
+        builder.Configuration.AddInMemoryCollection(defaults);
+    }
+
     builder.Configuration.AddJsonFile(
         DashboardConfigPaths.InstallerConfigPath,
         optional: true,

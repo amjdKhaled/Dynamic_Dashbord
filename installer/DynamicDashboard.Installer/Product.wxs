@@ -10,7 +10,35 @@
            Compressed="yes">
     <MajorUpgrade AllowSameVersionUpgrades="yes"
                   DowngradeErrorMessage="A newer version of Dynamic Dashboard is already installed." />
-    <MediaTemplate EmbedCab="yes" />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="low" />
+    <!-- File costing only; keep Windows restore points and rollback enabled. -->
+    <Property Id="MSIFASTINSTALL" Value="2" />
+    <Property Id="DYNAMIC_LF_SERVER" Secure="yes" />
+    <Property Id="SAVED_DYNAMIC_LF_SERVER">
+      <RegistrySearch Id="SavedDynamicServer" Root="HKLM" Key="Software\ISB\DynamicDashboard\Installer"
+                      Name="ServerUrl" Type="raw" Bitness="always64" />
+    </Property>
+    <Property Id="DYNAMIC_LF_API_PATH" Secure="yes" />
+    <Property Id="SAVED_DYNAMIC_LF_API_PATH">
+      <RegistrySearch Id="SavedDynamicApiPath" Root="HKLM" Key="Software\ISB\DynamicDashboard\Installer"
+                      Name="ApiBasePath" Type="raw" Bitness="always64" />
+    </Property>
+    <Property Id="DYNAMIC_LF_API_VERSION" Secure="yes" />
+    <Property Id="SAVED_DYNAMIC_LF_API_VERSION">
+      <RegistrySearch Id="SavedDynamicApiVersion" Root="HKLM" Key="Software\ISB\DynamicDashboard\Installer"
+                      Name="ApiVersion" Type="raw" Bitness="always64" />
+    </Property>
+    <SetProperty Id="DYNAMIC_LF_SERVER" Value="[SAVED_DYNAMIC_LF_SERVER]" After="AppSearch" Sequence="execute" Condition="NOT DYNAMIC_LF_SERVER AND SAVED_DYNAMIC_LF_SERVER" />
+    <SetProperty Id="DYNAMIC_LF_API_PATH" Value="[SAVED_DYNAMIC_LF_API_PATH]" After="AppSearch" Sequence="execute" Condition="NOT DYNAMIC_LF_API_PATH AND SAVED_DYNAMIC_LF_API_PATH" />
+    <SetProperty Id="DYNAMIC_LF_API_VERSION" Value="[SAVED_DYNAMIC_LF_API_VERSION]" After="AppSearch" Sequence="execute" Condition="NOT DYNAMIC_LF_API_VERSION AND SAVED_DYNAMIC_LF_API_VERSION" />
+    <Component Id="DynamicConnectionDefaults" Directory="DYNAMICINSTALLFOLDER"
+               Guid="{D031A2FB-EFFD-44E2-AD82-D0E1073C36E9}" Bitness="always64">
+      <RegistryKey Root="HKLM" Key="Software\ISB\DynamicDashboard\Installer">
+        <RegistryValue Name="ServerUrl" Type="string" Value="[DYNAMIC_LF_SERVER]" KeyPath="yes" />
+        <RegistryValue Name="ApiBasePath" Type="string" Value="[DYNAMIC_LF_API_PATH]" />
+        <RegistryValue Name="ApiVersion" Type="string" Value="[DYNAMIC_LF_API_VERSION]" />
+      </RegistryKey>
+    </Component>
 
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="DYNAMICINSTALLFOLDER" Name="Dynamic Dashboard" />
@@ -33,6 +61,7 @@
     <Feature Id="DynamicDashboardFeature" Title="Dynamic Dashboard" Level="1">
       <ComponentGroupRef Id="DynamicFiles" />
       <ComponentRef Id="DynamicDashboardShortcut" />
+      <ComponentRef Id="DynamicConnectionDefaults" />
     </Feature>
   </Package>
 </Wix>

@@ -192,7 +192,7 @@ namespace Dashboard.BA
             {
                 Dock = DockStyle.Left,
                 Width = 218,
-                BackColor = Navy,
+                BackColor = IsDynamic ? Color.FromArgb(11, 57, 84) : Navy,
                 Padding = new Padding(20)
             };
 
@@ -211,11 +211,33 @@ namespace Dashboard.BA
                 Font = new Font("Segoe UI", 16F, FontStyle.Bold)
             });
 
-            sidebar.Controls.Add(brandMark);
+            if (IsDynamic)
+            {
+                using var stream = typeof(ProfessionalWizardForm).Assembly.GetManifestResourceStream("Dashboard.BA.IsbLogo.jpg");
+                if (stream != null)
+                {
+                    using var logo = Image.FromStream(stream);
+                    var bitmap = new Bitmap(logo);
+                    var picture = new PictureBox
+                    {
+                        Location = new Point(14, 24), Size = new Size(62, 44),
+                        BackColor = Color.White, SizeMode = PictureBoxSizeMode.Zoom, Image = bitmap
+                    };
+                    picture.Disposed += (_, __) => bitmap.Dispose();
+                    sidebar.Controls.Add(picture);
+                    sidebar.Controls.Add(new Panel
+                    {
+                        Location = new Point(14, 77), Size = new Size(190, 3),
+                        BackColor = Color.FromArgb(194, 154, 46)
+                    });
+                }
+                brandMark.Dispose();
+            }
+            else sidebar.Controls.Add(brandMark);
             sidebar.Controls.Add(new Label
             {
                 Text = IsDynamic ? "Dynamic\nDashboard" : "Laserfiche\nDashboard",
-                Location = new Point(64, 23),
+                Location = new Point(IsDynamic ? 84 : 64, 23),
                 Size = new Size(130, 46),
                 ForeColor = Color.White,
                 Font = new Font("Segoe UI", 11F, FontStyle.Bold)
@@ -229,7 +251,7 @@ namespace Dashboard.BA
                 Font = new Font("Segoe UI", 7.5F, FontStyle.Bold)
             });
 
-            string[] names = IsDynamic ? new[] { "Welcome", "Review", "Install", "Finish" }
+            string[] names = IsDynamic ? new[] { "Welcome", "Connection", "Review", "Install" }
                 : new[] { "Welcome", "Connection", "Deployment", "Install" };
             for (int i = 0; i < names.Length; i++)
             {
@@ -365,7 +387,7 @@ namespace Dashboard.BA
             _welcomeBody = new Label
             {
                 Text = IsDynamic
-                    ? "Install Dynamic Dashboard for this computer. After opening it from Start, configure the Laserfiche connection in Settings."
+                    ? "Install Dynamic Dashboard for this computer. Enter the Laserfiche connection in setup, then sign in after opening the app from Start."
                     : "Setup will install the web application, configure IIS, save the Laserfiche connection, " +
                        "secure the service credentials, and add the client integrations you select.",
                 Location = new Point(2, 44),
@@ -459,7 +481,7 @@ namespace Dashboard.BA
             var certificate = new Panel { Dock = DockStyle.Fill, Margin = new Padding(4), Height = 64 };
             _certificateStatus = new Label
             {
-                Text = "Certificate details will appear after automatic detection.",
+                Text = IsDynamic ? "Use a certificate trusted by this computer." : "Certificate details will appear after automatic detection.",
                 Location = new Point(0, 2),
                 Size = new Size(600, 22),
                 ForeColor = Muted
@@ -605,7 +627,7 @@ namespace Dashboard.BA
             {
                 Dock = DockStyle.Bottom,
                 Height = 52,
-                Text = IsDynamic ? "Configure your Laserfiche connection in Settings after installation."
+                Text = IsDynamic ? "Setup saves the connection defaults. Sign in with your Laserfiche account after installation."
                     : "Your Laserfiche password is transferred only as a temporary DPAPI-encrypted package and is never written to setup logs or JSON files.",
                 BackColor = PaleBlue,
                 ForeColor = Navy,
@@ -742,7 +764,7 @@ namespace Dashboard.BA
             if (page == PAGE_READY)
             {
                 if (IsDynamic)
-                    _readySummary.Text = "Dynamic Dashboard will be installed as a separate Windows application. A shortcut will be added to Start.";
+                    _readySummary.Text = "Dynamic Dashboard will be installed as a separate Windows application.\r\n\r\nLaserfiche server: " + _config.LaserficheServerUrl + "\r\nAPI base path: " + _config.LaserficheApiBasePath + "\r\nAPI version: " + _config.LaserficheApiVersion;
                 else
                     UpdateReadySummary();
             }
@@ -757,8 +779,7 @@ namespace Dashboard.BA
             int active = _pageIndex switch
             {
                 PAGE_WELCOME => 0,
-                PAGE_READY when IsDynamic => 1,
-                PAGE_PROGRESS when IsDynamic => 2,
+                PAGE_READY when IsDynamic => 2,
                 PAGE_CONNECTION => 1,
                 PAGE_DEPLOYMENT => 2,
                 _ => 3
@@ -825,13 +846,16 @@ namespace Dashboard.BA
                 return;
             }
 
-            if (IsDynamic && _pageIndex == PAGE_WELCOME)
+            if (_pageIndex == PAGE_CONNECTION)
             {
-                NavigateTo(PAGE_READY);
-                return;
+                if (!ValidateConnectionPage()) return;
+                if (IsDynamic)
+                {
+                    CollectConfiguration();
+                    NavigateTo(PAGE_READY);
+                    return;
+                }
             }
-
-            if (_pageIndex == PAGE_CONNECTION && !ValidateConnectionPage()) return;
             if (_pageIndex == PAGE_DEPLOYMENT)
             {
                 if (!ValidateDeploymentPage()) return;
@@ -868,7 +892,7 @@ namespace Dashboard.BA
             }
 
             if (_pageIndex > PAGE_WELCOME && _pageIndex < PAGE_PROGRESS)
-                NavigateTo(IsDynamic && _pageIndex == PAGE_READY ? PAGE_WELCOME : _pageIndex - 1);
+                NavigateTo(IsDynamic && _pageIndex == PAGE_READY ? PAGE_CONNECTION : _pageIndex - 1);
         }
 
         private void CancelSetup()
@@ -1021,7 +1045,7 @@ namespace Dashboard.BA
                     return false;
             }
 
-            return ValidateLaserficheTls(GetLaserficheApiUrl());
+            return IsDynamic || ValidateLaserficheTls(GetLaserficheApiUrl());
         }
 
         private bool ValidateDeploymentPage()
@@ -1236,13 +1260,16 @@ namespace Dashboard.BA
             if (message != null) AppendLog(message);
             if (percent >= 0 && percent <= 100)
             {
-                _progress.Value = percent;
-                _currentAction.Text = message ?? "Installing... " + percent + "%";
+                _progress.Value = Math.Min(percent, 99);
+                _currentAction.Text = percent == 100
+                    ? "Finalizing setup. Windows Installer is still working..."
+                    : message ?? "Installing... " + percent + "%";
             }
         }
 
         private void OnInstallFinished(bool success, string message)
         {
+            if (success) _progress.Value = 100;
             _installDone = true;
             _installSuccess = success;
             _installMessage = message;
@@ -1266,7 +1293,7 @@ namespace Dashboard.BA
                 {
                     _completeDetail.Text = _operation == SetupOperation.Uninstall
                         ? "Dynamic Dashboard was removed. Your settings were kept."
-                        : "Open Dynamic Dashboard from Start and configure Laserfiche in Settings.";
+                        : "Open Dynamic Dashboard from Start and sign in to Laserfiche.";
                 }
                 else if (_operation == SetupOperation.Uninstall)
                 {

@@ -12,10 +12,10 @@ namespace Dashboard.SetupHelper
         {
             string value;
             Guid id;
-            if (!opts.TryGetValue("transaction", out value) || !Guid.TryParseExact(value, "N", out id))
+            if (!opts.TryGetValue("transaction", out value) || !(kind == "dynamic-webclient" ? Guid.TryParse(value, out id) : Guid.TryParseExact(value, "N", out id)))
                 throw new IOException("An exact installer transaction identifier is required.");
             string directory = Path.Combine(Environment.GetFolderPath(
-                Environment.SpecialFolder.CommonApplicationData), "Dashboard", "installer-transactions");
+                Environment.SpecialFolder.CommonApplicationData), kind == "dynamic-webclient" ? "ISB.DynamicDashboard" : "Dashboard", "installer-transactions");
             InstallerFileSafety.EnsureNoReparsePoints(directory);
             Directory.CreateDirectory(directory);
             var security = new DirectorySecurity();

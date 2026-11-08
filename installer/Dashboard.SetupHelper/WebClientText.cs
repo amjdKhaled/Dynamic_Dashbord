@@ -11,7 +11,11 @@ namespace Dashboard.SetupHelper
 
         // Preserve the original encoding, BOM, newline style and every existing
         // character. In particular, never drop a whole line containing the tag.
-        internal static byte[] InsertTag(byte[] original)
+        internal const string DynamicTag = "<script src=\"assets/custom/lf-dynamic-dashboard-button.js\"></script>";
+
+        internal static byte[] InsertTag(byte[] original) => ChangeTag(original, Tag, "lf-dashboard-button.js", false);
+
+        internal static byte[] ChangeTag(byte[] original, string tag, string file, bool remove)
         {
             Encoding encoding = new UTF8Encoding(false, true);
             int bomLength = 0;
@@ -28,16 +32,27 @@ namespace Dashboard.SetupHelper
                 bomLength = 2;
             }
             string text = encoding.GetString(original, bomLength, original.Length - bomLength);
-            if (text.IndexOf("lf-dashboard-button.js", StringComparison.OrdinalIgnoreCase) >= 0)
+            string updated;
+            if (remove)
+            {
+                int index = text.IndexOf(tag, StringComparison.Ordinal);
+                if (index < 0 || text.IndexOf(tag, index + tag.Length, StringComparison.Ordinal) >= 0)
+                    return original;
+                updated = text.Remove(index, tag.Length);
+            }
+            else if (text.IndexOf(file, StringComparison.OrdinalIgnoreCase) >= 0)
             {
                 // Do not normalize or rewrite an existing Laserfiche page.
-                if (!text.Contains(Tag))
+                if (!text.Contains(tag))
                     throw new IOException("An unfamiliar Dashboard script tag already exists; manual review is required.");
                 return original;
             }
-            Match head = Regex.Match(text, "</head\\s*>", RegexOptions.IgnoreCase);
-            if (!head.Success) throw new IOException("Browse.aspx has no head closing tag; no files were changed.");
-            string updated = text.Insert(head.Index, Tag);
+            else
+            {
+                Match head = Regex.Match(text, "</head\\s*>", RegexOptions.IgnoreCase);
+                if (!head.Success) throw new IOException("Browse.aspx has no head closing tag; no files were changed.");
+                updated = text.Insert(head.Index, tag);
+            }
             byte[] body = encoding.GetBytes(updated);
             byte[] result = new byte[bomLength + body.Length];
             Array.Copy(original, result, bomLength);

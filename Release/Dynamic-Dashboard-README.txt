@@ -1,17 +1,20 @@
 Dynamic Dashboard - Windows x64
 ===============================
 
-1. Open Dynamic-Dashboard-Setup.exe and select Continue, review the installation, then select Install.
-2. Launch Dynamic Dashboard from the Start menu.
-3. Enter the Laserfiche server and API settings in the setup wizard, then sign in.
+Open Dynamic-Dashboard-Setup.msi. Enter the Laserfiche server and API settings,
+then follow the prompts. The optional Web Access folder must be the local
+installation folder containing Browse.aspx. Leave it blank if Web Access is
+on a different machine. The Dashboard URL must be reachable from the browser
+that uses the toolbar. The default is http://127.0.0.1:5190.
 
-The setup installs in Program Files\Dynamic Dashboard. The Start menu launcher
-uses a free local port starting at 5190. Keep its window open to run the app.
-IIS and the .NET SDK are unnecessary for this installation. The Laserfiche
-server and any configured identity server must be reachable.
+Dynamic Dashboard starts in the background when you finish interactive setup
+and at Windows sign-in. Open it from Start or from the Laserfiche toolbar.
+The default toolbar URL requires the browser and Dashboard on the same computer
+and port 5190 to be available. Refresh Laserfiche Web Access after installation.
 
-Settings and credentials are stored in %LocalAppData%\Dynamic Dashboard
-for each Windows account. Repair and uninstall preserve these files.
-Use Windows Installed apps to remove Dynamic Dashboard.
+The MSI installs independently of the original Dashboard. Use Windows
+Installed apps to uninstall. Removal preserves user settings and any Web Access
+files that do not match the integration the installer added. Windows .NET
+Framework 4.8 is required for the optional Web Access integration helper.
 
-Verify the EXE using Dynamic-Dashboard-SHA256SUMS.txt.
+Verify the MSI using Dynamic-Dashboard-SHA256SUMS.txt.

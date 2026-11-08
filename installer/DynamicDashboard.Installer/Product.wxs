@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
   <Package Name="Dynamic Dashboard"
            Manufacturer="Dashboard"
            Language="1033"
@@ -8,7 +8,7 @@
            Scope="perMachine"
            InstallerVersion="500"
            Compressed="yes">
-    <MajorUpgrade AllowSameVersionUpgrades="yes"
+    <MajorUpgrade AllowSameVersionUpgrades="yes" Schedule="afterInstallInitialize"
                   DowngradeErrorMessage="A newer version of Dynamic Dashboard is already installed." />
     <MediaTemplate EmbedCab="yes" CompressionLevel="low" />
     <!-- File costing only; keep Windows restore points and rollback enabled. -->
@@ -31,18 +31,36 @@
     <SetProperty Id="DYNAMIC_LF_SERVER" Value="[SAVED_DYNAMIC_LF_SERVER]" After="AppSearch" Sequence="execute" Condition="NOT DYNAMIC_LF_SERVER AND SAVED_DYNAMIC_LF_SERVER" />
     <SetProperty Id="DYNAMIC_LF_API_PATH" Value="[SAVED_DYNAMIC_LF_API_PATH]" After="AppSearch" Sequence="execute" Condition="NOT DYNAMIC_LF_API_PATH AND SAVED_DYNAMIC_LF_API_PATH" />
     <SetProperty Id="DYNAMIC_LF_API_VERSION" Value="[SAVED_DYNAMIC_LF_API_VERSION]" After="AppSearch" Sequence="execute" Condition="NOT DYNAMIC_LF_API_VERSION AND SAVED_DYNAMIC_LF_API_VERSION" />
+    <Property Id="DYNAMIC_WEB_PATH" Secure="yes" />
+    <Property Id="DYNAMIC_WEB_URL" Secure="yes" />
+    <Property Id="SAVED_DYNAMIC_WEB_PATH">
+      <RegistrySearch Id="FindWebClientPath" Root="HKLM" Key="Software\ISB\DynamicDashboard\Installer"
+                      Name="WebClientPath" Type="raw" Bitness="always64" />
+    </Property>
+    <SetProperty Id="DYNAMIC_WEB_PATH" Value="[SAVED_DYNAMIC_WEB_PATH]" After="AppSearch" Sequence="both" Condition="NOT DYNAMIC_WEB_PATH AND SAVED_DYNAMIC_WEB_PATH" />
+    <Property Id="SAVED_DYNAMIC_WEB_URL">
+      <RegistrySearch Id="FindWebClientUrl" Root="HKLM" Key="Software\ISB\DynamicDashboard\Installer"
+                      Name="WebClientUrl" Type="raw" Bitness="always64" />
+    </Property>
+    <SetProperty Id="DYNAMIC_WEB_URL" Value="[SAVED_DYNAMIC_WEB_URL]" After="AppSearch" Sequence="both" Condition="NOT DYNAMIC_WEB_URL AND SAVED_DYNAMIC_WEB_URL" />
+    <Launch Condition="NOT SAVED_DYNAMIC_WEB_PATH OR NOT DYNAMIC_WEB_PATH OR SAVED_DYNAMIC_WEB_PATH ~= DYNAMIC_WEB_PATH"
+            Message="Uninstall the existing Dynamic Dashboard integration before selecting a different Web Access folder." />
     <Component Id="DynamicConnectionDefaults" Directory="DYNAMICINSTALLFOLDER"
                Guid="{D031A2FB-EFFD-44E2-AD82-D0E1073C36E9}" Bitness="always64">
       <RegistryKey Root="HKLM" Key="Software\ISB\DynamicDashboard\Installer">
         <RegistryValue Name="ServerUrl" Type="string" Value="[DYNAMIC_LF_SERVER]" KeyPath="yes" />
         <RegistryValue Name="ApiBasePath" Type="string" Value="[DYNAMIC_LF_API_PATH]" />
         <RegistryValue Name="ApiVersion" Type="string" Value="[DYNAMIC_LF_API_VERSION]" />
+        <RegistryValue Name="WebClientPath" Type="string" Value="[DYNAMIC_WEB_PATH]" />
+        <RegistryValue Name="WebClientUrl" Type="string" Value="[DYNAMIC_WEB_URL]" />
       </RegistryKey>
     </Component>
 
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="DYNAMICINSTALLFOLDER" Name="Dynamic Dashboard" />
     </StandardDirectory>
+    <StandardDirectory Id="System64Folder" />
+    <StandardDirectory Id="StartupFolder" />
     <StandardDirectory Id="ProgramMenuFolder">
       <Directory Id="DYNAMICMENUFOLDER" Name="Dynamic Dashboard" />
     </StandardDirectory>
@@ -50,17 +68,96 @@
     <Component Id="DynamicDashboardShortcut" Directory="DYNAMICMENUFOLDER"
                Guid="{932673B1-4C7B-4180-AC00-20A0FB7BF8D7}">
       <Shortcut Id="OpenDynamicDashboard" Name="Dynamic Dashboard"
-                Target="[SystemFolder]WindowsPowerShell\v1.0\powershell.exe"
-                Arguments='-NoExit -NoProfile -ExecutionPolicy Bypass -File "[DYNAMICINSTALLFOLDER]Start-Dashboard.ps1" -Published -InstalledDynamic -Port 5190'
+                Target="[System64Folder]WindowsPowerShell\v1.0\powershell.exe"
+                Arguments='-NoProfile -ExecutionPolicy Bypass -File "[DYNAMICINSTALLFOLDER]Start-Dashboard.ps1" -Published -InstalledDynamic -Port 5190'
                 WorkingDirectory="DYNAMICINSTALLFOLDER" />
       <RemoveFolder Id="RemoveDynamicMenuFolder" On="uninstall" />
       <RegistryValue Root="HKCU" Key="Software\Dynamic Dashboard\Shortcuts"
                      Name="Open" Type="integer" Value="1" KeyPath="yes" />
     </Component>
 
+    <Component Id="DynamicDashboardAutostart" Directory="StartupFolder"
+               Guid="{E7960898-41DA-4F8B-848C-C93E1923B62F}">
+      <Shortcut Id="StartDynamicDashboardAtSignIn" Name="Dynamic Dashboard Background"
+                Target="[System64Folder]WindowsPowerShell\v1.0\powershell.exe"
+                Arguments='-WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File "[DYNAMICINSTALLFOLDER]Start-Dashboard.ps1" -Published -InstalledDynamic -Port 5190 -NoBrowser'
+                WorkingDirectory="DYNAMICINSTALLFOLDER" />
+      <RegistryValue Root="HKCU" Key="Software\ISB\DynamicDashboard" Name="Autostart"
+                     Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+
+    <ui:WixUI Id="WixUI_Minimal" />
+    <CustomAction Id="StartDynamicDashboardAfterSetup" Directory="DYNAMICINSTALLFOLDER"
+                  ExeCommand='"[System64Folder]WindowsPowerShell\v1.0\powershell.exe" -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File "[DYNAMICINSTALLFOLDER]Start-Dashboard.ps1" -Published -InstalledDynamic -Port 5190 -NoBrowser'
+                  Execute="immediate" Return="asyncNoWait" />
+    <UI>
+      <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="StartDynamicDashboardAfterSetup"
+               Order="1" Condition="NOT Installed AND NOT REMOVE" />
+    </UI>
+    <WixVariable Id="WixUILicenseRtf" Value="$(var.BrandAssets)\License.rtf" />
+    <WixVariable Id="WixUIBannerBmp" Value="$(var.BrandAssets)\Banner.bmp" />
+    <WixVariable Id="WixUIDialogBmp" Value="$(var.BrandAssets)\Dialog.bmp" />
+    <UI>
+      <Dialog Id="DynamicConfigurationDlg" Width="370" Height="270" Title="Dynamic Dashboard Setup">
+        <Control Id="Title" Type="Text" X="18" Y="12" Width="334" Height="24" Text="{\WixUI_Font_Title}Laserfiche configuration" />
+        <Control Id="ServerLabel" Type="Text" X="18" Y="45" Width="334" Height="12" Text="Laserfiche server URL (optional)" />
+        <Control Id="Server" Type="Edit" X="18" Y="58" Width="334" Height="18" Property="DYNAMIC_LF_SERVER" />
+        <Control Id="ApiLabel" Type="Text" X="18" Y="80" Width="334" Height="12" Text="API base path (defaults to /LFRepositoryAPI)" />
+        <Control Id="ApiPath" Type="Edit" X="18" Y="93" Width="334" Height="18" Property="DYNAMIC_LF_API_PATH" />
+        <Control Id="VersionLabel" Type="Text" X="18" Y="115" Width="334" Height="12" Text="API version (Auto, v1, or v2)" />
+        <Control Id="Version" Type="Edit" X="18" Y="128" Width="334" Height="18" Property="DYNAMIC_LF_API_VERSION" />
+        <Control Id="WebPathLabel" Type="Text" X="18" Y="150" Width="334" Height="12" Text="Web Access folder containing Browse.aspx (optional, adds toolbar button)" />
+        <Control Id="WebPath" Type="Edit" X="18" Y="163" Width="334" Height="18" Property="DYNAMIC_WEB_PATH" />
+        <Control Id="WebUrlLabel" Type="Text" X="18" Y="185" Width="334" Height="12" Text="Dashboard URL reachable from the Web Access browser" />
+        <Control Id="WebUrl" Type="Edit" X="18" Y="198" Width="334" Height="18" Property="DYNAMIC_WEB_URL" />
+        <Control Id="Continue" Type="PushButton" X="230" Y="240" Width="56" Height="18" Default="yes" Text="Next">
+          <Publish Event="EndDialog" Value="Return" />
+        </Control>
+        <Control Id="Cancel" Type="PushButton" X="296" Y="240" Width="56" Height="18" Cancel="yes" Text="Cancel">
+          <Publish Event="EndDialog" Value="Exit" />
+        </Control>
+      </Dialog>
+    </UI>
+    <InstallUISequence>
+      <Show Dialog="DynamicConfigurationDlg" Before="WelcomeEulaDlg" Condition="NOT Installed AND NOT PATCH" />
+    </InstallUISequence>
+
+    <SetProperty Id="DYNAMIC_WEB_URL" Value="http://127.0.0.1:5190" Before="InstallInitialize" Sequence="execute" Action="SetDynamicDefaultWebUrl" Condition="DYNAMIC_WEB_PATH AND NOT DYNAMIC_WEB_URL" />
+    <CustomAction Id="StopOwnedDynamicDashboard" Directory="System64Folder"
+                  ExeCommand='"[System64Folder]WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -Command "$target = Join-Path $env:ProgramFiles &apos;Dynamic Dashboard\LFPortal.Web.exe&apos;; Get-Process -Name LFPortal.Web -ErrorAction SilentlyContinue | Where-Object Path -eq $target | Stop-Process -Force -ErrorAction Stop"'
+                  Execute="deferred" Impersonate="no" Return="check" />
+    <InstallExecuteSequence>
+      <Custom Action="StopOwnedDynamicDashboard" Before="RemoveFiles" Condition="Installed OR WIX_UPGRADE_DETECTED" />
+      <Custom Action="RollbackDynamicButtonInstall" After="InstallFiles" Condition="NOT Installed AND DYNAMIC_WEB_PATH" />
+      <Custom Action="CommitDynamicButtonInstall" After="RollbackDynamicButtonInstall" Condition="NOT Installed AND DYNAMIC_WEB_PATH" />
+      <Custom Action="DeployDynamicButton" After="CommitDynamicButtonInstall" Condition="NOT Installed AND DYNAMIC_WEB_PATH" />
+      <Custom Action="RollbackDynamicButtonRemoval" Before="RemoveDynamicButton" Condition="REMOVE~=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE AND DYNAMIC_WEB_PATH" />
+      <Custom Action="RemoveDynamicButton" Before="RemoveFiles" Condition="REMOVE~=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE AND DYNAMIC_WEB_PATH" />
+      <Custom Action="CommitDynamicButtonRemoval" Before="RollbackDynamicButtonRemoval" Condition="REMOVE~=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE AND DYNAMIC_WEB_PATH" />
+    </InstallExecuteSequence>
+    <Binary Id="DynamicSetupHelper" SourceFile="$(var.DynamicSetupHelper)" />
+    <CustomAction Id="RollbackDynamicButtonInstall" BinaryRef="DynamicSetupHelper"
+                  ExeCommand='--rollback-webclient --variant dynamic --transaction "[ProductCode]" --path "[DYNAMIC_WEB_PATH]\."'
+                  Execute="rollback" Impersonate="no" Return="ignore" />
+    <CustomAction Id="CommitDynamicButtonInstall" BinaryRef="DynamicSetupHelper"
+                  ExeCommand='--commit-webclient --variant dynamic --transaction "[ProductCode]"'
+                  Execute="commit" Impersonate="no" Return="ignore" />
+    <CustomAction Id="DeployDynamicButton" BinaryRef="DynamicSetupHelper"
+                  ExeCommand='--deploy-webclient --variant dynamic --transaction "[ProductCode]" --previous-path "[SAVED_DYNAMIC_WEB_PATH]\." --path "[DYNAMIC_WEB_PATH]\." --url "[DYNAMIC_WEB_URL]" --source-js "[DYNAMICINSTALLFOLDER]wwwroot\js\lf-dynamic-dashboard-button.js"'
+                  Execute="deferred" Impersonate="no" Return="check" />
+    <CustomAction Id="RollbackDynamicButtonRemoval" BinaryRef="DynamicSetupHelper"
+                  ExeCommand='--rollback-webclient --variant dynamic --transaction "[ProductCode]" --path "[DYNAMIC_WEB_PATH]\."'
+                  Execute="rollback" Impersonate="no" Return="ignore" />
+    <CustomAction Id="CommitDynamicButtonRemoval" BinaryRef="DynamicSetupHelper"
+                  ExeCommand='--commit-webclient --variant dynamic --transaction "[ProductCode]"'
+                  Execute="commit" Impersonate="no" Return="ignore" />
+    <CustomAction Id="RemoveDynamicButton" BinaryRef="DynamicSetupHelper"
+                  ExeCommand='--remove-webclient --variant dynamic --transaction "[ProductCode]" --path "[DYNAMIC_WEB_PATH]\." --url "[DYNAMIC_WEB_URL]" --source-js "[DYNAMICINSTALLFOLDER]wwwroot\js\lf-dynamic-dashboard-button.js"'
+                  Execute="deferred" Impersonate="no" Return="check" />
     <Feature Id="DynamicDashboardFeature" Title="Dynamic Dashboard" Level="1">
       <ComponentGroupRef Id="DynamicFiles" />
       <ComponentRef Id="DynamicDashboardShortcut" />
+      <ComponentRef Id="DynamicDashboardAutostart" />
       <ComponentRef Id="DynamicConnectionDefaults" />
     </Feature>
   </Package>

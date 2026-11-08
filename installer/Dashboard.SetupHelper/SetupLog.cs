@@ -26,13 +26,13 @@ namespace Dashboard.SetupHelper
         private static string? _logPath;
 
         // Resolves the log path and creates the directory. Never throws.
-        public static void Init()
+        public static void Init(bool dynamic = false)
         {
             try
             {
                 string programData = Environment.GetFolderPath(
                     Environment.SpecialFolder.CommonApplicationData);
-                string logDir = Path.Combine(programData, "Dashboard", "Logs");
+                string logDir = Path.Combine(programData, dynamic ? "ISB.DynamicDashboard" : "Dashboard", "Logs");
                 InstallerFileSafety.EnsureNoReparsePoints(logDir);
                 InstallerFileSafety.EnsureNoReparsePoints(Path.Combine(logDir, "SetupHelper.log"));
                 Directory.CreateDirectory(logDir);

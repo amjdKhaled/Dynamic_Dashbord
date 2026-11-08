@@ -38,15 +38,41 @@ function Test-LoopbackPortAvailable {
     finally { $listener.Stop() }
 }
 
+# The installed edition has a stable toolbar URL and one launcher per Windows session.
+$mutex = $null
+$ownsMutex = $false
+try {
+if ($InstalledDynamic) {
+    $mutex = [System.Threading.Mutex]::new($false, 'Local\ISB.DynamicDashboard.5190')
+    try { $ownsMutex = $mutex.WaitOne(0) }
+    catch [System.Threading.AbandonedMutexException] { $ownsMutex = $true }
+    if (-not $ownsMutex) {
+        if ($NoBrowser) { return }
+        for ($attempt = 0; $attempt -lt 30; $attempt++) {
+            try {
+                $reply = Invoke-RestMethod "http://127.0.0.1:$Port/_standalone/ready" -TimeoutSec 2
+                if ($reply.application -eq 'Dynamic_Dashbord' -and $reply.mode -eq 'standalone' -and
+                    $reply.dashboardPath -eq '/DynamicDashboard') {
+                    Start-Process "http://127.0.0.1:$Port/DynamicDashboard"
+                    return
+                }
+            } catch {}
+            Start-Sleep -Seconds 1
+        }
+        throw 'Dynamic Dashboard is already starting but did not become ready.'
+    }
+}
+
 $selectedPort = $null
-for ($candidate = $Port; $candidate -le $Port + 20; $candidate++) {
+$lastPort = if ($InstalledDynamic) { $Port } else { $Port + 20 }
+for ($candidate = $Port; $candidate -le $lastPort; $candidate++) {
     if (Test-LoopbackPortAvailable $candidate) {
         $selectedPort = $candidate
         break
     }
 }
 if ($null -eq $selectedPort) {
-    throw "No free loopback port between $Port and $($Port + 20)."
+    throw "No free loopback port between $Port and $lastPort."
 }
 if ($selectedPort -ne $Port) {
     Write-Host "Port $Port is already in use. Switching to $selectedPort." -ForegroundColor Yellow
@@ -110,4 +136,9 @@ Write-Host 'Keep this PowerShell window open. Ctrl+C stops the local server.'
 try { $process.WaitForExit() }
 finally {
     try { if (-not $process.HasExited) { $process.Kill() } } catch {}
+}
+}
+finally {
+    if ($ownsMutex) { $mutex.ReleaseMutex() }
+    if ($null -ne $mutex) { $mutex.Dispose() }
 }

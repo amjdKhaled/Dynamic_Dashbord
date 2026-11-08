@@ -2,7 +2,7 @@
 # Run on the disposable Windows build runner.
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-$setup = Join-Path $root 'Release\Dynamic-Dashboard-Setup.exe'
+$setup = Join-Path $root 'Release\Dynamic-Dashboard-Setup.msi'
 $installDir = Join-Path $env:ProgramFiles 'Dynamic Dashboard'
 $legacyDir = Join-Path $env:ProgramFiles 'Dashboard'
 $legacyPresent = Test-Path -LiteralPath $legacyDir
@@ -14,7 +14,8 @@ if (Test-Path -LiteralPath $installDir) {
 
 function Invoke-Setup([string]$Mode, [string]$LogName) {
     $log = Join-Path $logs $LogName
-    $process = Start-Process $setup -ArgumentList "$Mode /quiet /norestart /log `"$log`"" -PassThru
+    $extra = if ($Mode -eq '/i') { "DYNAMIC_LF_SERVER=https://localhost DYNAMIC_WEB_PATH=`"$webRoot`" DYNAMIC_WEB_URL=http://127.0.0.1:5190" } else { '' }
+    $process = Start-Process msiexec.exe -ArgumentList "$Mode `"$setup`" /qn /norestart /l*v `"$log`" $extra" -PassThru
     Write-Host "Running Dynamic Dashboard setup $Mode (PID $($process.Id))."
     if (-not $process.WaitForExit(12 * 60 * 1000)) {
         & taskkill.exe /PID $process.Id /T /F | Out-Host
@@ -25,10 +26,23 @@ function Invoke-Setup([string]$Mode, [string]$LogName) {
 
 $connectionKey = 'HKLM:\Software\ISB\DynamicDashboard\Installer'
 $unrelated = Join-Path $installDir 'ci-unowned-file.txt'
-Invoke-Setup '/install' 'msi-dynamic-install.log'
+$webRoot = Join-Path $logs ('dynamic-webclient-' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path (Join-Path $webRoot 'assets\custom') -Force | Out-Null
+$browse = Join-Path $webRoot 'Browse.aspx'
+$original = '<html><head><script src="assets/custom/lf-dashboard-button.js"></script></head></html>'
+[IO.File]::WriteAllText($browse, $original)
+$webButton = Join-Path $webRoot 'assets\custom\lf-dynamic-dashboard-button.js'
+Invoke-Setup '/i' 'msi-dynamic-install.log'
 try {
     if (-not (Test-Path -LiteralPath $connectionKey)) {
         throw 'MSI did not register its connection defaults.'
+    }
+    if (-not (Test-Path -LiteralPath $webButton) -or
+        -not [IO.File]::ReadAllText($browse).Contains('lf-dynamic-dashboard-button.js')) {
+        throw 'Dynamic Dashboard Web Access integration is missing.'
+    }
+    if ((Get-ItemPropertyValue -LiteralPath $connectionKey -Name ServerUrl) -ne 'https://localhost') {
+        throw 'MSI did not save the supplied Laserfiche server.'
     }
     Set-Content -LiteralPath $unrelated -Value 'This file is not owned by MSI.'
     foreach ($file in @('LFPortal.Web.exe', 'Start-Dashboard.ps1', 'coreclr.dll')) {
@@ -37,6 +51,10 @@ try {
         }
     }
     $shortcut = Join-Path ([Environment]::GetFolderPath('CommonPrograms')) 'Dynamic Dashboard\Dynamic Dashboard.lnk'
+    $startupShortcut = Join-Path ([Environment]::GetFolderPath('CommonStartup')) 'Dynamic Dashboard Background.lnk'
+    if (-not (Test-Path -LiteralPath $startupShortcut -PathType Leaf)) {
+        throw 'Dynamic Dashboard automatic startup shortcut is missing.'
+    }
     if (-not (Test-Path -LiteralPath $shortcut -PathType Leaf)) {
         throw 'Dynamic Dashboard Start menu shortcut is missing.'
     }
@@ -75,7 +93,7 @@ try {
     }
 }
 finally {
-    Invoke-Setup '/uninstall' 'msi-dynamic-uninstall.log'
+    Invoke-Setup '/x' 'msi-dynamic-uninstall.log'
 }
 if (Test-Path -LiteralPath (Join-Path $installDir 'LFPortal.Web.exe')) {
     throw 'Dynamic Dashboard payload remains after uninstall.'
@@ -92,4 +110,12 @@ foreach ($value in @('ServerUrl', 'ApiBasePath', 'ApiVersion')) {
     if ($null -ne (Get-ItemProperty -LiteralPath $connectionKey -Name $value -ErrorAction SilentlyContinue)) {
         throw "Uninstall left MSI-owned registry value $value."
     }
+}
+
+if ((Test-Path -LiteralPath $webButton) -or [IO.File]::ReadAllText($browse) -cne $original) {
+    throw 'Uninstall failed to remove only the Dynamic Dashboard Web Access integration.'
+}
+
+if (Test-Path -LiteralPath $startupShortcut) {
+    throw 'Uninstall left the automatic startup shortcut.'
 }

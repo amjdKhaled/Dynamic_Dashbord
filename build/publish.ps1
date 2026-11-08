@@ -2115,9 +2115,7 @@ if ($IsWindowsOS) {
 Copy-Item (Join-Path $RepoRoot 'scripts\Start-Standalone.ps1') (Join-Path $webAppDst 'Start-Dashboard.ps1') -Force
 # Package the independent desktop-launched web app before adding the portable ZIP launcher.
 if (-not $SkipMsi) {
-    $dynamicMsi = Join-Path $ArtifactsDir 'obj\DynamicMSI\Dynamic-Dashboard-Setup.msi'
-    $dynamicExe = Join-Path $ReleaseDir 'Dynamic-Dashboard-Setup.exe'
-    $dynamicBundleInterm = Join-Path $ArtifactsDir 'obj\DynamicBundle'
+    $dynamicMsi = Join-Path $ReleaseDir 'Dynamic-Dashboard-Setup.msi'
     $dynamicHarvest = Join-Path $StagingDir 'Harvest\DynamicDashboardFiles.wxs'
     $dynamicSource = Join-Path $RepoRoot 'installer\DynamicDashboard.Installer\Product.wxs'
     $dynamicInterm = Join-Path $ArtifactsDir 'obj\DynamicMSI'
@@ -2130,21 +2128,18 @@ if (-not $SkipMsi) {
         Invoke-NativeCommand -Stage 'wix build (Dynamic Dashboard MSI)' -FilePath 'dotnet' -Arguments @(
             'tool', 'run', 'wix', '--', 'build', $dynamicSource, $dynamicHarvest,
             '-arch', 'x64', '-d', "ProductVersion=$Version",
+            '-ext', "WixToolset.UI.wixext/$WixPinnedVersion",
+            '-d', "BrandAssets=$installerSrcDir",
+            '-d', "DynamicSetupHelper=$setupHelperStaged",
             '-intermediatefolder', $dynamicInterm, '-pdbtype', 'none', '-out', $dynamicMsi
         )
-        # Reuse the standard managed wizard and offline prerequisite payload.
-        $dynamicBundleArgs = $wixBundleArgs.Clone()
-        $dynamicBundleArgs[[Array]::IndexOf($dynamicBundleArgs, "MsiPath=$msiPath")] = "MsiPath=$dynamicMsi"
-        $dynamicBundleArgs[[Array]::IndexOf($dynamicBundleArgs, $bundleIntermDir)] = $dynamicBundleInterm
-        $dynamicBundleArgs[[Array]::IndexOf($dynamicBundleArgs, $bundleExe)] = $dynamicExe
-        $dynamicBundleArgs += @('-d', 'DynamicDashboardBundle=1')
-        Invoke-NativeCommand -Stage 'wix build (Dynamic Dashboard EXE)' -FilePath 'dotnet' -Arguments $dynamicBundleArgs
+
     }
     finally { Pop-Location }
 
-    $dynamicHash = (Get-FileHash -LiteralPath $dynamicExe -Algorithm SHA256).Hash.ToLowerInvariant()
+    $dynamicHash = (Get-FileHash -LiteralPath $dynamicMsi -Algorithm SHA256).Hash.ToLowerInvariant()
     Set-Content (Join-Path $ReleaseDir 'Dynamic-Dashboard-SHA256SUMS.txt') `
-        ("{0}  Dynamic-Dashboard-Setup.exe" -f $dynamicHash) -Encoding ASCII
+        ("{0}  Dynamic-Dashboard-Setup.msi" -f $dynamicHash) -Encoding ASCII
 }
 $launcher = @'
 @echo off

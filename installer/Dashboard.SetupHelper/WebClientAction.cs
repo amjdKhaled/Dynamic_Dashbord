@@ -17,11 +17,34 @@ namespace Dashboard.SetupHelper
             string root = InstallerFileSafety.FullPath(PathUtil.SanitizeDir(Opt(opts, "path")));
             InstallerFileSafety.EnsureNoReparsePoints(root);
             string page = Path.Combine(root, "Browse.aspx");
-            string js = Path.Combine(root, "assets", "custom", "lf-dashboard-button.js");
+            string js = ButtonPath(root, opts);
             InstallerFileSafety.EnsureNoReparsePoints(page);
             InstallerFileSafety.EnsureNoReparsePoints(js);
             if (!File.Exists(page)) throw new FileNotFoundException("Browse.aspx was not found.", page);
 
+            byte[] jsAfter = RenderButton(opts);
+
+            byte[] pageBefore = File.ReadAllBytes(page);
+            byte[] pageAfter = IsDynamic(opts) ? WebClientText.ChangeTag(pageBefore, WebClientText.DynamicTag, "lf-dynamic-dashboard-button.js", false) : WebClientText.InsertTag(pageBefore);
+            byte[] jsBefore = File.Exists(js) ? File.ReadAllBytes(js) : null;
+            if (IsDynamic(opts) && ((jsBefore == null) != (pageBefore != pageAfter) ||
+                (jsBefore != null && !Equal(jsBefore, jsAfter))))
+                throw new IOException("Existing Dynamic Dashboard integration differs; refusing to overwrite it.");
+            if (IsDynamic(opts) && Equal(jsBefore, jsAfter))
+            {
+                string previousPath = PathUtil.SanitizeDir(Opt(opts, "previous-path"));
+                if (Path.IsPathRooted(previousPath) && string.Equals(
+                    InstallerFileSafety.FullPath(previousPath), root, StringComparison.OrdinalIgnoreCase))
+                    return 0;
+                throw new IOException("A pre-existing Dynamic Dashboard button was not installed by this package.");
+            }
+
+            DeployFiles(opts, root, page, js, pageBefore, pageAfter, jsBefore, jsAfter);
+            return 0;
+        }
+
+        private static byte[] RenderButton(Dictionary<string, string> opts)
+        {
             Uri url;
             if (!Uri.TryCreate(Opt(opts, "url"), UriKind.Absolute, out url) ||
                 (url.Scheme != "http" && url.Scheme != "https") || !string.IsNullOrEmpty(url.UserInfo))
@@ -36,10 +59,12 @@ namespace Dashboard.SetupHelper
             string patched = Regex.Replace(content, urlPattern,
                 match => match.Groups[1].Value + "'" + escapedUrl + "'");
 
-            byte[] pageBefore = File.ReadAllBytes(page);
-            byte[] pageAfter = WebClientText.InsertTag(pageBefore);
-            byte[] jsBefore = File.Exists(js) ? File.ReadAllBytes(js) : null;
-            byte[] jsAfter = new UTF8Encoding(false).GetBytes(patched);
+            return new UTF8Encoding(false).GetBytes(patched);
+        }
+
+        private static void DeployFiles(Dictionary<string, string> opts, string root, string page,
+            string js, byte[] pageBefore, byte[] pageAfter, byte[] jsBefore, byte[] jsAfter)
+        {
             // Do not overwrite an unrelated pre-existing asset with the same name.
             if (jsBefore != null && !Encoding.UTF8.GetString(jsBefore).Contains("DASHBOARD_BASE_URL"))
                 throw new IOException("The destination JavaScript is not recognized as a Dashboard asset.");
@@ -65,16 +90,32 @@ namespace Dashboard.SetupHelper
             InstallerFileSafety.EnsureNoReparsePoints(js);
             byte[] currentJs = File.Exists(js) ? File.ReadAllBytes(js) : null;
             if (!Equal(currentJs, jsBefore)) throw new IOException("The JavaScript changed during setup.");
-            InstallerFileSafety.WriteBytesAtomic(js, jsAfter);
+            if (jsAfter == null) File.Delete(js);
+            else InstallerFileSafety.WriteBytesAtomic(js, jsAfter);
             if (!File.ReadAllBytes(page).SequenceEqual(pageBefore))
                 throw new IOException("Browse.aspx changed during setup; its contents were preserved.");
             InstallerFileSafety.WriteBytesAtomic(page, pageAfter);
-            SetupLog.Info("Dashboard Web Client button deployed with a transaction-specific rollback journal.");
-            return 0;
+            SetupLog.Info("Dashboard Web Client integration changed with a transaction-specific rollback journal.");
         }
 
         public static int Remove(Dictionary<string, string> opts)
         {
+            if (IsDynamic(opts))
+            {
+                string root = InstallerFileSafety.FullPath(PathUtil.SanitizeDir(Opt(opts, "path")));
+                string page = Path.Combine(root, "Browse.aspx");
+                string js = ButtonPath(root, opts);
+                InstallerFileSafety.EnsureNoReparsePoints(page);
+                InstallerFileSafety.EnsureNoReparsePoints(js);
+                if (!File.Exists(page) || !File.Exists(js)) return 0;
+                byte[] jsBefore = File.ReadAllBytes(js);
+                if (!Equal(jsBefore, RenderButton(opts))) return 0;
+                byte[] pageBefore = File.ReadAllBytes(page);
+                byte[] pageAfter = WebClientText.ChangeTag(pageBefore, WebClientText.DynamicTag, "lf-dynamic-dashboard-button.js", true);
+                if (ReferenceEquals(pageBefore, pageAfter)) return 0;
+                DeployFiles(opts, root, page, js, pageBefore, pageAfter, jsBefore, null);
+                return 0;
+            }
             // Uninstall deliberately makes NO filesystem changes in Laserfiche.
             // The optional Web Client integration can be managed independently.
             SetupLog.Info("Preserved all Laserfiche Web Client files during Dashboard removal.");
@@ -98,7 +139,7 @@ namespace Dashboard.SetupHelper
                 byte[] jsBefore = ReadBytes(reader);
                 byte[] jsAfter = ReadBytes(reader);
                 RestoreIfUnchanged(Path.Combine(root, "Browse.aspx"), pageBefore, pageAfter);
-                RestoreIfUnchanged(Path.Combine(root, "assets", "custom", "lf-dashboard-button.js"), jsBefore, jsAfter);
+                RestoreIfUnchanged(ButtonPath(root, opts), jsBefore, jsAfter);
             }
             File.Delete(journal);
             return 0;
@@ -131,7 +172,7 @@ namespace Dashboard.SetupHelper
 
         private static string JournalPath(Dictionary<string, string> opts)
         {
-            return InstallerJournal.PathFor(opts, "webclient");
+            return InstallerJournal.PathFor(opts, IsDynamic(opts) ? "dynamic-webclient" : "webclient");
         }
 
         private static void WriteBytes(BinaryWriter writer, byte[] bytes)
@@ -159,6 +200,11 @@ namespace Dashboard.SetupHelper
             if (!File.Exists(path)) throw new FileNotFoundException("Dashboard button source is missing.", path);
             return path;
         }
+
+        private static bool IsDynamic(Dictionary<string, string> opts) => Opt(opts, "variant") == "dynamic";
+
+        private static string ButtonPath(string root, Dictionary<string, string> opts) =>
+            Path.Combine(root, "assets", "custom", IsDynamic(opts) ? "lf-dynamic-dashboard-button.js" : "lf-dashboard-button.js");
 
         private static string Opt(Dictionary<string, string> opts, string key)
         {

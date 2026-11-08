@@ -56,7 +56,8 @@ namespace Dashboard.SetupHelper
             // Persistent diagnostics: %ProgramData%\Dashboard\Logs\SetupHelper.log.
             // The MSI log only shows "returned actual error code 1"; this log
             // captures the full command, environment, and any exception chain.
-            SetupLog.Init();
+            var opts = ParseArgs(args, startIndex: 1);
+            SetupLog.Init(opts.TryGetValue("variant", out var variant) && variant == "dynamic");
             SetupLog.Info("============================================================");
             SetupLog.Info($"Invoked: {string.Join(" ", args.Select(a => a.Length == 0 ? "<EMPTY>" : a))}");
             SetupLog.Info($"Process bitness: {(Environment.Is64BitProcess ? "x64" : "x86")}");
@@ -87,7 +88,6 @@ namespace Dashboard.SetupHelper
             }
 
             string command = args[0].ToLowerInvariant();
-            Dictionary<string, string> opts = ParseArgs(args, startIndex: 1);
 
             try
             {

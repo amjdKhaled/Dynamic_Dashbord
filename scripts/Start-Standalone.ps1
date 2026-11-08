@@ -8,6 +8,7 @@ and opens the browser only when the exact dashboard app passes a readiness probe
 param(
     [ValidateRange(1024,65515)][int]$Port = 5188,
     [switch]$Published,
+    [switch]$InstalledDynamic,
     [switch]$NoBrowser
 )
 
@@ -20,7 +21,8 @@ if ([string]::IsNullOrWhiteSpace($localAppData)) {
 }
 
 # Standalone settings/credentials/logs/keys never touch the installed Dashboard.
-$env:DASHBOARD_STANDALONE_DATA_DIR = Join-Path $localAppData 'Dynamic_Dashbord\Standalone'
+$dataFolder = if ($InstalledDynamic) { 'Dynamic Dashboard' } else { 'Dynamic_Dashbord\Standalone' }
+$env:DASHBOARD_STANDALONE_DATA_DIR = Join-Path $localAppData $dataFolder
 New-Item -ItemType Directory -Path $env:DASHBOARD_STANDALONE_DATA_DIR -Force | Out-Null
 $env:ASPNETCORE_ENVIRONMENT = 'Production'
 

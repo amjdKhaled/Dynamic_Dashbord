@@ -2113,6 +2113,30 @@ if ($IsWindowsOS) {
 # Bundled standalone uses the same guarded launcher as source mode, but does
 # not require the .NET SDK. It never touches the IIS Dashboard configuration.
 Copy-Item (Join-Path $RepoRoot 'scripts\Start-Standalone.ps1') (Join-Path $webAppDst 'Start-Dashboard.ps1') -Force
+# Package the independent desktop-launched web app before adding the portable ZIP launcher.
+if (-not $SkipMsi) {
+    $dynamicMsi = Join-Path $ReleaseDir 'Dynamic-Dashboard-Setup.msi'
+    $dynamicHarvest = Join-Path $StagingDir 'Harvest\DynamicDashboardFiles.wxs'
+    $dynamicSource = Join-Path $RepoRoot 'installer\DynamicDashboard.Installer\Product.wxs'
+    $dynamicInterm = Join-Path $ArtifactsDir 'obj\DynamicMSI'
+    $null = New-Item -ItemType Directory -Path $dynamicInterm -Force
+    New-HarvestWxs -SourceDir $webAppDst -ComponentGroupName 'DynamicFiles' `
+        -DirectoryRefId 'DYNAMICINSTALLFOLDER' -OutputWxs $dynamicHarvest
+
+    Push-Location $RepoRoot
+    try {
+        Invoke-NativeCommand -Stage 'wix build (Dynamic Dashboard MSI)' -FilePath 'dotnet' -Arguments @(
+            'tool', 'run', 'wix', '--', 'build', $dynamicSource, $dynamicHarvest,
+            '-arch', 'x64', '-d', "ProductVersion=$Version",
+            '-intermediatefolder', $dynamicInterm, '-pdbtype', 'none', '-out', $dynamicMsi
+        )
+    }
+    finally { Pop-Location }
+
+    $dynamicHash = (Get-FileHash -LiteralPath $dynamicMsi -Algorithm SHA256).Hash.ToLowerInvariant()
+    Set-Content (Join-Path $ReleaseDir 'Dynamic-Dashboard-SHA256SUMS.txt') `
+        ("{0}  Dynamic-Dashboard-Setup.msi" -f $dynamicHash) -Encoding ASCII
+}
 $launcher = @'
 @echo off
 cd /d "%~dp0"

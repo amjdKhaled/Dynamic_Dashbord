@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="Dynamic Dashboard"
+           Manufacturer="Dashboard"
+           Language="1033"
+           Version="$(ProductVersion)"
+           UpgradeCode="{1EA478E1-1A44-420D-AC04-D446B0B64E34}"
+           Scope="perMachine"
+           InstallerVersion="500"
+           Compressed="yes">
+    <MajorUpgrade AllowSameVersionUpgrades="yes"
+                  DowngradeErrorMessage="A newer version of Dynamic Dashboard is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="DYNAMICINSTALLFOLDER" Name="Dynamic Dashboard" />
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="DYNAMICMENUFOLDER" Name="Dynamic Dashboard" />
+    </StandardDirectory>
+
+    <Component Id="DynamicDashboardShortcut" Directory="DYNAMICMENUFOLDER"
+               Guid="{932673B1-4C7B-4180-AC00-20A0FB7BF8D7}">
+      <Shortcut Id="OpenDynamicDashboard" Name="Dynamic Dashboard"
+                Target="[SystemFolder]WindowsPowerShell\v1.0\powershell.exe"
+                Arguments='-NoProfile -ExecutionPolicy Bypass -File "[DYNAMICINSTALLFOLDER]Start-Dashboard.ps1" -Published -InstalledDynamic -Port 5190'
+                WorkingDirectory="DYNAMICINSTALLFOLDER" />
+      <RemoveFolder Id="RemoveDynamicMenuFolder" On="uninstall" />
+      <RegistryValue Root="HKCU" Key="Software\Dynamic Dashboard\Shortcuts"
+                     Name="Open" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+
+    <Feature Id="DynamicDashboardFeature" Title="Dynamic Dashboard" Level="1">
+      <ComponentGroupRef Id="DynamicFiles" />
+      <ComponentRef Id="DynamicDashboardShortcut" />
+    </Feature>
+  </Package>
+</Wix>

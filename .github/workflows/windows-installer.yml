@@ -82,7 +82,7 @@ jobs:
         shell: powershell
         run: .\installer\Test-MsiIsolation.ps1 -DisposableRunner
 
-      - name: Test independent Dynamic Dashboard MSI lifecycle
+      - name: Test independent Dynamic Dashboard EXE lifecycle
         shell: powershell
         run: .\installer\Test-DynamicDashboardMsi.ps1
 
@@ -99,7 +99,7 @@ jobs:
         with:
           name: Dynamic-Dashboard-Windows-${{ github.sha }}
           path: |
-            Release/Dynamic-Dashboard-Setup.msi
+            Release/Dynamic-Dashboard-Setup.exe
             Release/Dynamic-Dashboard-SHA256SUMS.txt
             Release/Dynamic-Dashboard-README.txt
           if-no-files-found: error
@@ -112,7 +112,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $tag = "dynamic-dashboard-${{ github.run_number }}"
-          gh release create $tag Release/Dynamic-Dashboard-Setup.msi Release/Dynamic-Dashboard-SHA256SUMS.txt Release/Dynamic-Dashboard-README.txt --target ${{ github.sha }} --title "Dynamic Dashboard Windows Installer" --notes "Independent, self-contained Windows MSI. Launch Dynamic Dashboard from Start and configure Laserfiche in Settings."
+          gh release create $tag Release/Dynamic-Dashboard-Setup.exe Release/Dynamic-Dashboard-SHA256SUMS.txt Release/Dynamic-Dashboard-README.txt --target ${{ github.sha }} --title "Dynamic Dashboard Windows Installer" --notes "Independent Windows EXE with a setup wizard. Launch Dynamic Dashboard from Start and configure Laserfiche in Settings."
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       # Downloadable preview requested for this implementation branch. It is

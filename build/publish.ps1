@@ -2115,7 +2115,10 @@ if ($IsWindowsOS) {
 Copy-Item (Join-Path $RepoRoot 'scripts\Start-Standalone.ps1') (Join-Path $webAppDst 'Start-Dashboard.ps1') -Force
 # Package the independent desktop-launched web app before adding the portable ZIP launcher.
 if (-not $SkipMsi) {
-    $dynamicMsi = Join-Path $ReleaseDir 'Dynamic-Dashboard-Setup.msi'
+    $dynamicMsi = Join-Path $ArtifactsDir 'Dynamic-Dashboard-Setup.msi'
+    $dynamicExe = Join-Path $ReleaseDir 'Dynamic-Dashboard-Setup.exe'
+    $dynamicBundle = Join-Path $RepoRoot 'installer\DynamicDashboard.Installer\Bundle.wxs'
+    $dynamicBundleInterm = Join-Path $ArtifactsDir 'obj\DynamicBundle'
     $dynamicHarvest = Join-Path $StagingDir 'Harvest\DynamicDashboardFiles.wxs'
     $dynamicSource = Join-Path $RepoRoot 'installer\DynamicDashboard.Installer\Product.wxs'
     $dynamicInterm = Join-Path $ArtifactsDir 'obj\DynamicMSI'
@@ -2130,12 +2133,18 @@ if (-not $SkipMsi) {
             '-arch', 'x64', '-d', "ProductVersion=$Version",
             '-intermediatefolder', $dynamicInterm, '-pdbtype', 'none', '-out', $dynamicMsi
         )
+        Invoke-NativeCommand -Stage 'wix build (Dynamic Dashboard EXE)' -FilePath 'dotnet' -Arguments @(
+            'tool', 'run', 'wix', '--', 'build', $dynamicBundle,
+            '-ext', "WixToolset.Bal.wixext/$WixPinnedVersion",
+            '-d', "BundleVersion=$Version", '-d', "MsiPath=$dynamicMsi",
+            '-intermediatefolder', $dynamicBundleInterm, '-pdbtype', 'none', '-out', $dynamicExe
+        )
     }
     finally { Pop-Location }
 
-    $dynamicHash = (Get-FileHash -LiteralPath $dynamicMsi -Algorithm SHA256).Hash.ToLowerInvariant()
+    $dynamicHash = (Get-FileHash -LiteralPath $dynamicExe -Algorithm SHA256).Hash.ToLowerInvariant()
     Set-Content (Join-Path $ReleaseDir 'Dynamic-Dashboard-SHA256SUMS.txt') `
-        ("{0}  Dynamic-Dashboard-Setup.msi" -f $dynamicHash) -Encoding ASCII
+        ("{0}  Dynamic-Dashboard-Setup.exe" -f $dynamicHash) -Encoding ASCII
 }
 $launcher = @'
 @echo off

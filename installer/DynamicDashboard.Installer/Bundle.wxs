@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal">
+  <Bundle Name="Dynamic Dashboard"
+          Manufacturer="Dashboard"
+          Version="$(BundleVersion)"
+          UpgradeCode="{F2B22D9D-C3B9-4F24-A80B-A237AC3C4447}">
+    <BootstrapperApplication>
+      <bal:WixStandardBootstrapperApplication Theme="hyperlinkLicense" LicenseUrl="" />
+    </BootstrapperApplication>
+    <Chain>
+      <MsiPackage SourceFile="$(MsiPath)" Compressed="yes" />
+    </Chain>
+  </Bundle>
+</Wix>

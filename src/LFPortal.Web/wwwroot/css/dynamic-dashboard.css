@@ -297,7 +297,7 @@ body:has(.dd-page.dd-is-loading) > :is(.site-header,.site-footer){display:none}
 .dd-card.dd-accent-card .dashboard-round-row:hover { background: #ffffff22; }
 
 /* The original repository-backed number cards can receive the same user-selected theme. */
-.dd-card.dd-native-widget.dd-accent-card > .dd-visual > :is(.d-card,.folder-kpi-card) {
+.dd-card.dd-native-widget.dd-accent-card > .dd-visual > :is(.folder-kpi-card,.d-card:has(.d-kpi-val)) {
   background: #0d3850 !important;
   color: #fff !important;
   box-shadow: none;

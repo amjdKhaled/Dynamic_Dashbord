@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <Package Name="Dynamic Dashboard"
-           Manufacturer="Dashboard"
+           Manufacturer="ISB"
            Language="1033"
            Version="$(ProductVersion)"
            UpgradeCode="{1EA478E1-1A44-420D-AC04-D446B0B64E34}"
@@ -28,9 +28,9 @@
       <RegistrySearch Id="SavedDynamicApiVersion" Root="HKLM" Key="Software\ISB\DynamicDashboard\Installer"
                       Name="ApiVersion" Type="raw" Bitness="always64" />
     </Property>
-    <SetProperty Id="DYNAMIC_LF_SERVER" Value="[SAVED_DYNAMIC_LF_SERVER]" After="AppSearch" Sequence="execute" Condition="NOT DYNAMIC_LF_SERVER AND SAVED_DYNAMIC_LF_SERVER" />
-    <SetProperty Id="DYNAMIC_LF_API_PATH" Value="[SAVED_DYNAMIC_LF_API_PATH]" After="AppSearch" Sequence="execute" Condition="NOT DYNAMIC_LF_API_PATH AND SAVED_DYNAMIC_LF_API_PATH" />
-    <SetProperty Id="DYNAMIC_LF_API_VERSION" Value="[SAVED_DYNAMIC_LF_API_VERSION]" After="AppSearch" Sequence="execute" Condition="NOT DYNAMIC_LF_API_VERSION AND SAVED_DYNAMIC_LF_API_VERSION" />
+    <SetProperty Id="DYNAMIC_LF_SERVER" Value="[SAVED_DYNAMIC_LF_SERVER]" After="AppSearch" Sequence="both" Condition="NOT DYNAMIC_LF_SERVER AND SAVED_DYNAMIC_LF_SERVER" />
+    <SetProperty Id="DYNAMIC_LF_API_PATH" Value="[SAVED_DYNAMIC_LF_API_PATH]" After="AppSearch" Sequence="both" Condition="NOT DYNAMIC_LF_API_PATH AND SAVED_DYNAMIC_LF_API_PATH" />
+    <SetProperty Id="DYNAMIC_LF_API_VERSION" Value="[SAVED_DYNAMIC_LF_API_VERSION]" After="AppSearch" Sequence="both" Condition="NOT DYNAMIC_LF_API_VERSION AND SAVED_DYNAMIC_LF_API_VERSION" />
     <Property Id="DYNAMIC_WEB_PATH" Secure="yes" />
     <Property Id="DYNAMIC_WEB_URL" Secure="yes" />
     <Property Id="SAVED_DYNAMIC_WEB_PATH">
@@ -86,7 +86,7 @@
                      Type="integer" Value="1" KeyPath="yes" />
     </Component>
 
-    <ui:WixUI Id="WixUI_Minimal" />
+
     <CustomAction Id="StartDynamicDashboardAfterSetup" Directory="DYNAMICINSTALLFOLDER"
                   ExeCommand='"[System64Folder]WindowsPowerShell\v1.0\powershell.exe" -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File "[DYNAMICINSTALLFOLDER]Start-Dashboard.ps1" -Published -InstalledDynamic -Port 5190 -NoBrowser'
                   Execute="immediate" Return="asyncNoWait" />
@@ -94,32 +94,126 @@
       <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="StartDynamicDashboardAfterSetup"
                Order="1" Condition="NOT Installed AND NOT REMOVE" />
     </UI>
-    <WixVariable Id="WixUILicenseRtf" Value="$(var.BrandAssets)\License.rtf" />
     <WixVariable Id="WixUIBannerBmp" Value="$(var.BrandAssets)\Banner.bmp" />
     <WixVariable Id="WixUIDialogBmp" Value="$(var.BrandAssets)\Dialog.bmp" />
+    <Binary Id="DynamicWizardSidebar" SourceFile="$(var.BrandAssets)\WizardSidebar.bmp" />
+    <UIRef Id="WixUI_Common" />
     <UI>
-      <Dialog Id="DynamicConfigurationDlg" Width="370" Height="270" Title="Dynamic Dashboard Setup">
-        <Control Id="Title" Type="Text" X="18" Y="12" Width="334" Height="24" Text="{\WixUI_Font_Title}Laserfiche configuration" />
-        <Control Id="ServerLabel" Type="Text" X="18" Y="45" Width="334" Height="12" Text="Laserfiche server URL (optional)" />
-        <Control Id="Server" Type="Edit" X="18" Y="58" Width="334" Height="18" Property="DYNAMIC_LF_SERVER" />
-        <Control Id="ApiLabel" Type="Text" X="18" Y="80" Width="334" Height="12" Text="API base path (defaults to /LFRepositoryAPI)" />
-        <Control Id="ApiPath" Type="Edit" X="18" Y="93" Width="334" Height="18" Property="DYNAMIC_LF_API_PATH" />
-        <Control Id="VersionLabel" Type="Text" X="18" Y="115" Width="334" Height="12" Text="API version (Auto, v1, or v2)" />
-        <Control Id="Version" Type="Edit" X="18" Y="128" Width="334" Height="18" Property="DYNAMIC_LF_API_VERSION" />
-        <Control Id="WebPathLabel" Type="Text" X="18" Y="150" Width="334" Height="12" Text="Web Access folder containing Browse.aspx (optional, adds toolbar button)" />
-        <Control Id="WebPath" Type="Edit" X="18" Y="163" Width="334" Height="18" Property="DYNAMIC_WEB_PATH" />
-        <Control Id="WebUrlLabel" Type="Text" X="18" Y="185" Width="334" Height="12" Text="Dashboard URL reachable from the Web Access browser" />
-        <Control Id="WebUrl" Type="Edit" X="18" Y="198" Width="334" Height="18" Property="DYNAMIC_WEB_URL" />
-        <Control Id="Continue" Type="PushButton" X="230" Y="240" Width="56" Height="18" Default="yes" Text="Next">
-          <Publish Event="EndDialog" Value="Return" />
+      <TextStyle Id="WixUI_Font_Normal" FaceName="Segoe UI" Size="9" />
+      <TextStyle Id="WixUI_Font_Bigger" FaceName="Segoe UI" Size="12" />
+      <TextStyle Id="WixUI_Font_Title" FaceName="Segoe UI" Size="11" Bold="yes" />
+      <TextStyle Id="DynamicHeading" FaceName="Segoe UI" Size="17" Bold="yes" />
+      <Property Id="DefaultUIFont" Value="WixUI_Font_Normal" />
+      <Property Id="ARPNOMODIFY" Value="1" />
+
+      <DialogRef Id="ErrorDlg" />
+      <DialogRef Id="FatalError" />
+      <DialogRef Id="FilesInUse" />
+      <DialogRef Id="MsiRMFilesInUse" />
+      <DialogRef Id="PrepareDlg" />
+      <DialogRef Id="ProgressDlg" />
+      <DialogRef Id="ResumeDlg" />
+      <DialogRef Id="UserExit" />
+      <DialogRef Id="WaitForCostingDlg" />
+      <Publish Dialog="ExitDialog" Control="Finish" Event="EndDialog" Value="Return" Order="999" />
+      <Publish Dialog="MaintenanceWelcomeDlg" Control="Next" Event="NewDialog" Value="MaintenanceTypeDlg" />
+      <Publish Dialog="MaintenanceTypeDlg" Control="RepairButton" Event="NewDialog" Value="VerifyReadyDlg" />
+      <Publish Dialog="MaintenanceTypeDlg" Control="RemoveButton" Event="NewDialog" Value="VerifyReadyDlg" />
+      <Publish Dialog="MaintenanceTypeDlg" Control="Back" Event="NewDialog" Value="MaintenanceWelcomeDlg" />
+      <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="MaintenanceTypeDlg" />
+
+      <ComboBox Property="DYNAMIC_LF_API_VERSION">
+        <ListItem Value="Auto" Text="Auto Detect (recommended)" />
+        <ListItem Value="v2" Text="v2" />
+        <ListItem Value="v1" Text="v1" />
+      </ComboBox>
+      <Dialog Id="DynamicWelcomeDlg" Width="540" Height="335" Title="Dynamic Dashboard Setup">
+        <Control Id="Sidebar" Type="Bitmap" X="0" Y="0" Width="112" Height="335" Text="DynamicWizardSidebar" />
+        <Control Id="Title" Type="Text" X="128" Y="16" Width="392" Height="28" Text="{\DynamicHeading}Welcome to Dynamic Dashboard" />
+        <Control Id="Subtitle" Type="Text" X="128" Y="48" Width="392" Height="18" Text="Set up the independent dashboard for your Laserfiche repository." />
+        <Control Id="License" Type="ScrollableText" X="128" Y="73" Width="392" Height="178" Sunken="yes">
+          <Text SourceFile="$(var.BrandAssets)\License.rtf" />
         </Control>
-        <Control Id="Cancel" Type="PushButton" X="296" Y="240" Width="56" Height="18" Cancel="yes" Text="Cancel">
-          <Publish Event="EndDialog" Value="Exit" />
+        <Control Id="Consent" Type="Text" X="128" Y="257" Width="392" Height="22" Text="By selecting Continue, you accept the license terms." />
+        <Control Id="FooterLine" Type="Line" X="112" Y="296" Width="428" Height="0" />
+        <Control Id="Continue" Type="PushButton" X="388" Y="307" Width="60" Height="19" Default="yes" Text="&amp;Continue">
+          <Publish Property="DYNAMIC_LF_SERVER" Value="https://localhost" Order="1" Condition="NOT DYNAMIC_LF_SERVER" />
+          <Publish Property="DYNAMIC_LF_API_PATH" Value="/LFRepositoryAPI" Order="2" Condition="NOT DYNAMIC_LF_API_PATH" />
+          <Publish Property="DYNAMIC_LF_API_VERSION" Value="Auto" Order="3" Condition="NOT DYNAMIC_LF_API_VERSION" />
+          <Publish Event="NewDialog" Value="DynamicConnectionDlg" Order="4" Condition="1" />
+        </Control>
+        <Control Id="Cancel" Type="PushButton" X="460" Y="307" Width="60" Height="19" Cancel="yes" Text="Cancel">
+          <Publish Event="SpawnDialog" Value="CancelDlg" Condition="1" />
+        </Control>
+      </Dialog>
+      <Dialog Id="DynamicConnectionDlg" Width="540" Height="335" Title="Dynamic Dashboard Setup">
+        <Control Id="Sidebar" Type="Bitmap" X="0" Y="0" Width="112" Height="335" Text="DynamicWizardSidebar" />
+        <Control Id="Title" Type="Text" X="128" Y="16" Width="392" Height="28" Text="{\DynamicHeading}Connect to Laserfiche" />
+        <Control Id="Subtitle" Type="Text" X="128" Y="48" Width="392" Height="18" Text="Enter the connection information used by Dynamic Dashboard." />
+        <Control Id="ServerLabel" Type="Text" X="128" Y="81" Width="392" Height="14" Text="Laserfiche server URL" />
+        <Control Id="Server" Type="Edit" X="128" Y="98" Width="392" Height="19" Property="DYNAMIC_LF_SERVER" />
+        <Control Id="ServerHint" Type="Text" X="128" Y="121" Width="392" Height="18" Text="Default: https://localhost. A full API URL is also accepted." />
+        <Control Id="ApiLabel" Type="Text" X="128" Y="150" Width="190" Height="14" Text="API base path" />
+        <Control Id="ApiPath" Type="Edit" X="128" Y="167" Width="190" Height="19" Property="DYNAMIC_LF_API_PATH" />
+        <Control Id="VersionLabel" Type="Text" X="330" Y="150" Width="190" Height="14" Text="API version" />
+        <Control Id="Version" Type="ComboBox" X="330" Y="167" Width="190" Height="19" Property="DYNAMIC_LF_API_VERSION" ComboList="yes" />
+        <Control Id="VersionHint" Type="Text" X="330" Y="190" Width="190" Height="28" Text="Auto Detect tries v2 and then v1." />
+        <Control Id="FooterLine" Type="Line" X="112" Y="296" Width="428" Height="0" />
+        <Control Id="Back" Type="PushButton" X="316" Y="307" Width="60" Height="19" Text="&amp;Back">
+          <Publish Event="NewDialog" Value="DynamicWelcomeDlg" Condition="1" />
+        </Control>
+        <Control Id="Continue" Type="PushButton" X="388" Y="307" Width="60" Height="19" Default="yes" Text="&amp;Continue">
+          <Publish Event="NewDialog" Value="DynamicDeploymentDlg" Order="4" Condition="1" />
+        </Control>
+        <Control Id="Cancel" Type="PushButton" X="460" Y="307" Width="60" Height="19" Cancel="yes" Text="Cancel">
+          <Publish Event="SpawnDialog" Value="CancelDlg" Condition="1" />
+        </Control>
+      </Dialog>
+      <Dialog Id="DynamicDeploymentDlg" Width="540" Height="335" Title="Dynamic Dashboard Setup">
+        <Control Id="Sidebar" Type="Bitmap" X="0" Y="0" Width="112" Height="335" Text="DynamicWizardSidebar" />
+        <Control Id="Title" Type="Text" X="128" Y="16" Width="392" Height="28" Text="{\DynamicHeading}Choose deployment options" />
+        <Control Id="Subtitle" Type="Text" X="128" Y="48" Width="392" Height="18" Text="Confirm how users will open the dashboard." />
+        <Control Id="HostLabel" Type="Text" X="128" Y="80" Width="392" Height="20" Text="{\WixUI_Font_Title}Dashboard website" />
+        <Control Id="HostInfo" Type="Text" X="128" Y="103" Width="392" Height="30" Text="The installed dashboard starts automatically and listens on http://127.0.0.1:5190 on this computer." />
+        <Control Id="IntegrationLabel" Type="Text" X="128" Y="144" Width="392" Height="20" Text="{\WixUI_Font_Title}Laserfiche Web Access integration (optional)" />
+        <Control Id="WebPathLabel" Type="Text" X="128" Y="171" Width="392" Height="14" Text="Web Access folder containing Browse.aspx" />
+        <Control Id="WebPath" Type="Edit" X="128" Y="188" Width="392" Height="19" Property="DYNAMIC_WEB_PATH" />
+        <Control Id="WebUrlLabel" Type="Text" X="128" Y="217" Width="392" Height="14" Text="Dashboard URL for the Web Access toolbar button" />
+        <Control Id="WebUrl" Type="Edit" X="128" Y="234" Width="392" Height="19" Property="DYNAMIC_WEB_URL" />
+        <Control Id="WebHint" Type="Text" X="128" Y="258" Width="392" Height="28" Text="Leave the folder blank to skip the toolbar button on a fresh install." />
+        <Control Id="FooterLine" Type="Line" X="112" Y="296" Width="428" Height="0" />
+        <Control Id="Back" Type="PushButton" X="316" Y="307" Width="60" Height="19" Text="&amp;Back">
+          <Publish Event="NewDialog" Value="DynamicConnectionDlg" Condition="1" />
+        </Control>
+        <Control Id="Continue" Type="PushButton" X="388" Y="307" Width="60" Height="19" Default="yes" Text="&amp;Continue">
+          <Publish Event="NewDialog" Value="DynamicReviewDlg" Order="4" Condition="1" />
+        </Control>
+        <Control Id="Cancel" Type="PushButton" X="460" Y="307" Width="60" Height="19" Cancel="yes" Text="Cancel">
+          <Publish Event="SpawnDialog" Value="CancelDlg" Condition="1" />
+        </Control>
+      </Dialog>
+      <Dialog Id="DynamicReviewDlg" Width="540" Height="335" Title="Dynamic Dashboard Setup">
+        <Control Id="Sidebar" Type="Bitmap" X="0" Y="0" Width="112" Height="335" Text="DynamicWizardSidebar" />
+        <Control Id="Title" Type="Text" X="128" Y="16" Width="392" Height="28" Text="{\DynamicHeading}Ready to install" />
+        <Control Id="Subtitle" Type="Text" X="128" Y="48" Width="392" Height="18" Text="Review your settings, then select Install." />
+        <Control Id="Settings" Type="Text" X="128" Y="84" Width="392" Height="60" Text="Laserfiche server: [DYNAMIC_LF_SERVER]&#13;&#10;API path: [DYNAMIC_LF_API_PATH]&#13;&#10;API version: [DYNAMIC_LF_API_VERSION]" />
+        <Control Id="Folder" Type="Text" X="128" Y="150" Width="392" Height="44" Text="Install location: [DYNAMICINSTALLFOLDER]" />
+        <Control Id="FooterLine" Type="Line" X="112" Y="296" Width="428" Height="0" />
+        <Control Id="Back" Type="PushButton" X="316" Y="307" Width="60" Height="19" Text="&amp;Back">
+          <Publish Event="NewDialog" Value="DynamicDeploymentDlg" Condition="1" />
+        </Control>
+        <Control Id="Continue" Type="PushButton" X="388" Y="307" Width="60" Height="19" Default="yes" Text="&amp;Install">
+          <Publish Event="SpawnWaitDialog" Value="WaitForCostingDlg" Order="1" Condition="CostingComplete &lt;&gt; 1" />
+          <Publish Event="SpawnDialog" Value="OutOfDiskDlg" Order="2" Condition="OutOfDiskSpace = 1" />
+          <Publish Event="EndDialog" Value="Return" Order="3" Condition="CostingComplete = 1 AND OutOfDiskSpace &lt;&gt; 1" />
+        </Control>
+        <Control Id="Cancel" Type="PushButton" X="460" Y="307" Width="60" Height="19" Cancel="yes" Text="Cancel">
+          <Publish Event="SpawnDialog" Value="CancelDlg" Condition="1" />
         </Control>
       </Dialog>
     </UI>
     <InstallUISequence>
-      <Show Dialog="DynamicConfigurationDlg" Before="WelcomeEulaDlg" Condition="NOT Installed AND NOT PATCH" />
+      <Show Dialog="DynamicWelcomeDlg" Before="ProgressDlg" Condition="NOT Installed" />
     </InstallUISequence>
 
     <SetProperty Id="DYNAMIC_WEB_URL" Value="http://127.0.0.1:5190" Before="InstallInitialize" Sequence="execute" Action="SetDynamicDefaultWebUrl" Condition="DYNAMIC_WEB_PATH AND NOT DYNAMIC_WEB_URL" />

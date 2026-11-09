@@ -32,6 +32,7 @@
     var folders   = Model.Entries.Where(e => e.EntryType == LFEntryType.Folder).ToList();
     var documents = Model.Entries.Where(e => e.EntryType != LFEntryType.Folder).ToList();
     var templates = Model.Templates;
+    var isTemplateCatalog = Model.DrillDownScope == "templates";
 
     string BuildPageUrl(int targetPage)
     {
@@ -203,7 +204,11 @@ footer.site-footer { background: #F7F8FD !important; }
             </a>
         }
         <span style="font-size:.75rem;color:var(--a-muted)">
-            @if (templates.Count > 0)
+            @if (isTemplateCatalog)
+            {
+                <text>@L["TotalTemplates"] (@Model.TotalCount)</text>
+            }
+            else if (templates.Count > 0)
             {
                 <text>@templates.Count template@(templates.Count == 1 ? "" : "s")</text>
             }
@@ -286,7 +291,10 @@ footer.site-footer { background: #F7F8FD !important; }
                         <tr>
                             <th data-col="name" class="sorted" style="min-width:220px">@L["Template"] <span class="sort-icon">▲</span></th>
                             <th data-col="type" style="width:110px">@L["Type"] <span class="sort-icon">⇅</span></th>
-                            <th data-col="created" style="width:130px">@L["Documents"] <span class="sort-icon">⇅</span></th>
+                            @if (!isTemplateCatalog)
+                            {
+                                <th data-col="created" style="width:130px">@L["Documents"] <span class="sort-icon">⇅</span></th>
+                            }
                             <th data-col="template">Description <span class="sort-icon">⇅</span></th>
                         </tr>
                     </thead>
@@ -306,9 +314,12 @@ footer.site-footer { background: #F7F8FD !important; }
                                 </div>
                             </td>
                             <td><span class="arc-badge arc-badge-other">Template</span></td>
-                            <td style="color:var(--a-muted)">
-                                <a href="@Url.Action("Index", "Archive", new { scope = "template", template = template.Name })">@template.DocumentCount</a>
-                            </td>
+                            @if (!isTemplateCatalog)
+                            {
+                                <td style="color:var(--a-muted)">
+                                    <a href="@Url.Action("Index", "Archive", new { scope = "template", template = template.Name })">@template.DocumentCount</a>
+                                </td>
+                            }
                             <td style="color:var(--a-muted)">@(template.Description ?? "—")</td>
                         </tr>
                     }

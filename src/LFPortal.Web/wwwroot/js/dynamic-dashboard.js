@@ -543,7 +543,16 @@
       }
       if(chart.type==="kpi") {
         const k=document.createElement("div");k.className="dd-kpi";
-        k.textContent=Number(data.kpi).toLocaleString(locale);
+        if(chart.accent) {
+          const emblem=document.createElement("span");emblem.className="dd-kpi-feature-icon";
+          emblem.setAttribute("aria-hidden","true");
+          emblem.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h11l5 5v11H4z"/><path d="M15 4v5h5"/></svg>';
+          k.appendChild(emblem);
+        }
+        const value=document.createElement("strong");
+        value.className="dd-kpi-number";
+        value.textContent=Number(data.kpi).toLocaleString(locale);
+        k.appendChild(value);
         const small=document.createElement("small");
         small.textContent=T("وثيقة مطابقة للقيم المعروضة","documents matching the displayed values");
         k.appendChild(small);body.appendChild(k);

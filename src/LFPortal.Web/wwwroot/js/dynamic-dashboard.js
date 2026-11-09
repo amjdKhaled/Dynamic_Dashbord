@@ -111,6 +111,7 @@
       to:validDate(chart.to)?chart.to:"",
       pages:pageCount(chart.pages),
       hidden:Boolean(chart.hidden),
+      accent:chart.accent===undefined ? chart.id==="overview-folders-total" : Boolean(chart.accent),
       allValues:Boolean(chart.allValues),
       selectedValues:!oldName && Array.isArray(chart.selectedValues)
         ? [...new Set(chart.selectedValues.filter(v=>typeof v==="string"))].slice(0,500) : []
@@ -472,7 +473,7 @@
     const type=displayType(chart);
     const ghost=Boolean(chart.hidden);
     const el=document.createElement("article");
-    el.className="dd-card"+(ghost?" dd-ghost":"");
+    el.className="dd-card"+(ghost?" dd-ghost":"")+(chart.accent?" dd-accent-card":"");
     const documentTable=type==="documents" || isRecent(type);
     el.classList.toggle("dd-full-card",documentTable || chart.span===12);
     el.classList.toggle("dd-quarter-card",quarterWidth(chart) && chart.span===3);
@@ -584,6 +585,8 @@
           layout.append(stage,window.dashboardRoundScroll(legend,arabic));
           body.appendChild(layout);
         }
+        const contrast=chart.accent?"#e8f2fa":"#506678";
+        const gridColor=chart.accent?"#ffffff22":"#eef1f6";
         const config={
           type,
           data:{labels:data.groups.map(g=>g.label),datasets:[{
@@ -596,8 +599,8 @@
             responsive:true,maintainAspectRatio:false,indexAxis:axis?"y":"x",
             plugins:{legend:{display:false},tooltip:{backgroundColor:"#0b1c49"}},
             scales:circ?{}:{
-              x:{grid:{display:axis,color:"#eef1f6"},ticks:{font:{size:14},color:"#506678",maxRotation:30,autoSkip:true}},
-              y:{beginAtZero:true,grid:{color:axis?"transparent":"#eef1f6"},ticks:{font:{size:14},color:"#506678"}}
+              x:{grid:{display:axis,color:gridColor},ticks:{font:{size:14},color:contrast,maxRotation:30,autoSkip:true}},
+              y:{beginAtZero:true,grid:{color:axis?"transparent":gridColor},ticks:{font:{size:14},color:contrast}}
             },
             onClick:(_,points)=>{const group=data.groups[points[0]?.index];if(group)openArchive(group.label,group.docs);}
           }
@@ -743,6 +746,7 @@
     $("dd-modified-from").value=editing.from||"";
     $("dd-modified-to").value=editing.to||"";
     $("dd-pages").value=editing.pages??"";
+    $("dd-card-style").value=editing.accent?"accent":"standard";
     $("dd-filter-error").classList.add("dd-hidden");
     const isField=Boolean(editing.dimension) && !BUILTIN.some(f=>f.id===editing.dimension);
     selectOptions($("dd-dimension"),[
@@ -795,6 +799,7 @@
     if(!editing)return;
     editing.title=$("dd-title").value.trim()||T("مؤشر بدون عنوان","Untitled widget");
     editing.type=$("dd-type").value;
+    editing.accent=$("dd-card-style").value==="accent";
     if(editing.type!=="overview"&&!isRecent(editing.type)&&!editing.dimension)return;
     editing.from=dateColumn(editing)?$("dd-modified-from").value:"";
     editing.to=dateColumn(editing)?$("dd-modified-to").value:"";

@@ -90,6 +90,7 @@
             <input class="dd-control" id="dd-title" maxlength="90" placeholder="@T("مثال: المعاملات حسب الإدارة", "Example: Transactions by department")" />
             <label class="dd-label" for="dd-type">@T("نوع العرض", "Display type")</label>
             <select class="dd-control" id="dd-type">
+                <option value="overview" id="dd-overview-type" hidden disabled>@T("العرض الأصلي للبطاقة", "Original widget view")</option>
                 <option value="bar">@T("أعمدة عمودية", "Vertical bars")</option>
                 <option value="horizontal">@T("أعمدة أفقية", "Horizontal bars")</option>
                 <option value="line">@T("خطي", "Line chart")</option>

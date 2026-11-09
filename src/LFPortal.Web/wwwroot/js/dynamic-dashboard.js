@@ -38,11 +38,38 @@
     for (const [ar,en] of presetTitles) if (value === ar || value === en) return T(ar,en);
     return value;
   };
+  // Keep the original repository-backed widget and its drill-down behavior available as a display type.
+  const overview = new Map();
+  const overviewStorage = $("dd-main-overview");
+  const overviewRoot = overviewStorage.querySelector("#dashboard-overview");
+  const overviewDefinitions = [
+    ["folders-total","إجمالي المجلدات","Total folders",3,"__folder"],
+    ["docs-total","إجمالي المستندات","Total documents",3,"__template"],
+    ["templates-total","إجمالي القوالب","Total templates",3,"__template"],
+    ["with-template","مستندات بقالب","Documents with template",3,"__template"],
+    ["without-template","مستندات بدون قالب","Documents without template",3,"__template"],
+    ["folders","المستندات حسب المجلد","Documents by folder",6,"__folder"],
+    ["templates","توزيع القوالب","Template distribution",6,"__template"],
+    ["activity","نشاط المستندات","Document activity",6,"__created"],
+    ["users","نشاط المستخدمين","User activity",6,"__creator"],
+    ["template-stats","إحصاءات القوالب","Template statistics",12,"__template"],
+    ["doc-types","توزيع أنواع المستندات","Document type distribution",6,"__template"],
+    ["health","حالة النظام","System health",6,"__template"],
+    ["recent-created","المستندات المنشأة حديثًا","Recently created documents",12,"__created"],
+    ["recent-modified","نشاط المستندات الأخير","Recent document activity",12,"__modified"]
+  ];
+  for (const [key,ar,en,span,dimension] of overviewDefinitions) {
+    const node=overviewRoot.querySelector('[data-overview-id="'+key+'"]');
+    const label=node?.querySelector(".d-card-title,.d-kpi-lbl,.folder-kpi-label");
+    overview.set("overview-"+key,{node,label,title:label?.textContent.trim()||T(ar,en),span,dimension});
+  }
+  const overviewAlert=overviewRoot.querySelector(".d-alert");
+  const widgetTitle = chart => chart.title || overview.get(chart.id)?.title || T("مؤشر","Widget");
   const EMPTY_VALUE = "\u0000no-value";
-  const validTypes = ["bar","horizontal","line","doughnut","pie","table","documents","kpi","recent-created","recent-modified"];
+  const validTypes = ["bar","horizontal","line","doughnut","pie","table","documents","kpi","recent-created","recent-modified","overview"];
   const isRecent = type => type==="recent-created" || type==="recent-modified";
   const isTable = type => type==="table" || type==="documents" || isRecent(type);
-  const dateColumn = chart => chart.type==="recent-modified" || (!isRecent(chart.type) && chart.dimension==="__modified")
+  const dateColumn = chart => chart.type==="overview" ? null : chart.type==="recent-modified" || (!isRecent(chart.type) && chart.dimension==="__modified")
     ? "modified" : chart.type==="recent-created" || chart.dimension==="__created" ? "created" : null;
   const isBar = type => type==="bar" || type==="horizontal";
   function pageCount(value) {
@@ -62,20 +89,22 @@
   let activeBoard = {...mainBoard};
   let partial = false, busy = false, editMode = false, revision = 0, savedRevision = 0, saving = false, hasSaved = false, layoutReady = false;
 
+  const quarterWidth = chart => chart.type==="kpi" || (chart.type==="overview" && overview.get(chart.id)?.span===3);
+
   function cardSpan(chart) {
-    if(chart.span==null)return chart.wide || isTable(chart.type)?12:chart.type==="kpi"?3:6;
+    if(chart.span==null)return chart.wide || isTable(chart.type)?12:quarterWidth(chart)?3:6;
     // Keep saved half/full widths; only number cards can occupy a quarter row.
-    if(chart.type==="kpi" && Number(chart.span)===3)return 3;
+    if(quarterWidth(chart) && Number(chart.span)===3)return 3;
     return Number(chart.span)>=9?12:6;
   }
 
   function normalChart(chart) {
     const oldName = chart.dimension==="__name";
     const type = chart.type==="audit" ? "recent-modified" : chart.type;
-    const title = chart.type==="audit" ? T("نشاط المستندات الأخير","Recent document activity") : String(chart.title||T("مؤشر","Widget"));
+    const title = chart.type==="audit" ? T("نشاط المستندات الأخير","Recent document activity") : String(chart.title ?? (overview.has(chart.id)?"":T("مؤشر","Widget")));
     return {
       id:String(chart.id), title:title.replace(/^شارت(?= جديد$| بدون عنوان$|$)/,T("مؤشر","Widget")).slice(0,90),
-      type:validTypes.includes(type)?type:"bar",
+      type:validTypes.includes(type) && (type!=="overview" || chart.id.startsWith("overview-"))?type:"bar",
       dimension:oldName?"__template":String(chart.dimension||"__template"),
       span:cardSpan({...chart,type}),
       from:validDate(chart.from)?chart.from:"",
@@ -89,15 +118,20 @@
   }
   function loadConfig(config) {
     if (config && Array.isArray(config.charts)) {
-      charts = config.charts.filter(c=>c && typeof c.id==="string").slice(0,60).map(normalChart);
+      charts = config.charts.filter(c=>c && typeof c.id==="string").slice(0,80).map(normalChart);
       hasSaved=true;
-      if(config.version!==2) {
+      if(config.version!==2 && config.version!==3 && activeBoard.id!=="default") {
         for(const card of defaults.filter(item=>isRecent(item.type))) {
           if(charts.length<60 && !charts.some(item=>item.type===card.type))
             charts.push(normalChart(card));
         }
       }
-    } else charts=defaults.filter(card=>activeBoard.id!=="default" || !isRecent(card.type)).map(normalChart);
+    } else charts=activeBoard.id==="default"?[]:defaults.map(normalChart);
+    if(activeBoard.id==="default" && config?.version!==3) {
+      const originalCards=[...overview].map(([id, item])=>
+        normalChart({id,title:"",type:"overview",dimension:item.dimension,span:item.span}));
+      charts=[...originalCards,...charts].slice(0,80);
+    }
   }
   function updateSaveBar(message) {
     $("dd-save-layout").disabled=!layoutReady || saving || revision===savedRevision;
@@ -139,7 +173,7 @@
     if(!layoutReady || saving || revision===savedRevision)return;
     saving=true;
     const snapshot=revision;
-    const layout={version:2,name:activeBoard.name,charts:structuredClone(charts),updatedAt:Date.now()};
+    const layout={version:3,name:activeBoard.name,charts:structuredClone(charts),updatedAt:Date.now()};
     let message;
     updateSaveBar();
     try {
@@ -428,6 +462,12 @@
     b.textContent=symbol;b.title=title;b.setAttribute("aria-label",title);
     b.addEventListener("click",handler);return b;
   }
+  function visibilityButton(hidden, handler) {
+    const button=iconButton(hidden?T("إظهار المؤشر","Show widget"):T("إخفاء المؤشر","Hide widget"),"",handler);
+    button.setAttribute("aria-pressed",String(hidden));
+    button.innerHTML='<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="2.5"/>'+(hidden?'<path d="m3 3 18 18"/>':'')+'</svg>';
+    return button;
+  }
   function drawCard(chart) {
     const type=displayType(chart);
     const ghost=Boolean(chart.hidden);
@@ -435,24 +475,32 @@
     el.className="dd-card"+(ghost?" dd-ghost":"");
     const documentTable=type==="documents" || isRecent(type);
     el.classList.toggle("dd-full-card",documentTable || chart.span===12);
-    el.classList.toggle("dd-quarter-card",type==="kpi" && chart.span===3);
-    el.classList.toggle("dd-graph",!isTable(type)&&type!=="kpi");
-    el.dataset.id=chart.id;el.draggable=editMode;
+    el.classList.toggle("dd-quarter-card",quarterWidth(chart) && chart.span===3);
+    el.classList.toggle("dd-graph",!isTable(type)&&type!=="kpi"&&type!=="overview");
+    el.dataset.id=chart.id;
     const header=document.createElement("header");header.className="dd-card-head";
     const headText=document.createElement("div"),title=document.createElement("strong");
-    title.textContent=chart.id.startsWith("base-")?presetTitle(chart.title):chart.title;headText.appendChild(title);
+    title.textContent=chart.id.startsWith("base-")?presetTitle(widgetTitle(chart)):widgetTitle(chart);headText.appendChild(title);
     const sub=document.createElement("small");sub.className="dd-card-sub";
     sub.textContent=isTable(type)&&type!=="table"?T("جدول الوثائق","Document table"):(fieldMeta(chart.dimension)?.name||T("الوثائق","Documents"))+T(" · عدد الوثائق"," · Document count");
     headText.appendChild(sub);
     const actions=document.createElement("div");actions.className="dd-card-actions";
     if(editMode) {
-      actions.append(
+      const grip=iconButton(T("اسحب لتغيير المكان","Drag to reorder"),"⠿",()=>{});
+      grip.classList.add("dd-drag-handle");grip.draggable=true;
+      grip.addEventListener("keydown",event=>{
+        if(!["ArrowUp","ArrowDown"].includes(event.key))return;
+        event.preventDefault();moveCard(chart.id,event.key==="ArrowUp"?-1:1);
+        [...$("dd-grid").children].find(card=>card.dataset.id===chart.id)?.querySelector(".dd-drag-handle")?.focus();
+      });
+      actions.append(grip,
+
         iconButton(T("تعديل المؤشر","Edit widget"),"⚙",()=>openEditor(chart.id)),
         ...(!documentTable?[iconButton(T("تبديل عرض الكرت","Change card width"),"⤢",
           ()=>setCardSpan(el,chart,nextCardSpan(chart)))]:[]),
         iconButton(T("نقل لأعلى","Move up"),"↑",()=>moveCard(chart.id,-1)),
         iconButton(T("نقل لأسفل","Move down"),"↓",()=>moveCard(chart.id,1)),
-        iconButton(ghost?T("إظهار المؤشر","Show widget"):T("إخفاء المؤشر","Hide widget"),ghost?"◉":"◌",
+        visibilityButton(ghost,
           ()=>{chart.hidden=!chart.hidden;markChanged();render();}),
         iconButton(T("حذف المؤشر","Delete widget"),"×",()=>{if(window.confirm(T("حذف هذا المؤشر من لوحتك؟","Delete this widget from your dashboard?"))){
           tablePages.delete(chart.id);charts=charts.filter(c=>c.id!==chart.id);markChanged();render();}})
@@ -466,6 +514,18 @@
       const text=document.createElement("p");text.className="dd-ghost-note";
       text.textContent=T("العنصر مخفي؛ اضغط زر العين لإظهاره","This widget is hidden. Use the visibility button to show it.");
       body.appendChild(text);
+    } else if(type==="overview") {
+      const original=overview.get(chart.id);
+      if(original?.node) {
+        el.classList.add("dd-native-widget");
+        if(original.label) {
+          const decoration=[...original.label.children];
+          original.label.replaceChildren(...decoration,document.createTextNode(widgetTitle(chart)));
+        }
+        body.appendChild(original.node);
+      } else {
+        body.textContent=T("لا تتوفر البيانات الأصلية حاليًا.","Original data is currently unavailable.");
+      }
     } else if(type==="documents" || isRecent(type)) {
       drawDocumentTable(body,chart);
     } else {
@@ -546,13 +606,21 @@
       }
     }
     el.addEventListener("dragstart",event=>{
-      if(!editMode || event.target.closest("button,select,input")) {event.preventDefault();return;}
+      if(!editMode || !event.target.closest(".dd-drag-handle")) {event.preventDefault();return;}
       event.dataTransfer?.setData("text/plain",chart.id);
       if(event.dataTransfer)event.dataTransfer.effectAllowed="move";
       el.classList.add("is-dragging");
     });
-    el.addEventListener("dragend",()=>el.classList.remove("is-dragging"));
-    el.addEventListener("dragover",event=>{if(editMode)event.preventDefault();});
+    el.addEventListener("dragend",()=>{
+      el.classList.remove("is-dragging");
+      $("dd-grid").querySelectorAll(".dd-drop-target").forEach(card=>card.classList.remove("dd-drop-target"));
+    });
+    el.addEventListener("dragover",event=>{
+      if(editMode && $("dd-grid").querySelector(".is-dragging")!==el){
+        event.preventDefault();el.classList.add("dd-drop-target");
+      }
+    });
+    el.addEventListener("dragleave",event=>{if(!el.contains(event.relatedTarget))el.classList.remove("dd-drop-target");});
     el.addEventListener("drop",event=>{
       if(!editMode || busy)return;
       event.preventDefault();const source=event.dataTransfer?.getData("text/plain");
@@ -571,16 +639,16 @@
     markChanged();render();
   }
   function nextCardSpan(chart) {
-    return chart.span===12?(chart.type==="kpi"?3:6):chart.span===3?6:12;
+    return chart.span===12?(quarterWidth(chart)?3:6):chart.span===3?6:12;
   }
   function narrowerCardSpan(chart) {
-    return chart.type==="kpi" && chart.span<=6?3:6;
+    return quarterWidth(chart) && chart.span<=6?3:6;
   }
   function setCardSpan(card,chart,span) {
     if(chart.span===span)return;
     chart.span=span;
     card.classList.toggle("dd-full-card",span===12);
-    card.classList.toggle("dd-quarter-card",chart.type==="kpi" && span===3);
+    card.classList.toggle("dd-quarter-card",quarterWidth(chart) && span===3);
     markChanged();
   }
   function attachResize(card,chart) {
@@ -618,13 +686,18 @@
     $("dd-customize").textContent=editMode?T("✓ إنهاء التخصيص","✓ Finish customizing"):T("⚙ تخصيص اللوحة","⚙ Customize dashboard");
     $("dd-customize").setAttribute("aria-pressed",String(editMode));
     $("dd-add").classList.toggle("dd-hidden",!editMode);
-    $("dd-main-overview").hidden=activeBoard.id!=="default";
+    overviewStorage.hidden=true;
+    if(overviewAlert) {
+      $("dd-grid").before(overviewAlert);
+      overviewAlert.hidden=activeBoard.id!=="default";
+    }
+    for(const {node} of overview.values())if(node)overviewRoot.appendChild(node);
     $("dd-grid").replaceChildren(...charts.filter(chart=>editMode || !chart.hidden).map(drawCard));
-    $("dd-empty").classList.toggle("dd-hidden",activeBoard.id==="default" || charts.some(c=>!c.hidden)||editMode&&charts.length>0);
+    $("dd-empty").classList.toggle("dd-hidden",charts.some(c=>!c.hidden)||editMode&&charts.length>0);
   }
   function valueChoices() {
     const target=$("dd-value-list");target.replaceChildren();
-    if(!editing||!editing.dimension)return;
+    if(!editing||!editing.dimension||editing.type==="overview")return;
     const term=$("dd-value-search").value.trim().toLocaleLowerCase();
     if(dateColumn(editing) || isRecent(editing.type) || editing.dimension==="__pages")return;
     const categories=observedValues(editing.dimension);
@@ -654,13 +727,19 @@
   }
   function openEditor(id) {
     if(!editMode || busy)return;
+    if(id===null && charts.length>=80) {
+      window.alert(T("الحد الأقصى 80 بطاقة لكل لوحة.","A dashboard can have up to 80 widgets."));
+      return;
+    }
     const item=charts.find(c=>c.id===id);
     editing=item?structuredClone(item):{
       id:"custom-"+Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,6),
       title:T("مؤشر جديد","New widget"),type:"table",dimension:"__template",
       wide:false,hidden:false,selectedValues:[]
     };
-    $("dd-title").value=editing.id.startsWith("base-")?presetTitle(editing.title):editing.title;$("dd-type").value=editing.type;
+    $("dd-overview-type").hidden=!editing.id.startsWith("overview-");
+    $("dd-overview-type").disabled=$("dd-overview-type").hidden;
+    $("dd-title").value=editing.id.startsWith("base-")?presetTitle(widgetTitle(editing)):widgetTitle(editing);$("dd-type").value=editing.type;
     $("dd-modified-from").value=editing.from||"";
     $("dd-modified-to").value=editing.to||"";
     $("dd-pages").value=editing.pages??"";
@@ -680,7 +759,7 @@
     $("dd-editoroverlay").classList.remove("dd-hidden");
   }
   function updateEditorSource() {
-    const recent=isRecent(editing.type);
+    const recent=isRecent(editing.type) || editing.type==="overview";
     const dateKey=dateColumn(editing);
     const usesField=$("dd-dimension").value==="__fields";
     $("dd-axis-options").classList.toggle("dd-hidden",recent);
@@ -691,7 +770,7 @@
     const draft={...editing,from:$("dd-modified-from").value,to:$("dd-modified-to").value};
     const tooMany=!recent && dateColumnsLimited(draft);
     for(const option of $("dd-type").options) {
-      option.disabled=isBar(option.value) && tooMany;
+      option.disabled=option.value==="overview"?option.hidden:isBar(option.value) && tooMany;
     }
     if($("dd-type").selectedOptions[0]?.disabled) {
       editing.type="documents";
@@ -716,12 +795,12 @@
     if(!editing)return;
     editing.title=$("dd-title").value.trim()||T("مؤشر بدون عنوان","Untitled widget");
     editing.type=$("dd-type").value;
-    if(!isRecent(editing.type)&&!editing.dimension)return;
+    if(editing.type!=="overview"&&!isRecent(editing.type)&&!editing.dimension)return;
     editing.from=dateColumn(editing)?$("dd-modified-from").value:"";
     editing.to=dateColumn(editing)?$("dd-modified-to").value:"";
     editing.pages=editing.dimension==="__pages"?pageCount($("dd-pages").value):null;
     const invalidRange=editing.from && editing.to && editing.from>editing.to;
-    const invalidPages=!isRecent(editing.type) && editing.dimension==="__pages" && $("dd-pages").value.trim()!=="" && editing.pages===null;
+    const invalidPages=editing.type!=="overview" && !isRecent(editing.type) && editing.dimension==="__pages" && $("dd-pages").value.trim()!=="" && editing.pages===null;
     if(invalidRange || invalidPages) {
       const error=$("dd-filter-error");
       error.textContent=invalidRange?T("تاريخ البداية يجب أن يسبق تاريخ النهاية أو يطابقه.","The start date must be on or before the end date."):T("أدخل رقمًا عشريًا أو صحيحًا يبدأ من صفر.","Enter a nonnegative number.");
@@ -735,6 +814,7 @@
     if(isBar(editing.type) && dateColumnsLimited(editing))editing.type="documents";
     tablePages.delete(editing.id);
     // Only store chosen category identifiers; aggregation always counts unique documents.
+    if(overview.get(editing.id)?.title===editing.title)editing.title="";
     const entry=normalChart(editing);
     const index=charts.findIndex(c=>c.id===entry.id);
     if(index>=0)charts[index]=entry;else charts.push(entry);
@@ -876,7 +956,7 @@
         const id=Array.from(crypto.getRandomValues(new Uint8Array(16)),
           byte=>byte.toString(16).padStart(2,"0")).join("");
         editMode=true;
-        activateBoard({id,name:value,layout:{version:2,charts:[]}});
+        activateBoard({id,name:value,layout:{version:3,charts:[]}});
         hasSaved=false;
       } else activeBoard.name=value;
       syncBoardPicker();
@@ -926,5 +1006,5 @@
     });
   }
   loadConfig(null);wire();
-  restoreServerLayout().finally(refresh);
+  document.addEventListener("DOMContentLoaded",()=>restoreServerLayout().finally(refresh),{once:true});
 })();

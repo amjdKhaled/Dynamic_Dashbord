@@ -164,7 +164,7 @@ public sealed class DynamicDashboardController : Controller
             !layout.TryGetProperty("name", out var name) || name.ValueKind != JsonValueKind.String ||
             string.IsNullOrWhiteSpace(name.GetString()) || name.GetString()!.Length > 80 ||
             !layout.TryGetProperty("charts", out var cards) ||
-            cards.ValueKind != JsonValueKind.Array || cards.GetArrayLength() > 60)
+            cards.ValueKind != JsonValueKind.Array || cards.GetArrayLength() > 80)
             return BadRequest(new { error = "مخطط اللوحة غير صالح." });
 
         var json = layout.GetRawText();

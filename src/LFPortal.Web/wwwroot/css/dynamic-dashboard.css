@@ -197,3 +197,17 @@ body:has(.dd-page.dd-is-loading) > :is(.site-header,.site-footer){display:none}
 }
 
 #dd-repository-list[hidden]{display:none}
+
+/* Original widgets keep their visual content while using the same editor and grid. */
+.dd-native-widget:not(.dd-drop-target) { border-color: transparent; box-shadow: none; background: transparent; }
+.dd-native-widget > .dd-visual { padding: 0; }
+.dd-native-widget > .dd-visual > [data-overview-id] { flex: 1; min-width: 0; margin: 0 !important; }
+.dd-native-widget .d-tbl-wrap { overflow-x: auto; }
+.dd-native-widget > .dd-card-head { display: none; }
+.dd-edit-mode .dd-native-widget > .dd-card-head { display: flex; background: var(--isb-surface); }
+.dd-edit-mode .dd-native-widget:has(.dd-resize-handle) > .dd-visual { padding-block-end: 54px; }
+.dd-drag-handle { cursor: grab; }
+.dd-drag-handle:active { cursor: grabbing; }
+.dd-card.dd-drop-target { outline: 2px dashed var(--dd-blue); outline-offset: -2px; }
+
+.dd-page .d-alert[hidden] { display: none; }

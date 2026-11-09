@@ -91,10 +91,15 @@
 
   const quarterWidth = chart => chart.type==="kpi" || (chart.type==="overview" && overview.get(chart.id)?.span===3);
 
+  const numberSpans = [3,4,6,8,12];
+  const desktopColumns = 10;
+  let desktopLayout = new Map();
+  let draggedCard = null;
+
   function cardSpan(chart) {
     if(chart.span==null)return chart.wide || isTable(chart.type)?12:quarterWidth(chart)?3:6;
     // Keep saved half/full widths; only number cards can occupy a quarter row.
-    if(quarterWidth(chart) && Number(chart.span)===3)return 3;
+    if(quarterWidth(chart) && numberSpans.includes(Number(chart.span)))return Number(chart.span);
     return Number(chart.span)>=9?12:6;
   }
 
@@ -107,6 +112,9 @@
       type:validTypes.includes(type) && (type!=="overview" || chart.id.startsWith("overview-"))?type:"bar",
       dimension:oldName?"__template":String(chart.dimension||"__template"),
       span:cardSpan({...chart,type}),
+      slot:Number.isInteger(chart.slot?.row) && chart.slot.row>=0 && chart.slot.row<160 &&
+        Number.isInteger(chart.slot.column) && chart.slot.column>=0 && chart.slot.column<desktopColumns
+        ? {row:chart.slot.row,column:chart.slot.column}:null,
       from:validDate(chart.from)?chart.from:"",
       to:validDate(chart.to)?chart.to:"",
       pages:pageCount(chart.pages),
@@ -469,6 +477,95 @@
     button.innerHTML='<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="2.5"/>'+(hidden?'<path d="m3 3 18 18"/>':'')+'</svg>';
     return button;
   }
+  function desktopWidth(chart) {
+    const type=displayType(chart);
+    if(type==="documents" || isRecent(type) || chart.span===12)return desktopColumns;
+    return quarterWidth(chart)?2*(numberSpans.indexOf(chart.span)+1):5;
+  }
+
+  function arrangeDesktop(cards) {
+    const occupied=[];
+    const placements=new Map();
+    function fits(row,column,width) {
+      return column+width<=desktopColumns &&
+        !occupied[row]?.slice(column,column+width).some(Boolean);
+    }
+    function place(chart,row,column,width) {
+      occupied[row]??=Array(desktopColumns).fill(false);
+      occupied[row].fill(true,column,column+width);
+      placements.set(chart.id,{row,column,width});
+    }
+    // Keep explicitly placed cards in their saved slots before laying out the rest.
+    for(const chart of cards) {
+      const width=desktopWidth(chart);
+      if(chart.slot && fits(chart.slot.row,chart.slot.column,width))
+        place(chart,chart.slot.row,chart.slot.column,width);
+    }
+    let cursor=0;
+    for(const chart of cards) {
+      if(placements.has(chart.id))continue;
+      const width=desktopWidth(chart);
+      while(!fits(Math.floor(cursor/desktopColumns),cursor%desktopColumns,width))cursor++;
+      place(chart,Math.floor(cursor/desktopColumns),cursor%desktopColumns,width);
+      cursor+=width;
+    }
+    return placements;
+  }
+
+  function gridPosition(element,{row,column,width}) {
+    element.style.setProperty("--dd-row",row+1);
+    element.style.setProperty("--dd-column",column+1);
+    element.style.setProperty("--dd-width",width);
+  }
+
+  function clearDropSlots() {
+    $("dd-grid").querySelectorAll(".dd-empty-slot,.dd-drop-preview").forEach(node=>node.remove());
+  }
+
+  function showDropSlots(chart) {
+    if(!window.matchMedia("(min-width: 1300px)").matches)return;
+    const width=desktopWidth(chart), grid=$("dd-grid");
+    const rowCount=Math.max(0,...[...desktopLayout.values()].map(slot=>slot.row+1));
+    const occupied=Array.from({length:rowCount+1},()=>Array(desktopColumns).fill(false));
+    for(const slot of desktopLayout.values())
+      occupied[slot.row].fill(true,slot.column,slot.column+slot.width);
+
+    const preview=document.createElement("div");
+    preview.className="dd-drop-preview";preview.hidden=true;grid.appendChild(preview);
+    for(let row=0;row<=rowCount && row<160;row++) {
+      for(let cell=0;cell<desktopColumns;cell++) {
+        if(occupied[row][cell])continue;
+        let start=cell,end=cell+1;
+        while(start>0 && !occupied[row][start-1])start--;
+        while(end<desktopColumns && !occupied[row][end])end++;
+        if(end-start<width)continue;
+        const column=Math.min(cell,end-width);
+        const zone=document.createElement("div");
+        zone.className="dd-empty-slot";zone.setAttribute("aria-hidden","true");
+        gridPosition(zone,{row,column:cell,width:1});
+        zone.addEventListener("dragover",event=>{
+          if(draggedCard!==chart.id)return;
+          event.preventDefault();event.dataTransfer.dropEffect="move";
+          gridPosition(preview,{row,column,width});preview.hidden=false;
+        });
+        zone.addEventListener("dragleave",()=>{preview.hidden=true;});
+        zone.addEventListener("drop",event=>{
+          if(draggedCard!==chart.id || busy)return;
+          event.preventDefault();
+          for(const card of charts) {
+            const position=desktopLayout.get(card.id);
+            if(position && position.row<160)card.slot={row:position.row,column:position.column};
+          }
+          chart.slot={row,column};
+          charts.sort((left,right)=>(left.slot ? left.slot.row*desktopColumns+left.slot.column : Infinity) -
+            (right.slot ? right.slot.row*desktopColumns+right.slot.column : Infinity));
+          draggedCard=null;markChanged();render();
+        });
+        grid.appendChild(zone);
+      }
+    }
+  }
+
   function drawCard(chart) {
     const type=displayType(chart);
     const ghost=Boolean(chart.hidden);
@@ -479,6 +576,7 @@
     el.classList.toggle("dd-quarter-card",quarterWidth(chart) && chart.span===3);
     el.classList.toggle("dd-graph",!isTable(type)&&type!=="kpi"&&type!=="overview");
     el.dataset.id=chart.id;
+    gridPosition(el,desktopLayout.get(chart.id));
     const header=document.createElement("header");header.className="dd-card-head";
     const headText=document.createElement("div"),title=document.createElement("strong");
     title.textContent=chart.id.startsWith("base-")?presetTitle(widgetTitle(chart)):widgetTitle(chart);headText.appendChild(title);
@@ -621,14 +719,17 @@
       if(!editMode || !event.target.closest(".dd-drag-handle")) {event.preventDefault();return;}
       event.dataTransfer?.setData("text/plain",chart.id);
       if(event.dataTransfer)event.dataTransfer.effectAllowed="move";
+      draggedCard=chart.id;
       el.classList.add("is-dragging");
+      showDropSlots(chart);
     });
     el.addEventListener("dragend",()=>{
+      draggedCard=null;clearDropSlots();
       el.classList.remove("is-dragging");
       $("dd-grid").querySelectorAll(".dd-drop-target").forEach(card=>card.classList.remove("dd-drop-target"));
     });
     el.addEventListener("dragover",event=>{
-      if(editMode && $("dd-grid").querySelector(".is-dragging")!==el){
+      if(editMode && draggedCard && draggedCard!==chart.id){
         event.preventDefault();el.classList.add("dd-drop-target");
       }
     });
@@ -636,9 +737,15 @@
     el.addEventListener("drop",event=>{
       if(!editMode || busy)return;
       event.preventDefault();const source=event.dataTransfer?.getData("text/plain");
-      if(!source||source===chart.id)return;
+      if(!source||source!==draggedCard||source===chart.id)return;
       const i=charts.findIndex(c=>c.id===source),j=charts.findIndex(c=>c.id===chart.id);
       if(i<0||j<0)return;
+      if(charts[i].slot || charts[j].slot) {
+        const from=desktopLayout.get(source),to=desktopLayout.get(chart.id);
+        charts[i].slot=to?{row:to.row,column:Math.min(to.column,desktopColumns-desktopWidth(charts[i]))}:null;
+        charts[j].slot=from?{row:from.row,column:Math.min(from.column,desktopColumns-desktopWidth(charts[j]))}:null;
+      }
+      draggedCard=null;
       charts.splice(j,0,charts.splice(i,1)[0]);markChanged();render();
     });
     return el;
@@ -647,21 +754,29 @@
     const index=charts.findIndex(card=>card.id===id);
     const target=index+offset;
     if(index<0 || target<0 || target>=charts.length)return;
+    if(charts[index].slot || charts[target].slot) {
+      const from=desktopLayout.get(charts[index].id),to=desktopLayout.get(charts[target].id);
+      charts[index].slot=to?{row:to.row,column:Math.min(to.column,desktopColumns-desktopWidth(charts[index]))}:null;
+      charts[target].slot=from?{row:from.row,column:Math.min(from.column,desktopColumns-desktopWidth(charts[target]))}:null;
+    }
     charts.splice(target,0,charts.splice(index,1)[0]);
     markChanged();render();
   }
-  function nextCardSpan(chart) {
-    return chart.span===12?(quarterWidth(chart)?3:6):chart.span===3?6:12;
+  function stepCardSpan(chart, direction, cycle=false) {
+    const widths=quarterWidth(chart)?numberSpans:[6,12];
+    const next=widths.indexOf(chart.span)+direction;
+    return widths[cycle?(next+widths.length)%widths.length:Math.min(widths.length-1,Math.max(0,next))];
   }
-  function narrowerCardSpan(chart) {
-    return quarterWidth(chart) && chart.span<=6?3:6;
-  }
+  function nextCardSpan(chart) { return stepCardSpan(chart,1,true); }
+
   function setCardSpan(card,chart,span) {
     if(chart.span===span)return;
     chart.span=span;
-    card.classList.toggle("dd-full-card",span===12);
-    card.classList.toggle("dd-quarter-card",quarterWidth(chart) && span===3);
-    markChanged();
+    if(chart.slot && chart.slot.column+desktopWidth(chart)>desktopColumns)
+      chart.slot={row:chart.slot.row,column:desktopColumns-desktopWidth(chart)};
+    markChanged();render();
+    const updated=[...$("dd-grid").children].find(widget=>widget.dataset.id===card.dataset.id);
+    updated?.querySelector(".dd-resize-handle")?.focus({preventScroll:true});
   }
   function attachResize(card,chart) {
     const handle=iconButton(chart.type==="kpi"?T("تغيير عرض بطاقة الأرقام","Resize number card"):T("تغيير العرض إلى نصف الصف أو عرضه الكامل","Resize to half or full row width"),"↔",
@@ -679,7 +794,7 @@
         handle.removeEventListener("lostpointercapture",cancel);
         const distance=(next.clientX-event.clientX)*(rtl?-1:1);
         // Keep the canvas and its labels stable until the resize is committed.
-        if(Math.abs(distance)>=24)setCardSpan(card,chart,distance>0?(chart.span===3?6:12):narrowerCardSpan(chart));
+        if(Math.abs(distance)>=24)setCardSpan(card,chart,stepCardSpan(chart,distance>0?1:-1));
       };
       const cancel=()=>handle.removeEventListener("pointerup",finish);
       handle.addEventListener("pointerup",finish,{once:true});
@@ -689,7 +804,7 @@
       if(!["ArrowLeft","ArrowRight"].includes(event.key))return;
       event.preventDefault();
       const rtl=getComputedStyle(card).direction==="rtl";
-      setCardSpan(card,chart,(event.key==="ArrowLeft")===rtl?(chart.span===3?6:12):narrowerCardSpan(chart));
+      setCardSpan(card,chart,stepCardSpan(chart,(event.key==="ArrowLeft")===rtl?1:-1));
     });
   }
   function render() {
@@ -704,7 +819,9 @@
       overviewAlert.hidden=activeBoard.id!=="default";
     }
     for(const {node} of overview.values())if(node)overviewRoot.appendChild(node);
-    $("dd-grid").replaceChildren(...charts.filter(chart=>editMode || !chart.hidden).map(drawCard));
+    const visible=charts.filter(chart=>editMode || !chart.hidden);
+    desktopLayout=arrangeDesktop(visible);
+    $("dd-grid").replaceChildren(...visible.map(drawCard));
     $("dd-empty").classList.toggle("dd-hidden",charts.some(c=>!c.hidden)||editMode&&charts.length>0);
   }
   function valueChoices() {

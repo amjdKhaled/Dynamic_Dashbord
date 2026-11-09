@@ -221,8 +221,7 @@ body:has(.dd-page.dd-is-loading) > :is(.site-header,.site-footer){display:none}
   .dd-grid > .dd-card.dd-full-card { grid-column: 1 / -1; }
 }
 
-/* Every widget's edit tools occupy exactly one row, even on narrow cards.
-   When they cannot fit, scroll just the toolbar instead of wrapping the Delete button. */
+/* Edit tools use one row beneath the title. */
 .dd-edit-mode .dd-card-head {
   display: flex;
   flex-direction: column;
@@ -239,21 +238,8 @@ body:has(.dd-page.dd-is-loading) > :is(.site-header,.site-footer){display:none}
   max-width: 100%;
   min-width: 0;
   flex: 0 0 auto;
-  gap: 4px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: thin;
-  padding-block: 2px 5px;
-  overscroll-behavior-x: contain;
-}
-.dd-edit-mode .dd-card-actions .dd-icon-btn {
-  flex: 0 0 36px;
-  width: 36px;
-  min-width: 36px;
-  height: 36px;
-  min-height: 36px;
-  padding: 5px;
-  font-size: 19px;
+  gap: 3px;
+  padding-block: 2px;
 }
 .dd-edit-mode .dd-card.dd-quarter-card .dd-card-head { padding: 12px 10px 8px; }
 .dd-edit-mode .dd-card.dd-quarter-card .dd-visual { padding-inline: 10px; }
@@ -357,4 +343,65 @@ body:has(.dd-page.dd-is-loading) > :is(.site-header,.site-footer){display:none}
 .dd-card.dd-native-widget.dd-accent-card .folder-kpi-card {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'%3E%3Cpath d='M40 12 63 40 40 68 17 40Z M23 23h34v34H23z' fill='none' stroke='%23ffffff' stroke-opacity='.11' stroke-width='1.2'/%3E%3C/svg%3E") !important;
   background-size: 80px 80px;
+}
+
+/* Keep every edit action visible within the card, even at one fifth of a row. */
+.dd-edit-mode .dd-card-actions .dd-icon-btn {
+  flex: 0 1 34px;
+  width: 34px;
+  min-width: 0;
+  height: 32px;
+  min-height: 32px;
+  padding: 2px;
+  font-size: 16px;
+}
+.dd-edit-mode .dd-card-actions .dd-icon-btn svg { max-width: 85%; height: auto; }
+
+/* Only the widget content wears the accent in edit mode. */
+.dd-edit-mode .dd-card.dd-accent-card {
+  background: transparent;
+  color: inherit;
+  border: 1px dashed var(--dd-border);
+  box-shadow: none;
+}
+.dd-edit-mode .dd-card.dd-accent-card .dd-card-head {
+  background: var(--isb-surface);
+  color: var(--isb-ink);
+  border-color: var(--dd-border);
+}
+.dd-edit-mode .dd-card.dd-accent-card .dd-card-head strong { color: var(--isb-ink); }
+.dd-edit-mode .dd-card.dd-accent-card .dd-card-sub { color: var(--dd-muted); }
+.dd-edit-mode .dd-card.dd-accent-card > .dd-visual {
+  background-color: #0d3850;
+  border-radius: 14px;
+  border-bottom: 4px solid #bf972c;
+}
+.dd-edit-mode .dd-card.dd-native-widget.dd-accent-card > .dd-visual > .folder-kpi-card {
+  border-bottom: 0;
+}
+.dd-edit-mode .dd-card.dd-accent-card:has(.dd-resize-handle) > .dd-visual {
+  padding-block-end: 18px;
+  margin-block-end: 48px;
+}
+
+.dd-empty-slot,.dd-drop-preview { display: none; }
+@media (min-width: 1300px) {
+  .dd-grid > .dd-card,
+  .dd-grid > .dd-empty-slot,
+  .dd-grid > .dd-drop-preview {
+    grid-column: var(--dd-column) / span var(--dd-width);
+    grid-row: var(--dd-row);
+  }
+  .dd-grid > .dd-card:is(.dd-full-card,.dd-quarter-card) {
+    grid-column: var(--dd-column) / span var(--dd-width);
+  }
+  .dd-empty-slot { display: block; min-height: 72px; }
+  .dd-drop-preview:not([hidden]) {
+    display: block;
+    pointer-events: none;
+    border: 2px dashed var(--dd-blue);
+    border-radius: var(--isb-radius);
+    background: rgb(21 96 131 / 16%);
+    z-index: 1;
+  }
 }

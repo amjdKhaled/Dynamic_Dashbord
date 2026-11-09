@@ -88,12 +88,7 @@
 .dd-card-actions{flex-wrap:wrap;justify-content:flex-end}
 .dd-card-actions .dd-icon-btn{min-height:32px}
 .dd-edit-mode .dd-card[draggable=true]{cursor:grab}
-.dd-layout-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
-  margin:18px 0;padding:11px 16px;border:1px solid var(--dd-border);border-radius:12px;background:#fff}
-.dd-layout-bar strong{font-size:16px}
-.dd-save-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 #dd-layout-status{font-size:14px;color:var(--dd-muted)}
-.dd-save-actions button:disabled{opacity:.6;cursor:default}
 @media(max-width:850px){.dd-grid{grid-template-columns:minmax(0,1fr)}.dd-card-head{flex-wrap:wrap}}
 .dd-card{border:1px solid var(--isb-border-soft);border-radius:var(--isb-radius);min-height:0;box-shadow:var(--isb-card-shadow)}
 .dd-card-head{padding:18px 18px 10px}
@@ -405,3 +400,12 @@ body:has(.dd-page.dd-is-loading) > :is(.site-header,.site-footer){display:none}
     z-index: 1;
   }
 }
+
+/* The overview card already supplies the featured surface and gold edge. */
+.dd-card.dd-native-widget.dd-accent-card:has(> .dd-visual > .folder-kpi-card):not(.dd-drop-target) {
+  background: transparent;
+  border-bottom-color: transparent;
+  box-shadow: none;
+}
+.dd-color-option .dd-control { width: auto; max-width: 48%; }
+.dd-color-option i { width: .9rem; height: .9rem; border: 1px solid var(--dd-border); border-radius: 50%; flex: none; }

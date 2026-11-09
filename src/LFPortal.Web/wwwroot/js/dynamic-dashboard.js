@@ -64,13 +64,40 @@
     overview.set("overview-"+key,{node,label,title:label?.textContent.trim()||T(ar,en),span,dimension});
   }
   const overviewAlert=overviewRoot.querySelector(".d-alert");
-  const widgetTitle = chart => chart.title || overview.get(chart.id)?.title || T("مؤشر","Widget");
+  const widgetTitle = chart => chart.title || overview.get(chart.id)?.title || T("جدول","Table");
   const EMPTY_VALUE = "\u0000no-value";
   const validTypes = ["bar","horizontal","line","doughnut","pie","table","documents","kpi","recent-created","recent-modified","overview"];
   const isRecent = type => type==="recent-created" || type==="recent-modified";
   const isTable = type => type==="table" || type==="documents" || isRecent(type);
   const dateColumn = chart => chart.type==="overview" ? null : chart.type==="recent-modified" || (!isRecent(chart.type) && chart.dimension==="__modified")
     ? "modified" : chart.type==="recent-created" || chart.dimension==="__created" ? "created" : null;
+  const isGraph = type => ["bar","horizontal","line","doughnut","pie"].includes(type);
+  const nativeColors = new WeakMap();
+  const colorNames = [T("كحلي","Navy"),T("أزرق سماوي","Sky blue"),T("ذهبي","Gold"),
+    T("أزرق بترولي","Petrol blue"),T("أخضر","Green"),T("رمادي مزرق","Blue gray"),T("ذهبي فاتح","Light gold")];
+  const nativeGraph = chart => {
+    const canvas=overview.get(chart.id)?.node.querySelector(".chart-container canvas,.dashboard-round-stage canvas");
+    return canvas && window.Chart?.getChart(canvas);
+  };
+  const nativeKey = (label,index) => JSON.stringify([index,label]);
+  function paintNativeGraph(chart,node) {
+    const graph=nativeGraph(chart);
+    if(!graph)return;
+    if(!nativeColors.has(graph)) {
+      if(!Object.keys(chart.colors).length)return;
+      nativeColors.set(graph,graph.data.datasets.map(set=>set.backgroundColor));
+    }
+    const defaults=nativeColors.get(graph);
+    graph.data.datasets.forEach((set,index)=>{
+      const colors=graph.data.labels.map((label,i)=>chart.colors[nativeKey(label,index)] ??
+        (Array.isArray(defaults[index])?defaults[index][i]:defaults[index]));
+      set.backgroundColor=Object.keys(chart.colors).length?colors:defaults[index];
+      if(graph.config.type==="doughnut" || graph.config.type==="pie") {
+        node.querySelectorAll(".dashboard-round-dot").forEach((dot,i)=>dot.style.backgroundColor=colors[i]);
+      }
+    });
+    graph.update("none");
+  }
   const isBar = type => type==="bar" || type==="horizontal";
   function pageCount(value) {
     const decimal = String(value ?? "").trim()
@@ -106,9 +133,9 @@
   function normalChart(chart) {
     const oldName = chart.dimension==="__name";
     const type = chart.type==="audit" ? "recent-modified" : chart.type;
-    const title = chart.type==="audit" ? T("نشاط المستندات الأخير","Recent document activity") : String(chart.title ?? (overview.has(chart.id)?"":T("مؤشر","Widget")));
+    const title = chart.type==="audit" ? T("نشاط المستندات الأخير","Recent document activity") : String(chart.title ?? (overview.has(chart.id)?"":T("جدول","Table")));
     return {
-      id:String(chart.id), title:title.replace(/^شارت(?= جديد$| بدون عنوان$|$)/,T("مؤشر","Widget")).slice(0,90),
+      id:String(chart.id), title:title.replace(/^شارت(?= جديد$| بدون عنوان$|$)/,T("جدول","Table")).slice(0,90),
       type:validTypes.includes(type) && (type!=="overview" || chart.id.startsWith("overview-"))?type:"bar",
       dimension:oldName?"__template":String(chart.dimension||"__template"),
       span:cardSpan({...chart,type}),
@@ -120,6 +147,7 @@
       pages:pageCount(chart.pages),
       hidden:Boolean(chart.hidden),
       accent:chart.accent===undefined ? chart.id==="overview-folders-total" : Boolean(chart.accent),
+      colors:Object.fromEntries(Object.entries(chart.colors ?? {}).filter(([,color])=>palette.includes(color)).slice(0,500)),
       allValues:Boolean(chart.allValues),
       selectedValues:!oldName && Array.isArray(chart.selectedValues)
         ? [...new Set(chart.selectedValues.filter(v=>typeof v==="string"))].slice(0,500) : []
@@ -143,6 +171,7 @@
     }
   }
   function updateSaveBar(message) {
+    $("dd-save-layout").classList.toggle("dd-hidden",revision===savedRevision);
     $("dd-save-layout").disabled=!layoutReady || saving || revision===savedRevision;
     for(const id of ["dd-board-list","dd-new-board","dd-rename-board"])
       $(id).disabled=!layoutReady || saving;
@@ -472,7 +501,7 @@
     b.addEventListener("click",handler);return b;
   }
   function visibilityButton(hidden, handler) {
-    const button=iconButton(hidden?T("إظهار المؤشر","Show widget"):T("إخفاء المؤشر","Hide widget"),"",handler);
+    const button=iconButton(hidden?T("إظهار الجدول","Show widget"):T("إخفاء الجدول","Hide widget"),"",handler);
     button.setAttribute("aria-pressed",String(hidden));
     button.innerHTML='<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="2.5"/>'+(hidden?'<path d="m3 3 18 18"/>':'')+'</svg>';
     return button;
@@ -594,14 +623,14 @@
       });
       actions.append(grip,
 
-        iconButton(T("تعديل المؤشر","Edit widget"),"⚙",()=>openEditor(chart.id)),
+        iconButton(T("تعديل الجدول","Edit widget"),"⚙",()=>openEditor(chart.id)),
         ...(!documentTable?[iconButton(T("تبديل عرض الكرت","Change card width"),"⤢",
           ()=>setCardSpan(el,chart,nextCardSpan(chart)))]:[]),
         iconButton(T("نقل لأعلى","Move up"),"↑",()=>moveCard(chart.id,-1)),
         iconButton(T("نقل لأسفل","Move down"),"↓",()=>moveCard(chart.id,1)),
         visibilityButton(ghost,
           ()=>{chart.hidden=!chart.hidden;markChanged();render();}),
-        iconButton(T("حذف المؤشر","Delete widget"),"×",()=>{if(window.confirm(T("حذف هذا المؤشر من لوحتك؟","Delete this widget from your dashboard?"))){
+        iconButton(T("حذف الجدول","Delete widget"),"×",()=>{if(window.confirm(T("حذف هذا الجدول من لوحتك؟","Delete this widget from your dashboard?"))){
           tablePages.delete(chart.id);charts=charts.filter(c=>c.id!==chart.id);markChanged();render();}})
       );
     }
@@ -622,6 +651,7 @@
           original.label.replaceChildren(...decoration,document.createTextNode(widgetTitle(chart)));
         }
         body.appendChild(original.node);
+        paintNativeGraph(chart,original.node);
       } else {
         body.textContent=T("لا تتوفر البيانات الأصلية حاليًا.","Original data is currently unavailable.");
       }
@@ -674,6 +704,8 @@
         const canvas=document.createElement("canvas");stage.appendChild(canvas);body.appendChild(stage);
         const type=chart.type==="horizontal"?"bar":chart.type, axis=chart.type==="horizontal";
         const circ=["doughnut","pie"].includes(type);
+        const colors=data.groups.map((group,i)=>chart.colors[group.key] ??
+          (type==="line"?palette[0]:palette[i%palette.length]));
         if(circ) {
           const layout=document.createElement("div");layout.className="dashboard-round-layout";
           stage.className="dashboard-round-stage";
@@ -682,7 +714,7 @@
             const group=data.groups[i],btn=document.createElement("button");
             btn.type="button";btn.className="dashboard-round-row";
             const dot=document.createElement("span");dot.className="dashboard-round-dot";
-            dot.style.backgroundColor=palette[i%palette.length];
+            dot.style.backgroundColor=colors[i];
             const label=document.createElement("span");label.className="dashboard-round-label";label.textContent=group.label;label.title=group.label;
             const count=document.createElement("strong");count.textContent=group.value.toLocaleString(locale);
             btn.append(dot,label,count);
@@ -698,7 +730,9 @@
           type,
           data:{labels:data.groups.map(g=>g.label),datasets:[{
             label:T("عدد الوثائق","Document count"),data:data.groups.map(g=>g.value),
-            borderColor:palette[0],backgroundColor:type==="line"?palette[0]:data.groups.map((_,i)=>palette[i%palette.length]),
+            borderColor:palette[0],backgroundColor:colors,
+            ...(type==="line"?{pointBackgroundColor:colors,pointBorderColor:colors,
+              segment:{borderColor:context=>colors[context.p1DataIndex]}}:{}),
             ...(circ?{radius:"96%"}:{}),
             fill:false,borderWidth:type==="line"?2:0,tension:.27,borderRadius:type==="bar"?4:0
           }]},
@@ -854,6 +888,43 @@
       label.append(check,text,count);target.appendChild(label);
     }
   }
+  function renderColorChoices() {
+    const target=$("dd-color-list");
+    target.replaceChildren();
+    const graph=editing.type==="overview"?nativeGraph(editing):null;
+    const visible=Boolean(graph || isGraph(editing.type)&&editing.dimension);
+    $("dd-chart-colors").classList.toggle("dd-hidden",!visible);
+    if(!visible)return;
+    const choices=graph
+      ? graph.data.datasets.flatMap((set,index)=>graph.data.labels.map(label=>({
+          key:nativeKey(label,index),label:graph.data.datasets.length>1?set.label+" · "+label:String(label)
+        })))
+      : summary({...editing,from:$("dd-modified-from").value,to:$("dd-modified-to").value,
+          pages:pageCount($("dd-pages").value)}).groups;
+    const term=$("dd-color-search").value.trim().toLocaleLowerCase();
+    for(const {key,label} of choices.filter(choice=>choice.label.toLocaleLowerCase().includes(term))) {
+      const row=document.createElement("label");row.className="dd-value-option dd-color-option";
+      const name=document.createElement("span");name.textContent=label;
+      const swatch=document.createElement("i");swatch.setAttribute("aria-hidden","true");
+      const select=document.createElement("select");select.className="dd-control";
+      selectOptions(select,[{value:"",label:T("تلقائي","Automatic")},...palette.map((value,index)=>({value,label:colorNames[index]}))],
+        editing.colors[key] ?? "",null);
+      swatch.style.backgroundColor=select.value;
+      select.addEventListener("change",()=>{
+        if(select.value)Object.defineProperty(editing.colors,key,{value:select.value,writable:true,enumerable:true,configurable:true});
+        else delete editing.colors[key];
+        swatch.style.backgroundColor=select.value;
+        updateEditorSave();
+      });
+      row.append(name,swatch,select);target.appendChild(row);
+    }
+  }
+  const editorFields=["dd-title","dd-type","dd-card-style","dd-dimension","dd-field","dd-modified-from","dd-modified-to","dd-pages"];
+  const editorSnapshot=()=>JSON.stringify([editorFields.map(id=>$(id).value),editing.allValues,editing.selectedValues,editing.colors]);
+  let initialEditorSnapshot="";
+  function updateEditorSave() {
+    $("dd-save").classList.toggle("dd-hidden",!editing || initialEditorSnapshot===editorSnapshot());
+  }
   function openEditor(id) {
     if(!editMode || busy)return;
     if(id===null && charts.length>=80) {
@@ -863,8 +934,8 @@
     const item=charts.find(c=>c.id===id);
     editing=item?structuredClone(item):{
       id:"custom-"+Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,6),
-      title:T("مؤشر جديد","New widget"),type:"table",dimension:"__template",
-      wide:false,hidden:false,selectedValues:[]
+      title:T("جدول جديد","New table"),type:"table",dimension:"__template",
+      wide:false,hidden:false,allValues:false,selectedValues:[],colors:{}
     };
     $("dd-overview-type").hidden=!editing.id.startsWith("overview-");
     $("dd-overview-type").disabled=$("dd-overview-type").hidden;
@@ -884,8 +955,11 @@
       fieldOptions.push({value:editing.dimension,label:T("حقل محفوظ (","Saved field (")+editing.dimension+")"});
     selectOptions($("dd-field"),fieldOptions,isField?editing.dimension:"",T("اختر الحقل","Select a field"));
     $("dd-value-search").value="";
+    $("dd-color-search").value="";
     updateEditorSource();
     valueChoices();
+    initialEditorSnapshot=editorSnapshot();
+    updateEditorSave();
     $("dd-editoroverlay").classList.remove("dd-hidden");
   }
   function updateEditorSource() {
@@ -910,12 +984,15 @@
     limit.textContent=tooMany?T("الأعمدة متاحة حتى ١٠ وثائق ضمن نطاق التاريخ.","Bar charts are available for up to 10 documents in the date range."):"";
     limit.classList.toggle("dd-hidden",!limit.textContent);
     $("dd-save").disabled=!recent&&!editing.dimension;
+    renderColorChoices();
+    updateEditorSave();
   }
   function changeDimension() {
     if(!editing)return;
     editing.dimension=$("dd-dimension").value==="__fields"?$("dd-field").value:$("dd-dimension").value;
     editing.selectedValues=[];
     editing.allValues=false;
+    editing.colors={};
     $("dd-value-search").value="";
     updateEditorSource();
     valueChoices();
@@ -923,7 +1000,7 @@
   const closeEditor=()=>{$("dd-editoroverlay").classList.add("dd-hidden");editing=null;};
   function saveEditor() {
     if(!editing)return;
-    editing.title=$("dd-title").value.trim()||T("مؤشر بدون عنوان","Untitled widget");
+    editing.title=$("dd-title").value.trim()||T("جدول بدون اسم","Untitled table");
     editing.type=$("dd-type").value;
     editing.accent=$("dd-card-style").value==="accent";
     if(editing.type!=="overview"&&!isRecent(editing.type)&&!editing.dimension)return;
@@ -970,7 +1047,7 @@
       if(!Array.isArray(result.fields)||!Array.isArray(result.rows))throw new Error(T("استجابة غير متوقعة من Laserfiche.","Unexpected response from Laserfiche."));
       fields=result.fields;rows=result.rows;partial=Boolean(result.fieldDataIncomplete);
       if(partial){
-        $("dd-warning").textContent=T("بعض بيانات الحقول لم ترجع كاملة من Laserfiche. تعرض المؤشرات القيم المتاحة فقط.","Laserfiche returned incomplete field data. Widgets show available values only.");
+        $("dd-warning").textContent=T("بعض بيانات الحقول لم ترجع كاملة من Laserfiche. تعرض الجداول القيم المتاحة فقط.","Laserfiche returned incomplete field data. Widgets show available values only.");
         $("dd-warning").classList.remove("dd-hidden");
       }
       render();
@@ -1073,7 +1150,10 @@
       dialog.showModal();
       name.focus();
     };
-    $("dd-new-board").addEventListener("click",()=>open(true));
+    $("dd-new-board").addEventListener("click",()=>{
+      $("dd-board-tools").classList.remove("dd-hidden");
+      open(true);
+    });
     $("dd-rename-board").addEventListener("click",()=>open(false));
     $("dd-board-cancel").addEventListener("click",()=>dialog.close());
     dialog.querySelector("form").addEventListener("submit",event=>{
@@ -1103,6 +1183,7 @@
     $("dd-refresh").addEventListener("click",refresh);
     $("dd-customize").addEventListener("click",()=>{
       editMode=!editMode;
+      if(editMode)$("dd-board-tools").classList.remove("dd-hidden");
       if(!editMode)closeEditor();
       render();
     });
@@ -1125,6 +1206,10 @@
     $("dd-dimension").addEventListener("change",changeDimension);
     $("dd-field").addEventListener("change",changeDimension);
     $("dd-value-search").addEventListener("input",valueChoices);
+    $("dd-color-search").addEventListener("input",()=>{if(editing)renderColorChoices();});
+    for(const id of ["dd-title","dd-card-style"])
+      $(id).addEventListener("input",updateEditorSave);
+    $("dd-pages").addEventListener("input",()=>{if(editing)updateEditorSource();});
     for(const id of ["dd-modified-from","dd-modified-to"])
       $(id).addEventListener("input",()=>{if(editing)updateEditorSource();});
     $("dd-clear-values").addEventListener("click",()=>{

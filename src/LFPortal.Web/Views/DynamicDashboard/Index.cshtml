@@ -22,23 +22,18 @@
             <button type="button" class="dd-btn" id="dd-repository">@T("تبديل المستودع", "Switch repository") · @ViewBag.RepositoryId</button>
             <button type="button" class="dd-btn" id="dd-refresh">@T("⟳ تحديث البيانات", "⟳ Refresh data")</button>
             <button type="button" class="dd-btn" id="dd-customize" aria-pressed="false">@T("⚙ تخصيص اللوحة", "⚙ Customize dashboard")</button>
-            <button type="button" class="dd-btn dd-btn-primary dd-hidden" id="dd-add">@T("＋ إضافة مؤشر", "＋ Add widget")</button>
+            <button type="button" class="dd-btn" id="dd-new-board" disabled>@T("＋ لوحة جديدة", "＋ New dashboard")</button>
+            <div class="dd-board-picker dd-hidden" id="dd-board-tools">
+                <select class="dd-control" id="dd-board-list" aria-label="@T("لوحات التحكم", "Dashboards")" disabled></select>
+                <button type="button" class="dd-btn" id="dd-rename-board" disabled>@T("تغيير الاسم", "Rename")</button>
+            </div>
+            <span id="dd-layout-status" role="status"></span>
+            <button type="button" class="dd-btn dd-btn-primary dd-hidden" id="dd-save-layout" disabled>@T("حفظ اللوحة", "Save dashboard")</button>
+            <button type="button" class="dd-btn dd-btn-primary dd-hidden" id="dd-add">@T("＋ إضافة جدول", "＋ Add table")</button>
         </div>
     </header>
     <div class="dd-layout">
         <section class="dd-workspace" aria-label="@T("محتوى اللوحة", "Dashboard content")">
-            <div class="dd-layout-bar" aria-label="@T("حفظ اللوحة", "Save dashboard")">
-                <div class="dd-board-picker">
-                    <label for="dd-board-list"><strong>@T("لوحات التحكم", "Dashboards")</strong></label>
-                    <select class="dd-control" id="dd-board-list" disabled></select>
-                    <button type="button" class="dd-btn" id="dd-new-board" disabled>@T("＋ لوحة جديدة", "＋ New dashboard")</button>
-                    <button type="button" class="dd-btn" id="dd-rename-board" disabled>@T("تغيير الاسم", "Rename")</button>
-                </div>
-                <div class="dd-save-actions">
-                    <span id="dd-layout-status" role="status"></span>
-                    <button type="button" class="dd-btn dd-btn-primary" id="dd-save-layout" disabled>@T("حفظ اللوحة", "Save dashboard")</button>
-                </div>
-            </div>
             <p id="dd-warning" class="dd-warning dd-hidden" role="alert"></p>
             <section id="dd-main-overview" aria-label="@T("إحصائيات اللوحة الرئيسية", "Main dashboard statistics")">
                 <partial name="~/Views/Dashboard/_Overview.cshtml" model="Model" />
@@ -83,10 +78,10 @@
     <div id="dd-editoroverlay" class="dd-overlay dd-hidden">
         <section class="dd-editor" role="dialog" aria-modal="true" aria-labelledby="dd-editor-title">
             <div class="dd-editor-head">
-                <h2 id="dd-editor-title">@T("إعدادات المؤشر", "Widget settings")</h2>
+                <h2 id="dd-editor-title">@T("إعدادات الجدول", "Table settings")</h2>
                 <button type="button" id="dd-closeeditor" class="dd-icon-btn" title="@T("إغلاق", "Close")" aria-label="@T("إغلاق", "Close")">✕</button>
             </div>
-            <label class="dd-label" for="dd-title">@T("العنوان", "Title")</label>
+            <label class="dd-label" for="dd-title">@T("الاسم", "Name")</label>
             <input class="dd-control" id="dd-title" maxlength="90" placeholder="@T("مثال: المعاملات حسب الإدارة", "Example: Transactions by department")" />
             <label class="dd-label" for="dd-type">@T("نوع العرض", "Display type")</label>
             <select class="dd-control" id="dd-type">
@@ -96,7 +91,7 @@
                 <option value="line">@T("خطي", "Line chart")</option>
                 <option value="doughnut">@T("دائري مجوف", "Doughnut chart")</option>
                 <option value="pie">@T("دائري", "Pie chart")</option>
-                <option value="table">@T("جدول التجميع", "Summary table")</option>
+                <option value="table">@T("جدول", "Table")</option>
                 <option value="documents">@T("جدول الوثائق", "Document table")</option>
                 <option value="recent-created">@T("جدول المستندات المنشأة حديثًا", "Recently created documents table")</option>
                 <option value="recent-modified">@T("جدول نشاط المستندات الأخير", "Recent document activity table")</option>
@@ -128,14 +123,19 @@
             <label class="dd-label" for="dd-value-search">@T("القيم الموجودة في الوثائق (اختياري)", "Document values (optional)")</label>
             <div class="dd-values-actions">
                 <input type="search" id="dd-value-search" class="dd-control" placeholder="@T("البحث عن قيمة...", "Search for a value...")" autocomplete="off" />
-                <button type="button" id="dd-clear-values" class="dd-btn">@T("عرض جميع القيم", "Show all values")</button>
+                <button type="button" id="dd-clear-values" class="dd-btn">@T("عرض كل القيم", "Show all values")</button>
             </div>
             <div id="dd-value-list" class="dd-value-list" aria-live="polite"></div>
+            </div>
+            <div id="dd-chart-colors" class="dd-hidden">
+                <label class="dd-label" for="dd-color-search">@T("ألوان الرسم البياني", "Chart colors")</label>
+                <input type="search" class="dd-control" id="dd-color-search" placeholder="@T("البحث عن قيمة…", "Search values…")" />
+                <div id="dd-color-list" class="dd-value-list"></div>
             </div>
             <p id="dd-filter-error" class="dd-warning dd-hidden" role="alert"></p>
             <div class="dd-editor-actions">
                 <button type="button" id="dd-cancel" class="dd-btn">@T("إلغاء", "Cancel")</button>
-                <button type="button" id="dd-save" class="dd-btn dd-btn-primary">@T("تطبيق المؤشر", "Apply widget")</button>
+                <button type="button" id="dd-save" class="dd-btn dd-btn-primary dd-hidden">@T("حفظ الجدول", "Save table")</button>
             </div>
         </section>
     </div>

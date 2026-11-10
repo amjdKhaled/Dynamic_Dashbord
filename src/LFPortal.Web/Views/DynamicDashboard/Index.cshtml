@@ -19,18 +19,25 @@
             <h1>@T("لوحة المعلومات", "Dynamic") <span>@T("الديناميكية", "Dashboard")</span></h1>
         </div>
         <div class="dd-head-actions">
-            <button type="button" class="dd-btn" id="dd-repository">@T("تبديل المستودع", "Switch repository") · @ViewBag.RepositoryId</button>
-            <button type="button" class="dd-btn" id="dd-refresh">@T("⟳ تحديث البيانات", "⟳ Refresh data")</button>
-            <button type="button" class="dd-btn" id="dd-customize" aria-pressed="false">@T("⚙ تخصيص اللوحة", "⚙ Customize dashboard")</button>
-            <button type="button" class="dd-btn" id="dd-new-board" disabled>@T("＋ لوحة جديدة", "＋ New dashboard")</button>
-            <div class="dd-board-picker dd-hidden" id="dd-board-tools">
-                <select class="dd-control" id="dd-board-list" aria-label="@T("لوحات التحكم", "Dashboards")" disabled></select>
+            <div class="dd-board-picker">
+                <select class="dd-control" id="dd-board-list" aria-label="@T("اختيار اللوحة", "Select dashboard")" disabled>
+                    <option value="default">@T("اللوحة الرئيسية", "Main dashboard")</option>
+                </select>
+                <button type="button" class="dd-btn" id="dd-new-board" disabled>@T("＋ لوحة جديدة", "＋ New dashboard")</button>
                 <button type="button" class="dd-btn" id="dd-rename-board" disabled>@T("تغيير الاسم", "Rename")</button>
+                <button type="button" class="dd-btn dd-delete-board dd-toolbar-hidden" id="dd-delete-board" disabled>@T("حذف اللوحة", "Delete dashboard")</button>
             </div>
-            <span id="dd-layout-status" role="status"></span>
-            <button type="button" class="dd-btn dd-btn-primary dd-hidden" id="dd-save-layout" disabled>@T("حفظ اللوحة", "Save dashboard")</button>
-            <button type="button" class="dd-btn dd-btn-primary dd-hidden" id="dd-add">@T("＋ إضافة جدول", "＋ Add table")</button>
+            <div class="dd-head-group">
+                <button type="button" class="dd-btn" id="dd-customize" aria-pressed="false">@T("⚙ تخصيص اللوحة", "⚙ Customize dashboard")</button>
+                <button type="button" class="dd-btn dd-btn-primary dd-toolbar-hidden" id="dd-add">@T("＋ إضافة جدول", "＋ Add table")</button>
+                <button type="button" class="dd-btn dd-btn-primary dd-toolbar-hidden" id="dd-save-layout" disabled>@T("حفظ اللوحة", "Save dashboard")</button>
+            </div>
+            <div class="dd-head-group">
+                <button type="button" class="dd-btn" id="dd-refresh">@T("⟳ تحديث البيانات", "⟳ Refresh data")</button>
+                <button type="button" class="dd-btn" id="dd-repository">@T("تبديل المستودع", "Switch repository") · @ViewBag.RepositoryId</button>
+            </div>
         </div>
+        <span id="dd-layout-status" role="status"></span>
     </header>
     <div class="dd-layout">
         <section class="dd-workspace" aria-label="@T("محتوى اللوحة", "Dashboard content")">
@@ -91,17 +98,19 @@
                 <option value="line">@T("خطي", "Line chart")</option>
                 <option value="doughnut">@T("دائري مجوف", "Doughnut chart")</option>
                 <option value="pie">@T("دائري", "Pie chart")</option>
-                <option value="table">@T("جدول", "Table")</option>
-                <option value="documents">@T("جدول الوثائق", "Document table")</option>
-                <option value="recent-created">@T("جدول المستندات المنشأة حديثًا", "Recently created documents table")</option>
-                <option value="recent-modified">@T("جدول نشاط المستندات الأخير", "Recent document activity table")</option>
-                <option value="kpi">@T("بطاقة الأرقام", "Number card")</option>
+                <option value="table">@T("جدول الإحصاءات", "Statistics table")</option>
+                <option value="documents">@T("قائمة المستندات", "Document list")</option>
+                <option value="recent-created">@T("جدول المستندات المنشأة", "Created documents table")</option>
+                <option value="recent-modified">@T("جدول نشاط المستندات", "Document activity table")</option>
+                <option value="kpi">@T("بطاقة", "Card")</option>
             </select>
-            <label class="dd-label" for="dd-card-style">@T("شكل ولون البطاقة", "Card style and color")</label>
+            <div id="dd-card-color" class="dd-hidden">
+            <label class="dd-label" for="dd-card-style">@T("لون البطاقة", "Card color")</label>
             <select class="dd-control" id="dd-card-style">
                 <option value="standard">@T("عادي - أبيض", "Standard - white")</option>
                 <option value="accent">@T("مميز - كحلي بحد ذهبي", "Featured - navy with gold trim")</option>
             </select>
+            </div>
             <p id="dd-display-limit" class="dd-warning dd-hidden" role="status"></p>
             <div id="dd-axis-options">
             <label class="dd-label" for="dd-dimension">@T("البيانات / المحور التصنيفي", "Data / category axis")</label>
@@ -123,7 +132,7 @@
             <label class="dd-label" for="dd-value-search">@T("القيم الموجودة في الوثائق (اختياري)", "Document values (optional)")</label>
             <div class="dd-values-actions">
                 <input type="search" id="dd-value-search" class="dd-control" placeholder="@T("البحث عن قيمة...", "Search for a value...")" autocomplete="off" />
-                <button type="button" id="dd-clear-values" class="dd-btn">@T("عرض كل القيم", "Show all values")</button>
+                <button type="button" id="dd-clear-values" class="dd-btn">@T("اختيار الكل", "Select all")</button>
             </div>
             <div id="dd-value-list" class="dd-value-list" aria-live="polite"></div>
             </div>

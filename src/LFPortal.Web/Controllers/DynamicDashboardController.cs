@@ -136,7 +136,9 @@ public sealed class DynamicDashboardController : Controller
 
             async Task ReadBoardAsync(string path, string id)
             {
-                var json = await System.IO.File.ReadAllTextAsync(path, cancellationToken);
+                string json;
+                try { json = await System.IO.File.ReadAllTextAsync(path, cancellationToken); }
+                catch (FileNotFoundException) { return; }
                 var layout = JsonSerializer.Deserialize<JsonElement>(json);
                 var name = layout.TryGetProperty("name", out var savedName) && savedName.ValueKind == JsonValueKind.String
                     ? savedName.GetString() : "اللوحة الرئيسية";
@@ -196,6 +198,35 @@ public sealed class DynamicDashboardController : Controller
         {
             if (temp is not null && System.IO.File.Exists(temp))
                 System.IO.File.Delete(temp);
+        }
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeleteLayout([FromQuery] string boardId, CancellationToken cancellationToken)
+    {
+        if (!Guid.TryParseExact(boardId, "N", out var id) || boardId != id.ToString("N"))
+            return BadRequest();
+
+        try
+        {
+            var repo = await _repository.GetActiveRepositoryAsync(cancellationToken);
+            if (!IsCurrentRepository(repo.RepositoryId)) return StatusCode(409);
+            var scope = GetLayoutScope(repo.ServerUrl, repo.RepositoryId);
+            if (scope is null) return Forbid();
+            if (!MatchesLayoutScope(scope)) return StatusCode(409);
+
+            System.IO.File.Delete(GetLayoutPath(scope, boardId));
+            return NoContent();
+        }
+        catch (DirectoryNotFoundException)
+        {
+            return NoContent();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Could not delete dynamic dashboard layout.");
+            return StatusCode(503);
         }
     }
 

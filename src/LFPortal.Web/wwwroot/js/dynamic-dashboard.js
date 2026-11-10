@@ -114,7 +114,7 @@
   const boards = new Map();
   const mainBoard = {id:"default",name:T("اللوحة الرئيسية","Main dashboard"),layout:null};
   let activeBoard = {...mainBoard};
-  let partial = false, busy = false, editMode = false, revision = 0, savedRevision = 0, saving = false, hasSaved = false, layoutReady = false;
+  let partial = false, busy = false, editMode = false, revision = 0, savedRevision = 0, saving = false, hasSaved = false, layoutReady = false, deleting = false;
 
   const quarterWidth = chart => chart.type==="kpi" || (chart.type==="overview" && overview.get(chart.id)?.span===3);
 
@@ -171,10 +171,16 @@
     }
   }
   function updateSaveBar(message) {
-    $("dd-save-layout").classList.toggle("dd-hidden",revision===savedRevision);
-    $("dd-save-layout").disabled=!layoutReady || saving || revision===savedRevision;
+    $("dd-save-layout").classList.toggle("dd-toolbar-hidden",revision===savedRevision);
+    $("dd-save-layout").disabled=!layoutReady || saving || deleting || revision===savedRevision;
     for(const id of ["dd-board-list","dd-new-board","dd-rename-board"])
-      $(id).disabled=!layoutReady || saving;
+      $(id).disabled=!layoutReady || saving || deleting;
+    const custom=activeBoard.id!=="default";
+    $("dd-delete-board").classList.toggle("dd-toolbar-hidden",!custom);
+    $("dd-delete-board").disabled=!layoutReady || !custom || saving || deleting;
+    $("dd-customize").disabled=deleting;
+    $("dd-refresh").disabled=deleting;
+    $("dd-repository").disabled=deleting;
     $("dd-layout-status").textContent=message ?? (saving?T("جارٍ الحفظ…","Saving…")
       :revision!==savedRevision?T("تغييرات غير محفوظة","Unsaved changes")
       :hasSaved?T("تم الحفظ","Saved"):"");
@@ -208,7 +214,7 @@
     render();
   }
   async function saveLayout() {
-    if(!layoutReady || saving || revision===savedRevision)return;
+    if(!layoutReady || saving || deleting || revision===savedRevision)return;
     saving=true;
     const snapshot=revision;
     const layout={version:3,name:activeBoard.name,charts:structuredClone(charts),updatedAt:Date.now()};
@@ -610,7 +616,7 @@
     const headText=document.createElement("div"),title=document.createElement("strong");
     title.textContent=chart.id.startsWith("base-")?presetTitle(widgetTitle(chart)):widgetTitle(chart);headText.appendChild(title);
     const sub=document.createElement("small");sub.className="dd-card-sub";
-    sub.textContent=isTable(type)&&type!=="table"?T("جدول الوثائق","Document table"):(fieldMeta(chart.dimension)?.name||T("الوثائق","Documents"))+T(" · عدد الوثائق"," · Document count");
+    sub.textContent=isTable(type)&&type!=="table"?T("قائمة المستندات","Document list"):(fieldMeta(chart.dimension)?.name||T("الوثائق","Documents"))+T(" · عدد الوثائق"," · Document count");
     headText.appendChild(sub);
     const actions=document.createElement("div");actions.className="dd-card-actions";
     if(editMode) {
@@ -769,7 +775,7 @@
     });
     el.addEventListener("dragleave",event=>{if(!el.contains(event.relatedTarget))el.classList.remove("dd-drop-target");});
     el.addEventListener("drop",event=>{
-      if(!editMode || busy)return;
+      if(!editMode || busy || deleting)return;
       event.preventDefault();const source=event.dataTransfer?.getData("text/plain");
       if(!source||source!==draggedCard||source===chart.id)return;
       const i=charts.findIndex(c=>c.id===source),j=charts.findIndex(c=>c.id===chart.id);
@@ -846,7 +852,7 @@
     root.classList.toggle("dd-edit-mode",editMode);
     $("dd-customize").textContent=editMode?T("✓ إنهاء التخصيص","✓ Finish customizing"):T("⚙ تخصيص اللوحة","⚙ Customize dashboard");
     $("dd-customize").setAttribute("aria-pressed",String(editMode));
-    $("dd-add").classList.toggle("dd-hidden",!editMode);
+    $("dd-add").classList.toggle("dd-toolbar-hidden",!editMode);
     overviewStorage.hidden=true;
     if(overviewAlert) {
       $("dd-grid").before(overviewAlert);
@@ -902,22 +908,31 @@
       : summary({...editing,from:$("dd-modified-from").value,to:$("dd-modified-to").value,
           pages:pageCount($("dd-pages").value)}).groups;
     const term=$("dd-color-search").value.trim().toLocaleLowerCase();
-    for(const {key,label} of choices.filter(choice=>choice.label.toLocaleLowerCase().includes(term))) {
-      const row=document.createElement("label");row.className="dd-value-option dd-color-option";
+    const filtered=choices.filter(choice=>choice.label.toLocaleLowerCase().includes(term));
+    filtered.forEach(({key,label},rowIndex)=>{
+      const row=document.createElement("div");row.className="dd-value-option dd-color-option";
       const name=document.createElement("span");name.textContent=label;
-      const swatch=document.createElement("i");swatch.setAttribute("aria-hidden","true");
-      const select=document.createElement("select");select.className="dd-control";
-      selectOptions(select,[{value:"",label:T("تلقائي","Automatic")},...palette.map((value,index)=>({value,label:colorNames[index]}))],
-        editing.colors[key] ?? "",null);
-      swatch.style.backgroundColor=select.value;
-      select.addEventListener("change",()=>{
-        if(select.value)Object.defineProperty(editing.colors,key,{value:select.value,writable:true,enumerable:true,configurable:true});
-        else delete editing.colors[key];
-        swatch.style.backgroundColor=select.value;
-        updateEditorSave();
-      });
-      row.append(name,swatch,select);target.appendChild(row);
-    }
+      const options=document.createElement("div");options.className="dd-color-swatches";
+      options.setAttribute("role","group");options.setAttribute("aria-label",label);
+      for(const [index,color] of ["",...palette].entries()) {
+        const input=document.createElement("input");
+        input.type="radio";
+        input.name="dd-color-value-"+rowIndex;
+        input.className="dd-color-swatch";
+        input.title=color?colorNames[index-1]:T("تلقائي","Automatic");
+        input.setAttribute("aria-label",input.title);
+        input.checked=color===(editing.colors[key] ?? "");
+        if(color)input.style.setProperty("--dd-swatch",color);
+        else input.classList.add("dd-color-auto");
+        input.addEventListener("change",()=>{
+          if(color)Object.defineProperty(editing.colors,key,{value:color,writable:true,enumerable:true,configurable:true});
+          else delete editing.colors[key];
+          updateEditorSave();
+        });
+        options.appendChild(input);
+      }
+      row.append(name,options);target.appendChild(row);
+    });
   }
   const editorFields=["dd-title","dd-type","dd-card-style","dd-dimension","dd-field","dd-modified-from","dd-modified-to","dd-pages"];
   const editorSnapshot=()=>JSON.stringify([editorFields.map(id=>$(id).value),editing.allValues,editing.selectedValues,editing.colors]);
@@ -926,7 +941,7 @@
     $("dd-save").classList.toggle("dd-hidden",!editing || initialEditorSnapshot===editorSnapshot());
   }
   function openEditor(id) {
-    if(!editMode || busy)return;
+    if(!editMode || busy || deleting)return;
     if(id===null && charts.length>=80) {
       window.alert(T("الحد الأقصى 80 بطاقة لكل لوحة.","A dashboard can have up to 80 widgets."));
       return;
@@ -980,6 +995,7 @@
       editing.type="documents";
       $("dd-type").value=editing.type;
     }
+    $("dd-card-color").classList.toggle("dd-hidden",!quarterWidth(editing));
     const limit=$("dd-display-limit");
     limit.textContent=tooMany?T("الأعمدة متاحة حتى ١٠ وثائق ضمن نطاق التاريخ.","Bar charts are available for up to 10 documents in the date range."):"";
     limit.classList.toggle("dd-hidden",!limit.textContent);
@@ -1002,7 +1018,7 @@
     if(!editing)return;
     editing.title=$("dd-title").value.trim()||T("جدول بدون اسم","Untitled table");
     editing.type=$("dd-type").value;
-    editing.accent=$("dd-card-style").value==="accent";
+    editing.accent=quarterWidth(editing) && $("dd-card-style").value==="accent";
     if(editing.type!=="overview"&&!isRecent(editing.type)&&!editing.dimension)return;
     editing.from=dateColumn(editing)?$("dd-modified-from").value:"";
     editing.to=dateColumn(editing)?$("dd-modified-to").value:"";
@@ -1131,7 +1147,7 @@
     const name=$("dd-board-name");
     const list=$("dd-board-list");
     let creating=false;
-    const canLeave=()=>!saving && (revision===savedRevision ||
+    const canLeave=()=>!saving && !deleting && (revision===savedRevision ||
       window.confirm(T("توجد تغييرات غير محفوظة. هل تتابع؟","There are unsaved changes. Continue?")));
     list.addEventListener("change",()=>{
       if(!canLeave()) {list.value=activeBoard.id;return;}
@@ -1150,9 +1166,36 @@
       dialog.showModal();
       name.focus();
     };
-    $("dd-new-board").addEventListener("click",()=>{
-      $("dd-board-tools").classList.remove("dd-hidden");
-      open(true);
+    $("dd-new-board").addEventListener("click",()=>open(true));
+    $("dd-delete-board").addEventListener("click",async()=>{
+      const {id,name:boardName}=activeBoard;
+      if(id==="default" || !layoutReady || saving || deleting || busy)return;
+      if(!window.confirm(T("حذف لوحة «","Delete dashboard “")+boardName+T("»؟","”?")))return;
+      deleting=true;
+      closeEditor();
+      updateSaveBar(T("جارٍ حذف اللوحة…","Deleting dashboard…"));
+      let message;
+      try {
+        if(boards.has(id)) {
+          const token=root.querySelector('input[name="__RequestVerificationToken"]')?.value;
+          const response=await fetch("/DynamicDashboard/DeleteLayout?boardId="+encodeURIComponent(id),{
+            method:"POST",credentials:"same-origin",
+            headers:{...requestHeaders,"RequestVerificationToken":token||""}
+          });
+          if(!response.ok)throw new Error("HTTP "+response.status);
+        }
+        boards.delete(id);
+        editMode=false;
+        activateBoard(boards.get(mainBoard.id)??mainBoard);
+        rememberBoard();
+        message=T("تم حذف اللوحة","Dashboard deleted");
+      } catch {
+        message=T("تعذر حذف اللوحة. حاول مرة أخرى.","Could not delete dashboard. Try again.");
+      } finally {
+        deleting=false;
+        updateSaveBar(message);
+        if(activeBoard.id==="default")list.focus();
+      }
     });
     $("dd-rename-board").addEventListener("click",()=>open(false));
     $("dd-board-cancel").addEventListener("click",()=>dialog.close());
@@ -1183,7 +1226,6 @@
     $("dd-refresh").addEventListener("click",refresh);
     $("dd-customize").addEventListener("click",()=>{
       editMode=!editMode;
-      if(editMode)$("dd-board-tools").classList.remove("dd-hidden");
       if(!editMode)closeEditor();
       render();
     });

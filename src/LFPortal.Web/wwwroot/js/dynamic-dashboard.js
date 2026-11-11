@@ -120,6 +120,9 @@
 
   const numberSpans = [3,4,6,8,12];
   const desktopColumns = 10;
+  const comparisonViews=["table","bar","horizontal","line","doughnut","pie"];
+  const vacantRows=new Map();
+  const desktopGrid=()=>window.matchMedia("(min-width: 1100px)").matches;
   let desktopLayout = new Map();
   let draggedCard = null;
 
@@ -139,6 +142,7 @@
       type:validTypes.includes(type) && (type!=="overview" || chart.id.startsWith("overview-"))?type:"bar",
       dimension:oldName?"__template":String(chart.dimension||"__template"),
       span:cardSpan({...chart,type}),
+      width:Number.isInteger(chart.width) && chart.width>=2 && chart.width<=desktopColumns?chart.width:null,
       slot:Number.isInteger(chart.slot?.row) && chart.slot.row>=0 && chart.slot.row<160 &&
         Number.isInteger(chart.slot.column) && chart.slot.column>=0 && chart.slot.column<desktopColumns
         ? {row:chart.slot.row,column:chart.slot.column}:null,
@@ -147,7 +151,7 @@
       pages:pageCount(chart.pages),
       hidden:Boolean(chart.hidden),
       accent:chart.accent===undefined ? chart.id==="overview-folders-total" : Boolean(chart.accent),
-      ...(type==="comparison"?{comparison:[0,1].map(index=>({
+      ...(type==="comparison"?{comparisonView:comparisonViews.includes(chart.comparisonView)?chart.comparisonView:"table",comparison:[0,1].map(index=>({
         template:String(chart.comparison?.[index]?.template ?? ""),
         field:String(chart.comparison?.[index]?.field ?? "")
       }))}:{}),
@@ -209,6 +213,15 @@
   function activateBoard(board) {
     closeEditor();
     activeBoard={...board};
+    vacantRows.clear();
+    if(Array.isArray(board.layout?.vacantRows)) {
+      for(const entry of board.layout.vacantRows) {
+        if(!Array.isArray(entry))continue;
+        const [row,height]=entry;
+        if(Number.isInteger(row) && row>=0 && row<160 && Number.isFinite(height) && height>0 && height<=12000)
+          vacantRows.set(row,height);
+      }
+    }
     revision=0;
     savedRevision=0;
     hasSaved=false;
@@ -222,7 +235,7 @@
     if(!layoutReady || saving || deleting || revision===savedRevision)return;
     saving=true;
     const snapshot=revision;
-    const layout={version:3,name:activeBoard.name,charts:structuredClone(charts),updatedAt:Date.now()};
+    const layout={version:3,name:activeBoard.name,charts:structuredClone(charts),vacantRows:[...vacantRows],updatedAt:Date.now()};
     let message;
     updateSaveBar();
     try {
@@ -458,6 +471,10 @@
           cell.dataset.label=headers[index];
           const text=document.createElement("span");
           text.textContent=value;
+          if(chart.type==="comparison" && index===0) {
+            text.title=String(value);
+            text.className="dd-compare-value";
+          }
           cell.appendChild(text);
         });
         row.tabIndex=0;row.style.cursor="pointer";
@@ -519,10 +536,21 @@
   }
   function desktopWidth(chart) {
     const type=displayType(chart);
-    if(type==="documents" || type==="comparison" || isRecent(type) || chart.span===12)return desktopColumns;
+    if(type==="documents" || isRecent(type))return desktopColumns;
+    if(chart.width)return Math.max(minimumWidth(chart),chart.width);
+    if(chart.span===12)return desktopColumns;
     return quarterWidth(chart)?2*(numberSpans.indexOf(chart.span)+1):5;
   }
 
+  function minimumWidth(chart) {
+    return quarterWidth(chart)?2:displayType(chart)==="documents" || isRecent(chart.type)?10:3;
+  }
+  function freezeSlots() {
+    for(const item of charts) {
+      const slot=desktopLayout.get(item.id);
+      if(slot)item.slot={row:slot.row,column:slot.column};
+    }
+  }
   function arrangeDesktop(cards) {
     const occupied=[];
     const placements=new Map();
@@ -563,9 +591,9 @@
   }
 
   function showDropSlots(chart) {
-    if(!window.matchMedia("(min-width: 1300px)").matches)return;
+    if(!window.matchMedia("(min-width: 1100px)").matches)return;
     const width=desktopWidth(chart), grid=$("dd-grid");
-    const rowCount=Math.max(0,...[...desktopLayout.values()].map(slot=>slot.row+1));
+    const rowCount=Math.max(0,...[...desktopLayout.values()].map(slot=>slot.row+1),...[...vacantRows.keys()].map(row=>row+1));
     const occupied=Array.from({length:rowCount+1},()=>Array(desktopColumns).fill(false));
     for(const slot of desktopLayout.values())
       occupied[slot.row].fill(true,slot.column,slot.column+slot.width);
@@ -578,8 +606,10 @@
         let start=cell,end=cell+1;
         while(start>0 && !occupied[row][start-1])start--;
         while(end<desktopColumns && !occupied[row][end])end++;
-        if(end-start<width)continue;
-        const column=Math.min(cell,end-width);
+        const peers=charts.filter(item=>item!==chart && desktopLayout.get(item.id)?.row===row);
+        const repack=end-start<width && peers.reduce((used,item)=>used+desktopWidth(item),width)<=desktopColumns;
+        if(end-start<width && !repack)continue;
+        const column=repack?Math.min(cell,desktopColumns-width):Math.min(cell,end-width);
         const zone=document.createElement("div");
         zone.className="dd-empty-slot";zone.setAttribute("aria-hidden","true");
         gridPosition(zone,{row,column:cell,width:1});
@@ -592,11 +622,15 @@
         zone.addEventListener("drop",event=>{
           if(draggedCard!==chart.id || busy)return;
           event.preventDefault();
-          for(const card of charts) {
-            const position=desktopLayout.get(card.id);
-            if(position && position.row<160)card.slot={row:position.row,column:position.column};
-          }
+          freezeSlots();
           chart.slot={row,column};
+          if(repack) {
+            let start=0;
+            for(const item of [...peers,chart].sort((a,b)=>a.slot.column-b.slot.column)) {
+              item.slot={row,column:start};
+              start+=desktopWidth(item);
+            }
+          }
           charts.sort((left,right)=>(left.slot ? left.slot.row*desktopColumns+left.slot.column : Infinity) -
             (right.slot ? right.slot.row*desktopColumns+right.slot.column : Infinity));
           draggedCard=null;markChanged();render();
@@ -611,7 +645,7 @@
     const ghost=Boolean(chart.hidden);
     const el=document.createElement("article");
     el.className="dd-card"+(ghost?" dd-ghost":"")+(chart.accent?" dd-accent-card":"");
-    const documentTable=type==="documents" || type==="comparison" || isRecent(type);
+    const documentTable=type==="documents" || isRecent(type);
     el.classList.toggle("dd-full-card",documentTable || chart.span===12);
     el.classList.toggle("dd-quarter-card",quarterWidth(chart) && chart.span===3);
     el.classList.toggle("dd-graph",!isTable(type)&&type!=="kpi"&&type!=="overview");
@@ -644,6 +678,11 @@
         visibilityButton(ghost,
           ()=>{chart.hidden=!chart.hidden;markChanged();render();}),
         ...(activeBoard.id==="default" && overview.has(chart.id)?[]:[iconButton(T("حذف الجدول","Delete widget"),"×",()=>{if(window.confirm(T("حذف هذا الجدول من لوحتك؟","Delete this widget from your dashboard?"))){
+          const position=desktopLayout.get(chart.id);
+          if(position && desktopGrid()) {
+            freezeSlots();
+            vacantRows.set(position.row,Math.min(12000,el.getBoundingClientRect().height));
+          }
           tablePages.delete(chart.id);charts=charts.filter(c=>c.id!==chart.id);markChanged();render();}})])
       );
     }
@@ -799,7 +838,7 @@
     const left=charts[first], right=charts[second];
     const from=desktopLayout.get(left.id), to=desktopLayout.get(right.id);
     [charts[first],charts[second]]=[right,left];
-    if(!from || !to || !window.matchMedia("(min-width: 1300px)").matches)return;
+    if(!from || !to || !window.matchMedia("(min-width: 1100px)").matches)return;
     const swapRows=from.row!==to.row && from.width!==to.width;
     const reorderRow=from.row===to.row && from.width!==to.width;
     if(reorderRow) {
@@ -839,23 +878,65 @@
     markChanged();render();
   }
   function stepCardSpan(chart, direction, cycle=false) {
-    const widths=quarterWidth(chart)?numberSpans:[6,12];
-    const next=widths.indexOf(chart.span)+direction;
-    return widths[cycle?(next+widths.length)%widths.length:Math.min(widths.length-1,Math.max(0,next))];
+    const width=desktopWidth(chart);
+    const minimum=minimumWidth(chart);
+    if(cycle && width===desktopColumns)return minimum;
+    return Math.max(minimum,Math.min(desktopColumns,width+direction));
   }
   function nextCardSpan(chart) { return stepCardSpan(chart,1,true); }
 
-  function setCardSpan(card,chart,span) {
-    if(chart.span===span)return;
-    chart.span=span;
-    if(chart.slot && chart.slot.column+desktopWidth(chart)>desktopColumns)
-      chart.slot={row:chart.slot.row,column:desktopColumns-desktopWidth(chart)};
+  function setCardSpan(card,chart,width) {
+    if(desktopWidth(chart)===width)return;
+    const current=desktopLayout.get(chart.id);
+    const oldWidth=desktopWidth(chart);
+    chart.width=width;
+    chart.span=width===desktopColumns?12:6;
+    if(current && desktopGrid()) {
+      freezeSlots();
+      const peers=charts.filter(item=>desktopLayout.get(item.id)?.row===current.row)
+        .sort((a,b)=>a.slot.column-b.slot.column);
+      const remaining=[...peers];
+      if(width>oldWidth) {
+        let occupied=remaining.reduce((total,item)=>total+desktopWidth(item),0);
+        for(const item of [...remaining].reverse()) {
+          if(item===chart || occupied<=desktopColumns)continue;
+          const size=desktopWidth(item);
+          item.width=Math.max(minimumWidth(item),size-(occupied-desktopColumns));
+          occupied-=size-item.width;
+        }
+        const overflow=[];
+        for(const item of [...remaining].reverse()) {
+          if(item===chart || occupied<=desktopColumns)continue;
+          overflow.unshift(item);
+          remaining.splice(remaining.indexOf(item),1);
+          occupied-=desktopWidth(item);
+        }
+        if(overflow.length) {
+          for(const item of charts)if(item.slot?.row>current.row)item.slot.row++;
+          for(const [row,height] of [...vacantRows].sort(([a],[b])=>b-a)) {
+            if(row<=current.row)continue;
+            vacantRows.delete(row);
+            vacantRows.set(row+1,height);
+          }
+          let column=0;
+          for(const item of overflow) {
+            item.slot={row:current.row+1,column};
+            column+=desktopWidth(item);
+          }
+        }
+      }
+      let column=0;
+      for(const item of remaining) {
+        item.slot={row:current.row,column};
+        column+=desktopWidth(item);
+      }
+    }
     markChanged();render();
     const updated=[...$("dd-grid").children].find(widget=>widget.dataset.id===card.dataset.id);
     updated?.querySelector(".dd-resize-handle")?.focus({preventScroll:true});
   }
   function attachResize(card,chart) {
-    const handle=iconButton(chart.type==="kpi"?T("تغيير عرض بطاقة الأرقام","Resize number card"):T("تغيير العرض إلى نصف الصف أو عرضه الكامل","Resize to half or full row width"),"↔",
+    const handle=iconButton(chart.type==="kpi"?T("تغيير عرض بطاقة الأرقام","Resize number card"):T("تغيير عرض الجدول أو الرسم","Resize table or chart"),"↔",
       event=>{if(event.detail===0)setCardSpan(card,chart,nextCardSpan(chart));});
     handle.classList.add("dd-resize-handle");
     card.appendChild(handle);
@@ -865,27 +946,23 @@
       handle.focus({preventScroll:true});
       handle.setPointerCapture(event.pointerId);
       const rtl=getComputedStyle(card).direction==="rtl";
-      const widths=quarterWidth(chart)?numberSpans:[6,12];
+      const widths=Array.from({length:desktopColumns-minimumWidth(chart)+1},(_,i)=>i+minimumWidth(chart));
       const grid=$("dd-grid");
       const gap=parseFloat(getComputedStyle(grid).columnGap)||0;
       const gridWidth=grid.clientWidth;
-      const desktop=window.matchMedia("(min-width: 1300px)").matches;
-      const widthFor=span=>{
-        const part=desktop?desktopWidth({...chart,span})/desktopColumns:span/12;
-        return (gridWidth+gap)*part-gap;
-      };
+      const widthFor=width=>(gridWidth+gap)*width/desktopColumns-gap;
       const preview=document.createElement("div");
       preview.className="dd-resize-preview";
       preview.setAttribute("aria-hidden","true");
       card.appendChild(preview);
-      let nextSpan=chart.span;
+      let nextSpan=desktopWidth(chart);
       const update=next=>{
         const distance=(next.clientX-event.clientX)*(rtl?-1:1);
-        const target=widthFor(chart.span)+distance;
+        const target=widthFor(desktopWidth(chart))+distance;
         const width=Math.max(widthFor(widths[0]),Math.min(widthFor(widths.at(-1)),target));
         preview.style.setProperty("--dd-preview-width",width+"px");
         nextSpan=widths.reduce((closest,span)=>
-          Math.abs(widthFor(span)-width)<Math.abs(widthFor(closest)-width)?span:closest,chart.span);
+          Math.abs(widthFor(span)-width)<Math.abs(widthFor(closest)-width)?span:closest,desktopWidth(chart));
       };
       const cleanup=()=>{
         handle.removeEventListener("pointermove",update);
@@ -911,6 +988,7 @@
     });
   }
   function render() {
+    const scrollTop=window.scrollY;
     instances.forEach(c=>c.destroy());instances=[];
     root.classList.toggle("dd-edit-mode",editMode);
     $("dd-customize").textContent=editMode?T("إنهاء التخصيص","Finish customizing"):T("تخصيص اللوحة","Customize dashboard");
@@ -924,7 +1002,21 @@
     for(const {node} of overview.values())if(node)overviewRoot.appendChild(node);
     const visible=charts.filter(chart=>editMode || !chart.hidden);
     desktopLayout=arrangeDesktop(visible);
-    $("dd-grid").replaceChildren(...visible.map(drawCard));
+    const grid=$("dd-grid");
+    grid.replaceChildren(...visible.map(drawCard));
+    if(desktopGrid()) {
+      const occupied=new Set([...desktopLayout.values()].map(slot=>slot.row));
+      for(const [row,height] of vacantRows) {
+        if(occupied.has(row))continue;
+        const space=document.createElement("div");
+        space.className="dd-vacant-row";
+        space.setAttribute("aria-hidden","true");
+        space.style.gridRow=row+1;
+        space.style.minHeight=height+"px";
+        grid.appendChild(space);
+      }
+    }
+    if(window.scrollY!==scrollTop)window.scrollTo({top:scrollTop,behavior:"instant"});
     $("dd-empty").classList.toggle("dd-hidden",charts.some(c=>!c.hidden)||editMode&&charts.length>0);
   }
   function valueChoices() {
@@ -1016,9 +1108,58 @@
       }
     });
     const headers=sides.map(({template,field})=>template+" · "+(fieldMeta(field)?.name ?? field));
-    drawTable(body,chart,[T("القيمة","Value"),...headers],[...groups].sort(([a],[b])=>a.localeCompare(b,locale)),
-      ([value,counts])=>[value,...counts.map(docs=>docs.size.toLocaleString(locale))],
-      ([value,counts])=>openArchive(value,counts.flatMap(docs=>[...docs.values()])));
+    const values=[...groups].sort(([a],[b])=>a.localeCompare(b,locale));
+    const open=([value,counts],side)=>openArchive(value,
+      (side===undefined?counts:[counts[side]]).flatMap(docs=>[...docs.values()]));
+    const view=chart.comparisonView;
+    if(view==="table" || !window.Chart || !values.length) {
+      drawTable(body,chart,[T("القيمة","Value"),...headers],values,
+        ([value,counts])=>[value,...counts.map(docs=>docs.size.toLocaleString(locale))],open);
+      return;
+    }
+
+    const plotted=values.slice(0,20);
+    if(plotted.length<values.length) {
+      const note=document.createElement("small");
+      note.className="dd-chart-note";
+      note.textContent=T("يظهر الرسم أول ٢٠ قيمة. يعرض الجدول جميع القيم.","The chart shows the first 20 values. The table shows all values.");
+      body.appendChild(note);
+    }
+    const shorten=value=>value.length>32?value.slice(0,32)+"…":value;
+    const stage=document.createElement("div");
+    stage.className="dd-chart-stage dd-comparison-stage";
+    const canvas=document.createElement("canvas");
+    stage.appendChild(canvas);
+    body.appendChild(stage);
+    const circular=["doughnut","pie"].includes(view);
+    const colors=plotted.map((_,index)=>palette[index%palette.length]);
+    if(circular) {
+      const rings=document.createElement("small");
+      rings.className="dd-chart-note";
+      rings.textContent=T("الخارجية: ","Outer: ")+headers[0]+T(" · الداخلية: "," · Inner: ")+headers[1];
+      body.appendChild(rings);
+    }
+    instances.push(new Chart(canvas,{
+      type:view==="horizontal"?"bar":view,
+      data:{
+        labels:plotted.map(([value])=>shorten(value)),
+        datasets:headers.map((label,side)=>({
+          label,data:plotted.map(([,counts])=>counts[side].size),
+          backgroundColor:circular?colors:palette[side],borderColor:palette[side],fill:false
+        }))
+      },
+      options:{
+        responsive:true,maintainAspectRatio:false,indexAxis:view==="horizontal"?"y":"x",
+        plugins:{legend:{display:!circular},tooltip:{callbacks:{
+          title:items=>plotted[items[0]?.dataIndex]?.[0] ?? "",
+          label:item=>item.dataset.label+" · "+item.formattedValue
+        }}},
+        onClick:(_,points)=>{
+          const point=points[0];
+          if(point)open(plotted[point.index],point.datasetIndex);
+        }
+      }
+    }));
   }
   function updateComparisonChoices() {
     const templates=unique(rows.map(row=>row.template)).sort((a,b)=>a.localeCompare(b,locale));
@@ -1030,7 +1171,7 @@
       const available=new Set(rows.filter(row=>row.template===side.template).flatMap(row=>Object.keys(row.fields ?? {})));
       selectOptions(field,fields.filter(item=>available.has(String(item.id))).map(item=>({value:item.id,label:item.name})),
         side.field,T("اختر الحقل","Select a field"));
-      field.disabled=!side.template || !available.size;
+      field.disabled=!side.template || field.options.length===1;
     });
   }
   function openEditor(id) {
@@ -1047,7 +1188,7 @@
     };
     $("dd-overview-type").hidden=!editing.id.startsWith("overview-");
     $("dd-overview-type").disabled=$("dd-overview-type").hidden;
-    $("dd-title").value=editing.id.startsWith("base-")?presetTitle(widgetTitle(editing)):widgetTitle(editing);$("dd-type").value=editing.type;
+    $("dd-title").value=editing.id.startsWith("base-")?presetTitle(widgetTitle(editing)):widgetTitle(editing);$("dd-type").value=editing.type==="comparison"?editing.comparisonView:editing.type;
     $("dd-modified-from").value=editing.from||"";
     $("dd-modified-to").value=editing.to||"";
     $("dd-pages").value=editing.pages??"";
@@ -1056,8 +1197,9 @@
     const isField=Boolean(editing.dimension) && !BUILTIN.some(f=>f.id===editing.dimension);
     selectOptions($("dd-dimension"),[
       ...BUILTIN.map(f=>({value:f.id,label:f.name})),
-      {value:"__fields",label:T("حقول","Fields")}
-    ],isField?"__fields":editing.dimension,null);
+      {value:"__fields",label:T("حقول","Fields")},
+      {value:"__compare",label:T("مقارنة حقول القوالب","Compare template fields")}
+    ],editing.type==="comparison"?"__compare":isField?"__fields":editing.dimension,null);
     const fieldOptions=fields.map(f=>({value:String(f.id),label:f.name+(f.multi?T(" (قيم متعددة)"," (multiple values)"):"")}));
     if(isField&&!fieldOptions.some(f=>f.value===editing.dimension))
       fieldOptions.push({value:editing.dimension,label:T("حقل محفوظ (","Saved field (")+editing.dimension+")"});
@@ -1074,11 +1216,10 @@
     const comparison=editing.type==="comparison";
     const recent=comparison || isRecent(editing.type) || editing.type==="overview";
     $("dd-template-comparison").classList.toggle("dd-hidden",!comparison);
-    $("dd-start-comparison").classList.toggle("dd-hidden",recent || editing.dimension!=="__template");
     if(comparison)updateComparisonChoices();
     const dateKey=dateColumn(editing);
     const usesField=$("dd-dimension").value==="__fields";
-    $("dd-axis-options").classList.toggle("dd-hidden",recent);
+    $("dd-axis-options").classList.toggle("dd-hidden",recent && !comparison);
     $("dd-field-options").classList.toggle("dd-hidden",!usesField || recent);
     $("dd-modified-range").classList.toggle("dd-hidden",!dateKey);
     $("dd-page-count").classList.toggle("dd-hidden",recent || editing.dimension!=="__pages");
@@ -1086,7 +1227,7 @@
     const draft={...editing,from:$("dd-modified-from").value,to:$("dd-modified-to").value};
     const tooMany=!recent && dateColumnsLimited(draft);
     for(const option of $("dd-type").options) {
-      option.disabled=option.value==="overview"?option.hidden:isBar(option.value) && tooMany;
+      option.disabled=comparison?!comparisonViews.includes(option.value):option.value==="overview"?option.hidden:isBar(option.value) && tooMany;
     }
     if($("dd-type").selectedOptions[0]?.disabled) {
       editing.type="documents";
@@ -1102,7 +1243,16 @@
   }
   function changeDimension() {
     if(!editing)return;
-    editing.dimension=$("dd-dimension").value==="__fields"?$("dd-field").value:$("dd-dimension").value;
+    const source=$("dd-dimension").value;
+    if(source==="__compare") {
+      editing.type="comparison";
+      editing.comparisonView=comparisonViews.includes($("dd-type").value)?$("dd-type").value:"table";
+      $("dd-type").value=editing.comparisonView;
+      updateEditorSource();
+      return;
+    }
+    if(editing.type==="comparison")editing.type=$("dd-type").value;
+    editing.dimension=source==="__fields"?$("dd-field").value:$("dd-dimension").value;
     editing.selectedValues=[];
     editing.allValues=false;
     editing.colors={};
@@ -1114,7 +1264,7 @@
   function saveEditor() {
     if(!editing)return;
     editing.title=$("dd-title").value.trim()||T("جدول بدون اسم","Untitled table");
-    editing.type=$("dd-type").value;
+    if(editing.type!=="comparison")editing.type=$("dd-type").value;
     editing.accent=quarterWidth(editing) && $("dd-card-style").value==="accent";
     if($("dd-save").disabled)return;
     editing.from=dateColumn(editing)?$("dd-modified-from").value:"";
@@ -1338,18 +1488,10 @@
     });
     $("dd-type").addEventListener("change",event=>{
       if(!editing)return;
-      editing.type=event.target.value;
+      if(editing.type==="comparison")editing.comparisonView=event.target.value;
+      else editing.type=event.target.value;
       updateEditorSource();
       valueChoices();
-    });
-    $("dd-start-comparison").addEventListener("click",()=>{
-      if(!editing)return;
-      if(!editing.comparison && !editing.allValues) {
-        editing.comparison=[0,1].map(index=>({template:editing.selectedValues[index] ?? "",field:""}));
-      }
-      $("dd-type").value="comparison";
-      editing.type="comparison";
-      updateEditorSource();
     });
     for(const side of [1,2]) {
       $("dd-compare-template-"+side).addEventListener("change",event=>{

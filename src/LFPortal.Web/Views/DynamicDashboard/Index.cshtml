@@ -14,6 +14,7 @@
         <select class="dd-control" id="dd-board-list" aria-label="@T("اختيار اللوحة", "Select dashboard")" disabled>
             <option value="default">@T("اللوحة الرئيسية", "Main dashboard")</option>
         </select>
+        <button type="button" id="dd-rename-board" disabled>@T("تغيير الاسم", "Rename")</button>
         <button type="button" id="dd-add" class="dd-nav-icon dd-toolbar-hidden" title="@T("إضافة جدول", "Add table")" aria-label="@T("إضافة جدول", "Add table")">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
         </button>
@@ -42,9 +43,6 @@
             <h1>@T("لوحة المعلومات", "Dynamic") <span>@T("الديناميكية", "Dashboard")</span></h1>
         </div>
         <div class="dd-head-actions">
-            <div class="dd-board-picker">
-                <button type="button" class="dd-btn" id="dd-rename-board" disabled>@T("تغيير الاسم", "Rename")</button>
-            </div>
             <div class="dd-head-group">
                 <button type="button" class="dd-btn dd-btn-primary dd-toolbar-hidden" id="dd-save-layout" disabled>@T("حفظ اللوحة", "Save dashboard")</button>
             </div>
@@ -111,7 +109,6 @@
                 <option value="doughnut">@T("دائري مجوف", "Doughnut chart")</option>
                 <option value="pie">@T("دائري", "Pie chart")</option>
                 <option value="table">@T("جدول الإحصاءات", "Statistics table")</option>
-                <option value="comparison">@T("مقارنة حقول القوالب", "Compare template fields")</option>
                 <option value="documents">@T("قائمة المستندات", "Document list")</option>
                 <option value="recent-created">@T("جدول المستندات المنشأة", "Created documents table")</option>
                 <option value="recent-modified">@T("جدول نشاط المستندات", "Document activity table")</option>
@@ -125,15 +122,6 @@
             </select>
             </div>
             <p id="dd-display-limit" class="dd-warning dd-hidden" role="status"></p>
-            <div id="dd-template-comparison" class="dd-hidden">
-                @foreach (var side in new[] { 1, 2 })
-                {
-                    <label class="dd-label" for="dd-compare-template-@side">@(side == 1 ? T("القالب الأول", "First template") : T("القالب الثاني", "Second template"))</label>
-                    <select class="dd-control" id="dd-compare-template-@side"></select>
-                    <label class="dd-label" for="dd-compare-field-@side">@T("الحقل المراد مقارنته", "Field to compare")</label>
-                    <select class="dd-control" id="dd-compare-field-@side"></select>
-                }
-            </div>
             <div id="dd-axis-options">
             <label class="dd-label" for="dd-dimension">@T("البيانات / المحور التصنيفي", "Data / category axis")</label>
             <select class="dd-control" id="dd-dimension"></select>
@@ -150,7 +138,15 @@
                 <label class="dd-label" for="dd-pages">@T("عدد الصفحات (مطابقة الرقم)", "Page count (exact match)")</label>
                 <input type="text" inputmode="decimal" maxlength="24" id="dd-pages" class="dd-control" />
             </div>
-            <button type="button" id="dd-start-comparison" class="dd-btn dd-hidden">@T("مقارنة حقول قالبين", "Compare fields from two templates")</button>
+            <div id="dd-template-comparison" class="dd-hidden">
+                @foreach (var side in new[] { 1, 2 })
+                {
+                    <label class="dd-label" for="dd-compare-template-@side">@(side == 1 ? T("القالب الأول", "First template") : T("القالب الثاني", "Second template"))</label>
+                    <select class="dd-control" id="dd-compare-template-@side"></select>
+                    <label class="dd-label" for="dd-compare-field-@side">@T("الحقل المراد مقارنته", "Field to compare")</label>
+                    <select class="dd-control" id="dd-compare-field-@side"></select>
+                }
+            </div>
             <div id="dd-category-options">
             <label class="dd-label" for="dd-value-search">@T("القيم الموجودة في الوثائق (اختياري)", "Document values (optional)")</label>
             <div class="dd-values-actions">

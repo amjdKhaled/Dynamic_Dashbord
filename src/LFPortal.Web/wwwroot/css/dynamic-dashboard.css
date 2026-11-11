@@ -414,7 +414,25 @@ body:has(.dd-page.dd-is-loading) > :is(.site-header,.site-footer){display:none}
 .dd-head-actions .dd-btn { white-space: nowrap; }
 .dd-board-picker .dd-control { width: min(210px, 75vw); min-width: 0; }
 .dd-toolbar-hidden { visibility: hidden; }
-#dd-customize { min-inline-size: 13em; }
+/* Keep the dashboard actions beside Settings, with wrapping for narrow headers. */
+.site-header:has(.dd-nav-actions) { flex-wrap: wrap; height: auto; }
+.site-header__nav:has(.dd-nav-actions) { flex-wrap: wrap; flex-shrink: 1; min-width: 0; }
+.dd-nav-actions { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.dd-nav-actions button {
+  font: inherit;
+  font-size: .875rem;
+  color: var(--isb-on-dark-muted);
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+.dd-nav-actions button:enabled:is(:hover,:focus-visible,[aria-pressed="true"]) {
+  background: var(--isb-on-dark-pill);
+  color: #fff;
+}
+.dd-nav-actions button:disabled { opacity: .55; cursor: default; }
 #dd-layout-status { min-block-size: 1.4em; }
 .dd-delete-board { color: #972c37; }
 .dd-color-option { cursor: default; flex-wrap: wrap; }

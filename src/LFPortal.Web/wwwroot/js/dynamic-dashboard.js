@@ -850,7 +850,7 @@
   function render() {
     instances.forEach(c=>c.destroy());instances=[];
     root.classList.toggle("dd-edit-mode",editMode);
-    $("dd-customize").textContent=editMode?T("✓ إنهاء التخصيص","✓ Finish customizing"):T("⚙ تخصيص اللوحة","⚙ Customize dashboard");
+    $("dd-customize").textContent=editMode?T("إنهاء التخصيص","Finish customizing"):T("تخصيص اللوحة","Customize dashboard");
     $("dd-customize").setAttribute("aria-pressed",String(editMode));
     $("dd-add").classList.toggle("dd-toolbar-hidden",!editMode);
     overviewStorage.hidden=true;

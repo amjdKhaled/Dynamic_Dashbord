@@ -515,6 +515,7 @@ textarea {
                 <a asp-controller="Archive"   asp-action="Index" class="@(_ctrl == "Archive"   ? "active" : "")">@L["Archive"]</a>
                 <a asp-controller="Settings"  asp-action="Index" class="@(_ctrl == "Settings"  ? "active" : "")">@L["Settings"]</a>
             }
+            @await RenderSectionAsync("DashboardNavigation", required: false)
         </nav>
 
          @* ── Active repository badge ── *@

@@ -6,6 +6,13 @@
     ViewData["Title"] = T("لوحة المعلومات الديناميكية", "Dynamic Dashboard");
     var scope = (string?)ViewBag.StorageScope ?? string.Empty;
 }
+@section DashboardNavigation {
+    <div class="dd-nav-actions" role="group" aria-label="@T("إجراءات اللوحة", "Dashboard actions")">
+        <button type="button" id="dd-refresh">@T("تحديث اللوحة", "Refresh dashboard")</button>
+        <button type="button" id="dd-new-board" disabled>@T("إنشاء لوحة جديدة", "Create dashboard")</button>
+        <button type="button" id="dd-customize" aria-pressed="false">@T("تخصيص اللوحة", "Customize dashboard")</button>
+    </div>
+}
 @section Styles {
     <partial name="~/Views/Dashboard/_OverviewStyles.cshtml" />
     <link rel="stylesheet" href="~/css/dynamic-dashboard.css" asp-append-version="true" />
@@ -23,17 +30,14 @@
                 <select class="dd-control" id="dd-board-list" aria-label="@T("اختيار اللوحة", "Select dashboard")" disabled>
                     <option value="default">@T("اللوحة الرئيسية", "Main dashboard")</option>
                 </select>
-                <button type="button" class="dd-btn" id="dd-new-board" disabled>@T("＋ لوحة جديدة", "＋ New dashboard")</button>
                 <button type="button" class="dd-btn" id="dd-rename-board" disabled>@T("تغيير الاسم", "Rename")</button>
                 <button type="button" class="dd-btn dd-delete-board dd-toolbar-hidden" id="dd-delete-board" disabled>@T("حذف اللوحة", "Delete dashboard")</button>
             </div>
             <div class="dd-head-group">
-                <button type="button" class="dd-btn" id="dd-customize" aria-pressed="false">@T("⚙ تخصيص اللوحة", "⚙ Customize dashboard")</button>
                 <button type="button" class="dd-btn dd-btn-primary dd-toolbar-hidden" id="dd-add">@T("＋ إضافة جدول", "＋ Add table")</button>
                 <button type="button" class="dd-btn dd-btn-primary dd-toolbar-hidden" id="dd-save-layout" disabled>@T("حفظ اللوحة", "Save dashboard")</button>
             </div>
             <div class="dd-head-group">
-                <button type="button" class="dd-btn" id="dd-refresh">@T("⟳ تحديث البيانات", "⟳ Refresh data")</button>
                 <button type="button" class="dd-btn" id="dd-repository">@T("تبديل المستودع", "Switch repository") · @ViewBag.RepositoryId</button>
             </div>
         </div>

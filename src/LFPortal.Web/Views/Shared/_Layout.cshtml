@@ -519,7 +519,11 @@ textarea {
         </nav>
 
          @* ── Active repository badge ── *@
-        @if (!string.IsNullOrWhiteSpace(_displayRepoId))
+        @if (IsSectionDefined("RepositoryNavigation"))
+        {
+            @await RenderSectionAsync("RepositoryNavigation")
+        }
+        else if (!string.IsNullOrWhiteSpace(_displayRepoId))
         {
             var _badgeClass =
                 _isDesktop    ? "repo-badge repo-badge--desktop"    :

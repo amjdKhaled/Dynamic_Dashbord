@@ -66,10 +66,10 @@
   const overviewAlert=overviewRoot.querySelector(".d-alert");
   const widgetTitle = chart => chart.title || overview.get(chart.id)?.title || T("جدول","Table");
   const EMPTY_VALUE = "\u0000no-value";
-  const validTypes = ["bar","horizontal","line","doughnut","pie","table","documents","kpi","recent-created","recent-modified","overview"];
+  const validTypes = ["bar","horizontal","line","doughnut","pie","table","comparison","documents","kpi","recent-created","recent-modified","overview"];
   const isRecent = type => type==="recent-created" || type==="recent-modified";
-  const isTable = type => type==="table" || type==="documents" || isRecent(type);
-  const dateColumn = chart => chart.type==="overview" ? null : chart.type==="recent-modified" || (!isRecent(chart.type) && chart.dimension==="__modified")
+  const isTable = type => type==="table" || type==="comparison" || type==="documents" || isRecent(type);
+  const dateColumn = chart => ["overview","comparison"].includes(chart.type) ? null : chart.type==="recent-modified" || (!isRecent(chart.type) && chart.dimension==="__modified")
     ? "modified" : chart.type==="recent-created" || chart.dimension==="__created" ? "created" : null;
   const isGraph = type => ["bar","horizontal","line","doughnut","pie"].includes(type);
   const nativeColors = new WeakMap();
@@ -147,6 +147,10 @@
       pages:pageCount(chart.pages),
       hidden:Boolean(chart.hidden),
       accent:chart.accent===undefined ? chart.id==="overview-folders-total" : Boolean(chart.accent),
+      ...(type==="comparison"?{comparison:[0,1].map(index=>({
+        template:String(chart.comparison?.[index]?.template ?? ""),
+        field:String(chart.comparison?.[index]?.field ?? "")
+      }))}:{}),
       colors:Object.fromEntries(Object.entries(chart.colors ?? {}).filter(([,color])=>palette.includes(color)).slice(0,500)),
       allValues:Boolean(chart.allValues),
       selectedValues:!oldName && Array.isArray(chart.selectedValues)
@@ -164,10 +168,11 @@
         }
       }
     } else charts=activeBoard.id==="default"?[]:defaults.map(normalChart);
-    if(activeBoard.id==="default" && config?.version!==3) {
-      const originalCards=[...overview].map(([id, item])=>
+    if(activeBoard.id==="default") {
+      const originalCards=[...overview].filter(([id])=>!charts.some(chart=>chart.id===id)).map(([id, item])=>
         normalChart({id,title:"",type:"overview",dimension:item.dimension,span:item.span}));
-      charts=[...originalCards,...charts].slice(0,80);
+      charts=config?.version===3?[...charts,...originalCards]:[...originalCards,...charts];
+      while(charts.length>80)charts.splice(charts.findLastIndex(chart=>!overview.has(chart.id)),1);
     }
   }
   function updateSaveBar(message) {
@@ -514,7 +519,7 @@
   }
   function desktopWidth(chart) {
     const type=displayType(chart);
-    if(type==="documents" || isRecent(type) || chart.span===12)return desktopColumns;
+    if(type==="documents" || type==="comparison" || isRecent(type) || chart.span===12)return desktopColumns;
     return quarterWidth(chart)?2*(numberSpans.indexOf(chart.span)+1):5;
   }
 
@@ -606,7 +611,7 @@
     const ghost=Boolean(chart.hidden);
     const el=document.createElement("article");
     el.className="dd-card"+(ghost?" dd-ghost":"")+(chart.accent?" dd-accent-card":"");
-    const documentTable=type==="documents" || isRecent(type);
+    const documentTable=type==="documents" || type==="comparison" || isRecent(type);
     el.classList.toggle("dd-full-card",documentTable || chart.span===12);
     el.classList.toggle("dd-quarter-card",quarterWidth(chart) && chart.span===3);
     el.classList.toggle("dd-graph",!isTable(type)&&type!=="kpi"&&type!=="overview");
@@ -616,10 +621,12 @@
     const headText=document.createElement("div"),title=document.createElement("strong");
     title.textContent=chart.id.startsWith("base-")?presetTitle(widgetTitle(chart)):widgetTitle(chart);headText.appendChild(title);
     const sub=document.createElement("small");sub.className="dd-card-sub";
-    sub.textContent=isTable(type)&&type!=="table"?T("قائمة المستندات","Document list"):(fieldMeta(chart.dimension)?.name||T("الوثائق","Documents"))+T(" · عدد الوثائق"," · Document count");
+    sub.textContent=type==="comparison"?T("مقارنة حقول القوالب","Template field comparison"):isTable(type)&&type!=="table"?T("قائمة المستندات","Document list"):(fieldMeta(chart.dimension)?.name||T("الوثائق","Documents"))+T(" · عدد الوثائق"," · Document count");
     headText.appendChild(sub);
     const actions=document.createElement("div");actions.className="dd-card-actions";
     if(editMode) {
+      headText.draggable=true;
+      headText.classList.add("dd-drag-handle");
       const grip=iconButton(T("اسحب لتغيير المكان","Drag to reorder"),"⠿",()=>{});
       grip.classList.add("dd-drag-handle");grip.draggable=true;
       grip.addEventListener("keydown",event=>{
@@ -636,8 +643,8 @@
         iconButton(T("نقل لأسفل","Move down"),"↓",()=>moveCard(chart.id,1)),
         visibilityButton(ghost,
           ()=>{chart.hidden=!chart.hidden;markChanged();render();}),
-        iconButton(T("حذف الجدول","Delete widget"),"×",()=>{if(window.confirm(T("حذف هذا الجدول من لوحتك؟","Delete this widget from your dashboard?"))){
-          tablePages.delete(chart.id);charts=charts.filter(c=>c.id!==chart.id);markChanged();render();}})
+        ...(activeBoard.id==="default" && overview.has(chart.id)?[]:[iconButton(T("حذف الجدول","Delete widget"),"×",()=>{if(window.confirm(T("حذف هذا الجدول من لوحتك؟","Delete this widget from your dashboard?"))){
+          tablePages.delete(chart.id);charts=charts.filter(c=>c.id!==chart.id);markChanged();render();}})])
       );
     }
     header.append(headText,actions);el.appendChild(header);
@@ -661,6 +668,8 @@
       } else {
         body.textContent=T("لا تتوفر البيانات الأصلية حاليًا.","Original data is currently unavailable.");
       }
+    } else if(type==="comparison") {
+      drawTemplateComparison(body,chart);
     } else if(type==="documents" || isRecent(type)) {
       drawDocumentTable(body,chart);
     } else {
@@ -780,26 +789,53 @@
       if(!source||source!==draggedCard||source===chart.id)return;
       const i=charts.findIndex(c=>c.id===source),j=charts.findIndex(c=>c.id===chart.id);
       if(i<0||j<0)return;
-      if(charts[i].slot || charts[j].slot) {
-        const from=desktopLayout.get(source),to=desktopLayout.get(chart.id);
-        charts[i].slot=to?{row:to.row,column:Math.min(to.column,desktopColumns-desktopWidth(charts[i]))}:null;
-        charts[j].slot=from?{row:from.row,column:Math.min(from.column,desktopColumns-desktopWidth(charts[j]))}:null;
-      }
+      swapCards(i,j);
       draggedCard=null;
-      charts.splice(j,0,charts.splice(i,1)[0]);markChanged();render();
+      markChanged();render();
     });
     return el;
+  }
+  function swapCards(first,second) {
+    const left=charts[first], right=charts[second];
+    const from=desktopLayout.get(left.id), to=desktopLayout.get(right.id);
+    [charts[first],charts[second]]=[right,left];
+    if(!from || !to || !window.matchMedia("(min-width: 1300px)").matches)return;
+    const swapRows=from.row!==to.row && from.width!==to.width;
+    const reorderRow=from.row===to.row && from.width!==to.width;
+    if(reorderRow) {
+      const row=charts.filter(item=>desktopLayout.get(item.id)?.row===from.row)
+        .sort((a,b)=>{
+          const column=item=>item===left?to.column:item===right?from.column:desktopLayout.get(item.id).column;
+          return column(a)-column(b);
+        });
+      let column=0;
+      for(const item of row) {
+        item.slot={row:from.row,column};
+        column+=desktopLayout.get(item.id).width;
+      }
+    }
+    for(const item of charts) {
+      const slot=desktopLayout.get(item.id);
+      if(!slot || (reorderRow && slot.row===from.row))continue;
+      let {row,column}=slot;
+      if(swapRows) {
+        if(row===from.row)row=to.row;
+        else if(row===to.row)row=from.row;
+      } else if(item===left || item===right) {
+        const destination=item===left?to:from;
+        row=destination.row;
+        column=Math.min(destination.column,desktopColumns-slot.width);
+      }
+      item.slot={row,column};
+    }
+    charts.sort((a,b)=>(a.slot?.row??160)-(b.slot?.row??160) ||
+      (a.slot?.column??0)-(b.slot?.column??0));
   }
   function moveCard(id, offset) {
     const index=charts.findIndex(card=>card.id===id);
     const target=index+offset;
     if(index<0 || target<0 || target>=charts.length)return;
-    if(charts[index].slot || charts[target].slot) {
-      const from=desktopLayout.get(charts[index].id),to=desktopLayout.get(charts[target].id);
-      charts[index].slot=to?{row:to.row,column:Math.min(to.column,desktopColumns-desktopWidth(charts[index]))}:null;
-      charts[target].slot=from?{row:from.row,column:Math.min(from.column,desktopColumns-desktopWidth(charts[target]))}:null;
-    }
-    charts.splice(target,0,charts.splice(index,1)[0]);
+    swapCards(index,target);
     markChanged();render();
   }
   function stepCardSpan(chart, direction, cycle=false) {
@@ -829,16 +865,43 @@
       handle.focus({preventScroll:true});
       handle.setPointerCapture(event.pointerId);
       const rtl=getComputedStyle(card).direction==="rtl";
-      const finish=next=>{
-        handle.removeEventListener("pointerup",finish);
-        handle.removeEventListener("lostpointercapture",cancel);
-        const distance=(next.clientX-event.clientX)*(rtl?-1:1);
-        // Keep the canvas and its labels stable until the resize is committed.
-        if(Math.abs(distance)>=24)setCardSpan(card,chart,stepCardSpan(chart,distance>0?1:-1));
+      const widths=quarterWidth(chart)?numberSpans:[6,12];
+      const grid=$("dd-grid");
+      const gap=parseFloat(getComputedStyle(grid).columnGap)||0;
+      const gridWidth=grid.clientWidth;
+      const desktop=window.matchMedia("(min-width: 1300px)").matches;
+      const widthFor=span=>{
+        const part=desktop?desktopWidth({...chart,span})/desktopColumns:span/12;
+        return (gridWidth+gap)*part-gap;
       };
-      const cancel=()=>handle.removeEventListener("pointerup",finish);
+      const preview=document.createElement("div");
+      preview.className="dd-resize-preview";
+      preview.setAttribute("aria-hidden","true");
+      card.appendChild(preview);
+      let nextSpan=chart.span;
+      const update=next=>{
+        const distance=(next.clientX-event.clientX)*(rtl?-1:1);
+        const target=widthFor(chart.span)+distance;
+        const width=Math.max(widthFor(widths[0]),Math.min(widthFor(widths.at(-1)),target));
+        preview.style.setProperty("--dd-preview-width",width+"px");
+        nextSpan=widths.reduce((closest,span)=>
+          Math.abs(widthFor(span)-width)<Math.abs(widthFor(closest)-width)?span:closest,chart.span);
+      };
+      const cleanup=()=>{
+        handle.removeEventListener("pointermove",update);
+        handle.removeEventListener("pointerup",finish);
+        handle.removeEventListener("lostpointercapture",cleanup);
+        preview.remove();
+      };
+      const finish=next=>{
+        update(next);
+        cleanup();
+        setCardSpan(card,chart,nextSpan);
+      };
+      update(event);
+      handle.addEventListener("pointermove",update);
       handle.addEventListener("pointerup",finish,{once:true});
-      handle.addEventListener("lostpointercapture",cancel,{once:true});
+      handle.addEventListener("lostpointercapture",cleanup,{once:true});
     });
     handle.addEventListener("keydown",event=>{
       if(!["ArrowLeft","ArrowRight"].includes(event.key))return;
@@ -935,10 +998,40 @@
     });
   }
   const editorFields=["dd-title","dd-type","dd-card-style","dd-dimension","dd-field","dd-modified-from","dd-modified-to","dd-pages"];
-  const editorSnapshot=()=>JSON.stringify([editorFields.map(id=>$(id).value),editing.allValues,editing.selectedValues,editing.colors]);
+  const editorSnapshot=()=>JSON.stringify([editorFields.map(id=>$(id).value),editing.allValues,editing.selectedValues,editing.colors,editing.comparison]);
   let initialEditorSnapshot="";
   function updateEditorSave() {
     $("dd-save").classList.toggle("dd-hidden",!editing || initialEditorSnapshot===editorSnapshot());
+  }
+  function drawTemplateComparison(body,chart) {
+    const sides=chart.comparison ?? [];
+    const groups=new Map();
+    sides.forEach(({template,field},index)=>{
+      for(const row of rows) {
+        if(row.template!==template)continue;
+        for(const value of new Set(valuesFor(row,field))) {
+          if(!groups.has(value))groups.set(value,[new Map(),new Map()]);
+          groups.get(value)[index].set(row.id,row);
+        }
+      }
+    });
+    const headers=sides.map(({template,field})=>template+" · "+(fieldMeta(field)?.name ?? field));
+    drawTable(body,chart,[T("القيمة","Value"),...headers],[...groups].sort(([a],[b])=>a.localeCompare(b,locale)),
+      ([value,counts])=>[value,...counts.map(docs=>docs.size.toLocaleString(locale))],
+      ([value,counts])=>openArchive(value,counts.flatMap(docs=>[...docs.values()])));
+  }
+  function updateComparisonChoices() {
+    const templates=unique(rows.map(row=>row.template)).sort((a,b)=>a.localeCompare(b,locale));
+    editing.comparison??=[{template:"",field:""},{template:"",field:""}];
+    editing.comparison.forEach((side,index)=>{
+      const template=$("dd-compare-template-"+(index+1));
+      const field=$("dd-compare-field-"+(index+1));
+      selectOptions(template,templates.map(value=>({value,label:value})),side.template,T("اختر القالب","Select a template"));
+      const available=new Set(rows.filter(row=>row.template===side.template).flatMap(row=>Object.keys(row.fields ?? {})));
+      selectOptions(field,fields.filter(item=>available.has(String(item.id))).map(item=>({value:item.id,label:item.name})),
+        side.field,T("اختر الحقل","Select a field"));
+      field.disabled=!side.template || !available.size;
+    });
   }
   function openEditor(id) {
     if(!editMode || busy || deleting)return;
@@ -978,7 +1071,11 @@
     $("dd-editoroverlay").classList.remove("dd-hidden");
   }
   function updateEditorSource() {
-    const recent=isRecent(editing.type) || editing.type==="overview";
+    const comparison=editing.type==="comparison";
+    const recent=comparison || isRecent(editing.type) || editing.type==="overview";
+    $("dd-template-comparison").classList.toggle("dd-hidden",!comparison);
+    $("dd-start-comparison").classList.toggle("dd-hidden",recent || editing.dimension!=="__template");
+    if(comparison)updateComparisonChoices();
     const dateKey=dateColumn(editing);
     const usesField=$("dd-dimension").value==="__fields";
     $("dd-axis-options").classList.toggle("dd-hidden",recent);
@@ -999,7 +1096,7 @@
     const limit=$("dd-display-limit");
     limit.textContent=tooMany?T("الأعمدة متاحة حتى ١٠ وثائق ضمن نطاق التاريخ.","Bar charts are available for up to 10 documents in the date range."):"";
     limit.classList.toggle("dd-hidden",!limit.textContent);
-    $("dd-save").disabled=!recent&&!editing.dimension;
+    $("dd-save").disabled=comparison ? ![1,2].every(side=>$("dd-compare-template-"+side).value && $("dd-compare-field-"+side).value) : !recent&&!editing.dimension;
     renderColorChoices();
     updateEditorSave();
   }
@@ -1019,12 +1116,12 @@
     editing.title=$("dd-title").value.trim()||T("جدول بدون اسم","Untitled table");
     editing.type=$("dd-type").value;
     editing.accent=quarterWidth(editing) && $("dd-card-style").value==="accent";
-    if(editing.type!=="overview"&&!isRecent(editing.type)&&!editing.dimension)return;
+    if($("dd-save").disabled)return;
     editing.from=dateColumn(editing)?$("dd-modified-from").value:"";
     editing.to=dateColumn(editing)?$("dd-modified-to").value:"";
     editing.pages=editing.dimension==="__pages"?pageCount($("dd-pages").value):null;
     const invalidRange=editing.from && editing.to && editing.from>editing.to;
-    const invalidPages=editing.type!=="overview" && !isRecent(editing.type) && editing.dimension==="__pages" && $("dd-pages").value.trim()!=="" && editing.pages===null;
+    const invalidPages=!["overview","comparison"].includes(editing.type) && !isRecent(editing.type) && editing.dimension==="__pages" && $("dd-pages").value.trim()!=="" && editing.pages===null;
     if(invalidRange || invalidPages) {
       const error=$("dd-filter-error");
       error.textContent=invalidRange?T("تاريخ البداية يجب أن يسبق تاريخ النهاية أو يطابقه.","The start date must be on or before the end date."):T("أدخل رقمًا عشريًا أو صحيحًا يبدأ من صفر.","Enter a nonnegative number.");
@@ -1245,6 +1342,25 @@
       updateEditorSource();
       valueChoices();
     });
+    $("dd-start-comparison").addEventListener("click",()=>{
+      if(!editing)return;
+      if(!editing.comparison && !editing.allValues) {
+        editing.comparison=[0,1].map(index=>({template:editing.selectedValues[index] ?? "",field:""}));
+      }
+      $("dd-type").value="comparison";
+      editing.type="comparison";
+      updateEditorSource();
+    });
+    for(const side of [1,2]) {
+      $("dd-compare-template-"+side).addEventListener("change",event=>{
+        editing.comparison[side-1]={template:event.target.value,field:""};
+        updateEditorSource();
+      });
+      $("dd-compare-field-"+side).addEventListener("change",event=>{
+        editing.comparison[side-1].field=event.target.value;
+        updateEditorSource();
+      });
+    }
     $("dd-dimension").addEventListener("change",changeDimension);
     $("dd-field").addEventListener("change",changeDimension);
     $("dd-value-search").addEventListener("input",valueChoices);

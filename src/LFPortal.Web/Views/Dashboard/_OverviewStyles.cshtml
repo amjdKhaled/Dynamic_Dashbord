@@ -155,11 +155,14 @@ body:has(.dashboard-overview-standalone) footer.site-footer { background: #F7F8F
 .dashboard-round-stage canvas { width:100% !important; height:100% !important; }
 .dashboard-round-scroll {
     display:grid;
-    grid-template-rows:24px minmax(0,1fr) 24px;
+    grid-template-rows:minmax(0,1fr);
     min-width:0;
     min-height:0;
     height:100%;
 }
+.dashboard-round-scroll.has-overflow { grid-template-rows:24px minmax(0,1fr) 24px; }
+.dashboard-round-scroll:not(.has-overflow) .dashboard-round-arrow { display:none; }
+.dashboard-round-arrow:disabled { opacity:.35; cursor:default; }
 .dashboard-round-arrow {
     border:0;
     border-radius:4px;

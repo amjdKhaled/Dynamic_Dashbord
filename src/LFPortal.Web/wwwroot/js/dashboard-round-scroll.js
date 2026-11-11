@@ -16,10 +16,26 @@ window.dashboardRoundScroll = function (results, arabic) {
         return button;
     }
     if (results.parentNode) results.before(wrapper);
-    wrapper.append(
-        arrow(-1, "▲", arabic ? "تمرير النتائج لأعلى" : "Scroll results up"),
-        results,
-        arrow(1, "▼", arabic ? "تمرير النتائج لأسفل" : "Scroll results down")
-    );
+    const up = arrow(-1, "▲", arabic ? "تمرير النتائج لأعلى" : "Scroll results up");
+    const down = arrow(1, "▼", arabic ? "تمرير النتائج لأسفل" : "Scroll results down");
+    wrapper.append(up, results, down);
+    function updateArrows() {
+        const heightWithoutArrows = wrapper.clientHeight;
+        const overflows = results.scrollHeight > heightWithoutArrows + 1;
+        wrapper.classList.toggle("has-overflow", overflows);
+        up.disabled = results.scrollTop <= 1;
+        down.disabled = results.scrollTop + results.clientHeight >= results.scrollHeight - 1;
+    }
+    results.addEventListener("scroll", updateArrows, {passive:true});
+    const observer = new ResizeObserver(() => {
+        if (!wrapper.isConnected) {
+            observer.disconnect();
+            return;
+        }
+        updateArrows();
+    });
+    observer.observe(wrapper);
+    observer.observe(results);
+    requestAnimationFrame(updateArrows);
     return wrapper;
 };

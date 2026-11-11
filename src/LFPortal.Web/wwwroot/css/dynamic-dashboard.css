@@ -443,3 +443,32 @@ body:has(.dd-page.dd-is-loading) > :is(.site-header,.site-footer){display:none}
 }
 .dd-color-auto { background: linear-gradient(135deg,#fff 44%,#687785 45% 55%,#fff 56%); }
 .dd-color-swatch:checked, .dd-color-swatch:focus-visible { outline: 2px solid var(--dd-navy); outline-offset: 2px; }
+
+.dd-nav-actions #dd-board-list {
+  width: clamp(130px, 15vw, 210px);
+  border-color: transparent;
+  background: var(--isb-on-dark-pill);
+  color: #fff;
+  border-radius: 999px;
+}
+.dd-nav-actions #dd-board-list option { color: var(--isb-ink); background: var(--isb-surface); }
+.dd-nav-actions .dd-nav-icon { display: grid; place-items: center; width: 38px; height: 38px; padding: 7px; }
+.dd-nav-icon svg { width: 22px; height: 22px; }
+.dd-nav-actions .dd-delete-board { color: #ffd3d8; }
+.dd-repo-switch { cursor: pointer; font: inherit; }
+.dd-repo-switch:hover { filter: brightness(.94); }
+.dd-repo-switch:focus-visible { outline: 2px solid white; outline-offset: 3px; }
+#dd-start-comparison { margin-block-start: 12px; }
+.dd-edit-mode .dd-card-head [draggable="true"] { cursor: grab; }
+.dd-card:has(.dd-resize-preview) { overflow: visible; z-index: 5; }
+.dd-resize-preview {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  inset-inline-end: auto;
+  width: var(--dd-preview-width);
+  z-index: 4;
+  pointer-events: none;
+  border: 2px dashed var(--dd-blue);
+  border-radius: inherit;
+}

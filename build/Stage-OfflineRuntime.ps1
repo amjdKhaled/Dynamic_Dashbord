@@ -4,20 +4,31 @@ $ProgressPreference = 'SilentlyContinue'
 $cache = Join-Path $PSScriptRoot '..\.build-cache\office'
 $null = New-Item -ItemType Directory -Path $cache -Force
 $cache = (Resolve-Path $cache).Path
-$version = '26.2.6'
-$msi = Join-Path $cache "LibreOffice_$($version)_Win_x86-64.msi"
-$baseUrl = "https://download.documentfoundation.org/libreoffice/stable/$version/win/x86_64/LibreOffice_$($version)_Win_x86-64.msi"
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-if (-not (Test-Path $msi)) {
-    & curl.exe --fail --location --retry 3 --connect-timeout 30 --max-time 900 --output $msi $baseUrl
-    if ($LASTEXITCODE -ne 0) { Remove-Item $msi -ErrorAction SilentlyContinue; throw 'LibreOffice download failed.' }
+$version = '26.2.6.2'
+$fileName = "LibreOffice_${version}_Win_x86-64.msi"
+$msi = Join-Path $cache $fileName
+$baseUrl = "https://downloadarchive.documentfoundation.org/libreoffice/old/$version/win/x86_64/$fileName"
+# SHA-256 published on the Document Foundation archive mirror list for this exact MSI.
+$checksum = '788ce7d4b56460357f57552cb8cd848e8f2254f28f6e51fa61e0c65a18096373'
+if ((Test-Path -LiteralPath $msi) -and (Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash -ne $checksum) {
+    Write-Warning 'Cached LibreOffice MSI failed verification. Downloading a fresh copy.'
+    Remove-Item -LiteralPath $msi
 }
-# Verify against the publisher's checksum before executing the administrative extraction.
-$checksum = (Invoke-WebRequest -UseBasicParsing -Uri "$baseUrl.sha256").Content.Trim().Split(' ')[0]
-if ($checksum -notmatch '^[a-fA-F0-9]{64}$' -or (Get-FileHash $msi -Algorithm SHA256).Hash -ne $checksum) {
-    throw 'LibreOffice checksum verification failed.'
+if (-not (Test-Path -LiteralPath $msi)) {
+    $download = "$msi.$([Guid]::NewGuid().ToString('N')).partial"
+    try {
+        & curl.exe --fail --location --retry 3 --connect-timeout 30 --max-time 900 --output $download $baseUrl
+        if ($LASTEXITCODE -ne 0) { throw "LibreOffice download failed (curl exit $LASTEXITCODE): $baseUrl" }
+        if ((Get-FileHash -LiteralPath $download -Algorithm SHA256).Hash -ne $checksum) {
+            throw 'LibreOffice checksum verification failed.'
+        }
+        Move-Item -LiteralPath $download -Destination $msi -Force
+    }
+    finally {
+        if (Test-Path -LiteralPath $download) { Remove-Item -LiteralPath $download }
+    }
 }
-$extract = Join-Path $cache 'administrative-image'
+$extract = Join-Path $cache "administrative-image-$version"
 $marker = Join-Path $extract 'complete.txt'
 if (-not (Test-Path $marker)) {
     $null = New-Item -ItemType Directory -Path $extract -Force

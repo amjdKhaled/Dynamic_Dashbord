@@ -519,6 +519,7 @@ textarea {
         </nav>
 
          @* ── Active repository badge ── *@
+        @await RenderSectionAsync("DashboardEndNavigation", required: false)
         @if (IsSectionDefined("RepositoryNavigation"))
         {
             @await RenderSectionAsync("RepositoryNavigation")
@@ -552,7 +553,6 @@ textarea {
             <span class="lang-sep">|</span>
             <a href="/SetCulture?culture=ar&returnUrl=@_returnUrl" class="@(_isRtl ? "lang-active" : "")">@L["LangAr"]</a>
         </div>
-        @await RenderSectionAsync("DashboardEndNavigation", required: false)
     </header>
 
     <main>

@@ -10,7 +10,7 @@ window.dashboardRoundScroll = function (results, arabic) {
         button.title = title;
         button.setAttribute("aria-label", title);
         button.addEventListener("click", () => {
-            const rowHeight = results.firstElementChild?.getBoundingClientRect().height || 24;
+            const rowHeight = results.querySelector(".dashboard-round-row")?.getBoundingClientRect().height || 24;
             results.scrollBy({top: direction * rowHeight * 3, behavior: "smooth"});
         });
         return button;

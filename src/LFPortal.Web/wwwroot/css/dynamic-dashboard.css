@@ -481,7 +481,8 @@ html:has(.dd-edit-mode) { overflow-anchor: none; }
 
 .dd-save-dock {
   position: fixed;
-  inset-inline-end: clamp(14px, 4vw, 56px);
+  left: 50%;
+  transform: translateX(-50%);
   inset-block-end: calc(18px + env(safe-area-inset-bottom, 0px));
   z-index: 20;
   display: flex;
@@ -518,3 +519,28 @@ html:has(.dd-edit-mode) { overflow-anchor: none; }
   padding: 6px 10px;
 }
 .dd-template-field-group summary { padding: 7px 2px; font-weight: 600; cursor: pointer; }
+
+.dd-template-result-heading {
+  margin: 0;
+  padding: 8px 6px 4px;
+  color: var(--dd-navy);
+  font-size: .95rem;
+  overflow-wrap: anywhere;
+}
+.dd-template-result-field {
+  margin: 0;
+  padding: 3px 6px;
+  color: var(--dd-muted);
+  font-size: .8rem;
+  overflow-wrap: anywhere;
+}
+.dashboard-round-results section .dashboard-round-label {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.dd-template-value-picker { margin: 4px 0 8px; padding-inline-start: 12px; border-inline-start: 2px solid var(--dd-border); }
+.dd-template-value-picker .dd-value-list { max-height: 160px; }
+.dd-template-value-picker .dd-btn { margin-block: 4px; }
+.site-header:has(.dd-header-refresh) .lang-switcher { margin-inline: 0; }
+.dd-template-value-picker:empty { display: none; }
+.site-header:has(.dd-header-refresh) .dd-repo-switch { margin-inline: 0; }

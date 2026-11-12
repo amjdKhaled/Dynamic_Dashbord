@@ -177,6 +177,9 @@
       pages:pageCount(chart.pages),
       hidden:Boolean(chart.hidden),
       accent:chart.accent===undefined ? chart.id==="overview-folders-total" : Boolean(chart.accent),
+      templateValueFilters:Array.isArray(chart.templateValueFilters)?chart.templateValueFilters
+        .filter(rule=>fieldsByTemplate.get(rule?.template)?.includes(rule.field) && Array.isArray(rule.values))
+        .map(rule=>({template:rule.template,field:rule.field,values:unique(rule.values.filter(value=>typeof value==="string"))})):[],
       templateFields:[...fieldsByTemplate].filter(([,fields])=>fields.length).map(([template,fields])=>({template,fields})),
       colors:Object.fromEntries(Object.entries(chart.colors ?? {}).filter(([,color])=>palette.includes(color)).slice(0,500)),
       allValues:!legacy && Boolean(chart.allValues),
@@ -396,20 +399,25 @@
     const filter=new Set(chart.selectedValues);
     return source.filter(row=>categoryKeys(row,chart.dimension).some(v=>filter.has(v)!==Boolean(chart.allValues)));
   }
-  function summaryCategories(row,chart,selected,templateFields) {
+  function summaryCategories(row,chart,selected,templateFields,valueFilters) {
     const emptyLabel=T("بدون قيمة","No value");
     return categoryKeys(row,chart.dimension).flatMap(key=>{
       if(selected.size && selected.has(key)===Boolean(chart.allValues))return [];
       const label=key===EMPTY_VALUE?(chart.dimension==="__template"?T("بدون قالب","No template"):emptyLabel):key;
       const fields=chart.dimension==="__template"?templateFields.get(key):null;
-      if(!fields?.length)return [{key,label}];
+      if(!fields?.length)return [{key,label,template:chart.dimension==="__template"?label:null}];
       return fields.flatMap(field=>{
         if(!row.fields || !Object.hasOwn(row.fields,field))return [];
         const values=valuesFor(row,field);
-        return unique(values.length?values:[EMPTY_VALUE]).map(value=>({
-          key:JSON.stringify([key,field,value]),
-          label:label+" · "+(fieldMeta(field)?.name ?? field)+" · "+(value===EMPTY_VALUE?emptyLabel:value)
-        }));
+        const allowed=valueFilters.get(JSON.stringify([key,field]));
+        const fieldLabel=fieldMeta(field)?.name ?? field;
+        return unique(values.length?values:[EMPTY_VALUE])
+          .filter(value=>!allowed || allowed.has(value))
+          .map(value=>{
+            const valueLabel=value===EMPTY_VALUE?emptyLabel:value;
+            return {key:JSON.stringify([key,field,value]),template:label,field:fieldLabel,valueLabel,
+              label:label+" · "+fieldLabel+" · "+valueLabel};
+          });
       });
     });
   }
@@ -418,10 +426,12 @@
     if(chart.type==="kpi")return {kpi:new Set(source.map(x=>x.id)).size,items:source,groups:[],extra:0};
     const map=new Map(),selected=new Set(chart.dimension==="__pages" && chart.pages!=null ? [] : chart.selectedValues);
     const templateFields=new Map((chart.templateFields ?? []).map(item=>[item.template,item.fields]));
+    const valueFilters=new Map((chart.templateValueFilters ?? []).map(rule=>
+      [JSON.stringify([rule.template,rule.field]),new Set(rule.values)]));
     for(const row of source) {
-      for(const category of summaryCategories(row,chart,selected,templateFields)) {
-        const {key,label}=category;
-        if(!map.has(key))map.set(key,{key,label,docs:[],ids:new Set()});
+      for(const category of summaryCategories(row,chart,selected,templateFields,valueFilters)) {
+        const {key}=category;
+        if(!map.has(key))map.set(key,{...category,docs:[],ids:new Set()});
         const g=map.get(key);
         if(!g.ids.has(row.id)){g.ids.add(row.id);g.docs.push(row);}
       }
@@ -787,9 +797,12 @@
           });
         }
       } else if(chart.type==="table") {
-        drawTable(body,chart,[fieldMeta(chart.dimension)?.name||T("القيمة","Value"),T("عدد الوثائق","Document count")],data.groups,
-          group=>[group.label,group.value.toLocaleString(locale)],
-          group=>openArchive(group.label,group.docs));
+        const byField=data.groups.some(group=>group.field);
+        const headers=byField?[T("القالب","Template"),T("الحقل","Field"),T("القيمة","Value")]:
+          [fieldMeta(chart.dimension)?.name||T("القيمة","Value")];
+        drawTable(body,chart,[...headers,T("عدد الوثائق","Document count")],data.groups,
+          group=>[...(byField?[group.template,group.field??"—",group.valueLabel??T("إجمالي القالب","Template total")]:[group.label]),
+            group.value.toLocaleString(locale)],group=>openArchive(group.label,group.docs));
       } else if(!window.Chart) {
         const p=document.createElement("p");p.textContent=T("مكتبة الرسم المحلي غير متاحة","The local chart library is unavailable.");body.appendChild(p);
       } else {
@@ -803,17 +816,44 @@
           const layout=document.createElement("div");layout.className="dashboard-round-layout";
           stage.className="dashboard-round-stage";
           const legend=document.createElement("div");legend.className="dashboard-round-results";legend.dir=arabic?"rtl":"ltr";
-          for(let i=0;i<data.groups.length;i++) {
-            const group=data.groups[i],btn=document.createElement("button");
+          const grouped=data.groups.some(group=>group.field);
+          const containers=new Map();
+          const heading=(parent,text,className)=>{
+            const label=document.createElement("p");
+            label.textContent=text;
+            label.className=className;
+            parent.appendChild(label);
+          };
+          data.groups.forEach((group,index)=>{
+            let parent=legend;
+            if(grouped) {
+              if(!containers.has(group.template)) {
+                const section=document.createElement("section");
+                heading(section,group.template,"dd-template-result-heading");
+                legend.appendChild(section);
+                containers.set(group.template,{section,fields:new Map()});
+              }
+              const {section,fields}=containers.get(group.template);
+              if(group.field && !fields.has(group.field)) {
+                const field=document.createElement("div");
+                heading(field,group.field,"dd-template-result-field");
+                section.appendChild(field);
+                fields.set(group.field,field);
+              }
+              parent=fields.get(group.field) ?? section;
+            }
+            const btn=document.createElement("button");
             btn.type="button";btn.className="dashboard-round-row";
             const dot=document.createElement("span");dot.className="dashboard-round-dot";
-            dot.style.backgroundColor=colors[i];
-            const label=document.createElement("span");label.className="dashboard-round-label";label.textContent=group.label;label.title=group.label;
+            dot.style.backgroundColor=colors[index];
+            const label=document.createElement("span");label.className="dashboard-round-label";
+            label.textContent=grouped?(group.valueLabel??T("إجمالي القالب","Template total")):group.label;
+            label.title=group.label;
             const count=document.createElement("strong");count.textContent=group.value.toLocaleString(locale);
             btn.append(dot,label,count);
             btn.addEventListener("click",()=>openArchive(group.label,group.docs));
-            legend.appendChild(btn);
-          }
+            parent.appendChild(btn);
+          });
           layout.append(stage,window.dashboardRoundScroll(legend,arabic));
           body.appendChild(layout);
         }
@@ -870,18 +910,18 @@
       if(!source||source!==draggedCard||source===chart.id)return;
       const i=charts.findIndex(c=>c.id===source),j=charts.findIndex(c=>c.id===chart.id);
       if(i<0||j<0)return;
-      swapCards(i,j);
+      swapCards(i,j,true);
       draggedCard=null;
       markChanged();render();
     });
     return el;
   }
-  function swapCards(first,second,moveRows=true) {
+  function swapCards(first,second,fromDrag=false) {
     const left=charts[first], right=charts[second];
     const from=desktopLayout.get(left.id), to=desktopLayout.get(right.id);
     [charts[first],charts[second]]=[right,left];
     if(!from || !to || !window.matchMedia("(min-width: 1100px)").matches)return;
-    if(!moveRows && from.row!==to.row && from.width!==to.width) {
+    if(from.row!==to.row && from.width!==to.width) {
       freezeSlots();
       left.slot=null;
       right.slot=null;
@@ -900,7 +940,7 @@
           item.slot={row:destination.row,column};
           continue;
         }
-        const insertRow=destination.row+(source.row<destination.row?1:0);
+        const insertRow=destination.row+(fromDrag || source.row<destination.row?1:0);
         for(const peer of charts)if(peer.slot?.row>=insertRow)peer.slot.row++;
         for(const [row,height] of [...vacantRows].sort(([a],[b])=>b-a)) {
           if(row<insertRow)continue;
@@ -913,7 +953,6 @@
         (a.slot?.column??0)-(b.slot?.column??0));
       return;
     }
-    const swapRows=from.row!==to.row && from.width!==to.width;
     const reorderRow=from.row===to.row && from.width!==to.width;
     if(reorderRow) {
       const row=charts.filter(item=>desktopLayout.get(item.id)?.row===from.row)
@@ -931,10 +970,7 @@
       const slot=desktopLayout.get(item.id);
       if(!slot || (reorderRow && slot.row===from.row))continue;
       let {row,column}=slot;
-      if(swapRows) {
-        if(row===from.row)row=to.row;
-        else if(row===to.row)row=from.row;
-      } else if(item===left || item===right) {
+      if(item===left || item===right) {
         const destination=item===left?to:from;
         row=destination.row;
         column=Math.min(destination.column,desktopColumns-slot.width);
@@ -948,7 +984,7 @@
     const index=charts.findIndex(card=>card.id===id);
     const target=index+offset;
     if(index<0 || target<0 || target>=charts.length)return;
-    swapCards(index,target,false);
+    swapCards(index,target);
     markChanged();render();
   }
   function stepCardSpan(chart, direction, cycle=false) {
@@ -1164,10 +1200,54 @@
     });
   }
   const editorFields=["dd-title","dd-type","dd-card-style","dd-dimension","dd-field","dd-modified-from","dd-modified-to","dd-pages"];
-  const editorSnapshot=()=>JSON.stringify([editorFields.map(id=>$(id).value),editing.allValues,editing.selectedValues,editing.colors,editing.templateFields]);
+  const editorSnapshot=()=>JSON.stringify([editorFields.map(id=>$(id).value),editing.allValues,editing.selectedValues,editing.colors,editing.templateFields,editing.templateValueFilters]);
   let initialEditorSnapshot="";
   function updateEditorSave() {
     $("dd-save").classList.toggle("dd-hidden",!editing || initialEditorSnapshot===editorSnapshot());
+  }
+  function renderFieldValuePicker(target,template,field,source) {
+    target.replaceChildren();
+    const id=String(field.id);
+    const groups=observedValues(id,source.filter(row=>row.fields && Object.hasOwn(row.fields,id)));
+    const filters=editing.templateValueFilters ?? [];
+    const saved=filters.find(rule=>rule.template===template && rule.field===id);
+    let selected=new Set(saved?.values ?? groups.map(group=>group.value));
+    const title=document.createElement("p");
+    title.className="dd-label";
+    title.textContent=T("القيم الداخلة في المقارنة","Values included in comparison");
+    const toggle=document.createElement("button");
+    toggle.type="button";toggle.className="dd-btn";
+    const list=document.createElement("div");
+    list.className="dd-value-list";
+    const checks=[];
+    function update() {
+      const all=groups.every(group=>selected.has(group.value));
+      toggle.textContent=all?T("إلغاء اختيار الكل","Clear selection"):T("اختيار الكل","Select all");
+      editing.templateValueFilters=(editing.templateValueFilters ?? [])
+        .filter(rule=>rule.template!==template || rule.field!==id);
+      if(!all)editing.templateValueFilters.push({template,field:id,values:[...selected]});
+      renderColorChoices();
+      updateEditorSave();
+    }
+    toggle.textContent=groups.every(group=>selected.has(group.value))?T("إلغاء اختيار الكل","Clear selection"):T("اختيار الكل","Select all");
+    toggle.addEventListener("click",()=>{
+      selected=groups.every(group=>selected.has(group.value))?new Set():new Set(groups.map(group=>group.value));
+      checks.forEach((check,index)=>{check.checked=selected.has(groups[index].value);});
+      update();
+    });
+    for(const group of groups) {
+      const label=document.createElement("label");label.className="dd-value-option";
+      const check=document.createElement("input");check.type="checkbox";check.checked=selected.has(group.value);
+      check.addEventListener("change",()=>{
+        if(check.checked)selected.add(group.value);
+        else selected.delete(group.value);
+        update();
+      });
+      const value=document.createElement("span");value.textContent=group.label;
+      const count=document.createElement("small");count.textContent=group.count.toLocaleString(locale);
+      checks.push(check);label.append(check,value,count);list.appendChild(label);
+    }
+    if(groups.length)target.append(title,toggle,list);
   }
   function renderTemplateFields() {
     const target=$("dd-template-fields");
@@ -1187,6 +1267,8 @@
       const catalog=available.get(row.template);
       if(catalog)for(const field of Object.keys(row.fields ?? {}))catalog.add(field);
     }
+    const rowsByTemplate=new Map(templates.map(item=>[item.value,[]]));
+    for(const row of rows)rowsByTemplate.get(row.template)?.push(row);
     const selectedFields=new Map((editing.templateFields ?? []).map(item=>[item.template,new Set(item.fields)]));
     for(const template of templates) {
       const details=document.createElement("details");
@@ -1211,6 +1293,9 @@
         checkbox.type="checkbox";
         const id=String(field.id);
         checkbox.checked=picked.has(id);
+        const values=document.createElement("div");
+        values.className="dd-template-value-picker";
+        if(checkbox.checked)renderFieldValuePicker(values,template.value,field,rowsByTemplate.get(template.value));
         checkbox.addEventListener("change",()=>{
           if(checkbox.checked)picked.add(id);
           else picked.delete(id);
@@ -1218,11 +1303,13 @@
           editing.templateFields=[...selectedFields].filter(([,ids])=>ids.size)
             .map(([template,ids])=>({template,fields:[...ids]}));
           updateCaption();
+          if(checkbox.checked)renderFieldValuePicker(values,template.value,field,rowsByTemplate.get(template.value));
+          else values.replaceChildren();
           renderColorChoices();
           updateEditorSave();
         });
         label.append(checkbox,document.createTextNode(field.name));
-        details.appendChild(label);
+        details.append(label,values);
       }
       target.appendChild(details);
     }
@@ -1237,7 +1324,7 @@
     editing=item?structuredClone(item):{
       id:"custom-"+Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,6),
       title:T("جدول جديد","New table"),type:"table",dimension:"__template",
-      wide:false,hidden:false,allValues:false,selectedValues:[],colors:{}
+      wide:false,hidden:false,allValues:false,selectedValues:[],templateValueFilters:[],colors:{}
     };
     $("dd-overview-type").hidden=!editing.id.startsWith("overview-");
     $("dd-overview-type").disabled=$("dd-overview-type").hidden;

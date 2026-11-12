@@ -80,8 +80,7 @@
     return canvas && window.Chart?.getChart(canvas);
   };
   const nativeKey = (label,index) => JSON.stringify([index,label]);
-  function paintNativeGraph(chart,node) {
-    const graph=nativeGraph(chart);
+  function paintNativeGraph(chart,node,graph=nativeGraph(chart)) {
     if(!graph)return;
     if(!nativeColors.has(graph)) {
       if(!Object.keys(chart.colors).length)return;
@@ -537,7 +536,7 @@
     const total=Math.max(1,Math.ceil(rows.length/size));
     function show(page) {
       page=Math.min(total,Math.max(1,page));
-      tablePages.set(chart.id,page);
+      if(activate)tablePages.set(chart.id,page);
       tbody.replaceChildren();
       nav.replaceChildren();
       if(!rows.length) {
@@ -558,14 +557,15 @@
           }
           cell.appendChild(text);
         });
+        if(!activate)continue;
         row.tabIndex=0;row.style.cursor="pointer";
         row.addEventListener("click",()=>activate(item));
         row.addEventListener("keydown",event=>{
           if(event.key==="Enter"||event.key===" "){event.preventDefault();activate(item);}
         });
       }
-      nav.hidden=total===1;
-      if(total===1)return;
+      nav.hidden=!activate || total===1;
+      if(nav.hidden)return;
       function button(label, target, disabled) {
         const control=iconButton(label,label,()=>show(target));
         control.className="dd-btn";
@@ -590,10 +590,10 @@
       nav.append(input,submit);
       nav.append(T("من ","of ")+total);
     }
-    show(tablePages.get(chart.id)||1);
+    show(activate?(tablePages.get(chart.id)||1):1);
   }
 
-  function drawDocumentTable(body,chart) {
+  function drawDocumentTable(body,chart,preview) {
     body.classList.add("dd-document-table");
     const modified=dateColumn(chart)==="modified" || !dateColumn(chart);
     const headers=[T("اسم المستند","Document name"),T("المجلد","Folder"),T("القالب","Template"),T("تاريخ الإنشاء","Date created"),
@@ -601,7 +601,7 @@
     const format=value=>dateStamp(value)?.toLocaleString(locale,{calendar:"gregory"})||"—";
     drawTable(body,chart,headers,documentRows(chart),row=>[row.name,row.folder||"—",row.template||"—",
       format(row.created),...(modified?[format(row.modified)]:[]),row.creator||"—",row.pages??"—"],
-      row=>openArchive(row.name,[row]));
+      preview?null:row=>openArchive(row.name,[row]));
   }
 
   function iconButton(title,symbol,handler) {
@@ -771,7 +771,7 @@
       (a.slot?.column??0)-(b.slot?.column??0));
   }
 
-  function drawCard(chart) {
+  function drawCard(chart,preview=false) {
     const type=displayType(chart);
     const ghost=Boolean(chart.hidden);
     const el=document.createElement("article");
@@ -782,7 +782,7 @@
     el.classList.toggle("dd-number-card",quarterWidth(chart));
     el.classList.toggle("dd-graph",!isTable(type)&&type!=="kpi"&&type!=="overview");
     el.dataset.id=chart.id;
-    gridPosition(el,desktopLayout.get(chart.id));
+    if(!preview)gridPosition(el,desktopLayout.get(chart.id));
     const header=document.createElement("header");header.className="dd-card-head";
     const headText=document.createElement("div"),title=document.createElement("strong");
     title.textContent=chart.id.startsWith("base-")?presetTitle(widgetTitle(chart)):widgetTitle(chart);headText.appendChild(title);
@@ -790,7 +790,7 @@
     sub.textContent=isTable(type)&&type!=="table"?T("قائمة المستندات","Document list"):(fieldMeta(chart.dimension)?.name||T("الوثائق","Documents"))+T(" · عدد الوثائق"," · Document count");
     headText.appendChild(sub);
     const actions=document.createElement("div");actions.className="dd-card-actions";
-    if(editMode) {
+    if(editMode && !preview) {
       headText.draggable=true;
       headText.classList.add("dd-drag-handle");
       const grip=iconButton(T("اسحب لتغيير المكان","Drag to reorder"),"⠿",()=>{});
@@ -821,14 +821,17 @@
     header.append(headText,actions);el.appendChild(header);
     const body=document.createElement("div");body.className="dd-visual";
     el.appendChild(body);
-    if(editMode && !documentTable)attachResize(el,chart);
+    if(editMode && !preview && !documentTable)attachResize(el,chart);
     if(ghost) {
       const text=document.createElement("p");text.className="dd-ghost-note";
       text.textContent=T("العنصر مخفي؛ اضغط زر العين لإظهاره","This widget is hidden. Use the visibility button to show it.");
       body.appendChild(text);
     } else if(type==="overview") {
       const original=overview.get(chart.id);
-      if(original?.node) {
+      if(original?.node && preview) {
+        el.classList.add("dd-native-widget");
+        drawNativePreview(body,chart,original.node);
+      } else if(original?.node) {
         el.classList.add("dd-native-widget");
         if(original.label) {
           const decoration=[...original.label.children];
@@ -840,7 +843,7 @@
         body.textContent=T("لا تتوفر البيانات الأصلية حاليًا.","Original data is currently unavailable.");
       }
     } else if(type==="documents" || isRecent(type)) {
-      drawDocumentTable(body,chart);
+      drawDocumentTable(body,chart,preview);
     } else {
       const data=summary(chart);
       const partialText=partial && isFieldDimension(chart.dimension)?T("قد تكون بعض قيم الحقول غير متاحة.","Some field values may be unavailable."):"";
@@ -868,7 +871,7 @@
         const small=document.createElement("small");
         small.textContent=T("وثيقة مطابقة للقيم المعروضة","documents matching the displayed values");
         k.appendChild(small);body.appendChild(k);
-        if(data.items.length) {
+        if(!preview && data.items.length) {
           k.tabIndex=0;
           k.setAttribute("role","button");
           k.style.cursor="pointer";
@@ -883,7 +886,7 @@
           [fieldMeta(chart.dimension)?.name||T("القيمة","Value")];
         drawTable(body,chart,[...headers,T("عدد الوثائق","Document count")],data.groups,
           group=>[...(byField?[group.template,group.field??"—",group.valueLabel??T("إجمالي القالب","Template total")]:[group.label]),
-            group.value.toLocaleString(locale)],group=>openArchive(group.label,group.docs));
+            group.value.toLocaleString(locale)],preview?null:group=>openArchive(group.label,group.docs));
       } else if(!window.Chart) {
         const p=document.createElement("p");p.textContent=T("مكتبة الرسم المحلي غير متاحة","The local chart library is unavailable.");body.appendChild(p);
       } else {
@@ -923,8 +926,9 @@
               }
               parent=fields.get(group.field) ?? section;
             }
-            const btn=document.createElement("button");
-            btn.type="button";btn.className="dashboard-round-row";
+            const btn=document.createElement(preview?"div":"button");
+            if(!preview)btn.type="button";
+            btn.className="dashboard-round-row";
             const dot=document.createElement("span");dot.className="dashboard-round-dot";
             dot.style.backgroundColor=colors[index];
             const label=document.createElement("span");label.className="dashboard-round-label";
@@ -932,7 +936,7 @@
             label.title=group.label;
             const count=document.createElement("strong");count.textContent=group.value.toLocaleString(locale);
             btn.append(dot,label,count);
-            btn.addEventListener("click",()=>openArchive(group.label,group.docs));
+            if(!preview)btn.addEventListener("click",()=>openArchive(group.label,group.docs));
             parent.appendChild(btn);
           });
           layout.append(stage,window.dashboardRoundScroll(legend,arabic));
@@ -964,12 +968,16 @@
               x:{grid:{display:axis,color:gridColor},ticks:{font:{size:14},color:contrast,maxRotation:30,autoSkip:true}},
               y:{beginAtZero:true,grid:{color:axis?"transparent":gridColor},ticks:{font:{size:14},color:contrast}}
             },
-            onClick:(_,points)=>{const group=data.groups[points[0]?.index];if(group)openArchive(group.label,group.docs);}
+            animation:preview?false:undefined,
+            onClick:preview?undefined:(_,points)=>{const group=data.groups[points[0]?.index];if(group)openArchive(group.label,group.docs);}
           }
         };
-        instances.push(new Chart(canvas,config));
+        const graph=new Chart(canvas,config);
+        if(preview)editorPreviewGraph=graph;
+        else instances.push(graph);
       }
     }
+    if(preview)return el;
     el.addEventListener("dragstart",event=>{
       if(!editMode || !event.target.closest(".dd-drag-handle")) {event.preventDefault();return;}
       event.dataTransfer?.setData("text/plain",chart.id);
@@ -1223,7 +1231,7 @@
     const visible=charts.filter(chart=>editMode || !chart.hidden);
     desktopLayout=arrangeDesktop(visible);
     const grid=$("dd-grid");
-    grid.replaceChildren(...visible.map(drawCard));
+    grid.replaceChildren(...visible.map(chart=>drawCard(chart)));
     if(desktopGrid()) {
       const occupied=new Set([...desktopLayout.values()].map(slot=>slot.row));
       for(const [row,height] of vacantRows) {
@@ -1311,9 +1319,55 @@
   }
   const editorFields=["dd-title","dd-type","dd-card-style","dd-dimension","dd-field","dd-modified-from","dd-modified-to","dd-pages"];
   const editorSnapshot=()=>JSON.stringify([editorFields.map(id=>$(id).value),editing.allValues,editing.selectedValues,editing.colors,editing.templateFields,editing.templateValueFilters]);
-  let initialEditorSnapshot="";
+  let initialEditorSnapshot="", lastEditorPreview="";
+  let editorPreviewGraph=null, editorPreviewFrame=0;
+  function drawNativePreview(body,chart,node) {
+    const clone=node.cloneNode(true);
+    clone.removeAttribute("id");
+    for(const child of clone.querySelectorAll("[id]"))child.removeAttribute("id");
+    clone.inert=true;
+    body.appendChild(clone);
+    const source=nativeGraph(chart);
+    const canvas=clone.querySelector(".chart-container canvas,.dashboard-round-stage canvas");
+    if(!source || !canvas)return;
+    const defaults=nativeColors.get(source);
+    const datasets=Chart.helpers.clone(source.data.datasets);
+    if(defaults)datasets.forEach((set,index)=>{
+      set.backgroundColor=Chart.helpers.clone(defaults[index]);
+    });
+    editorPreviewGraph=new Chart(canvas,{
+      type:source.config.type,
+      data:{labels:Chart.helpers.clone(source.data.labels),datasets},
+      options:{...Chart.helpers.clone(source.config.options),responsive:true,animation:false,events:[]}
+    });
+    paintNativeGraph(chart,clone,editorPreviewGraph);
+  }
   function updateEditorSave() {
-    $("dd-save").classList.toggle("dd-hidden",!editing || initialEditorSnapshot===editorSnapshot());
+    if(!editing)return;
+    const snapshot=editorSnapshot();
+    $("dd-save").disabled=(!isRecent(editing.type) && editing.type!=="overview" && !editing.dimension)
+      || (snapshot===initialEditorSnapshot && charts.some(chart=>chart.id===editing.id));
+    for(const button of $("dd-editoroverlay").querySelectorAll("[data-editor-type]")) {
+      const option=[...$("dd-type").options].find(option=>option.value===button.dataset.editorType);
+      button.disabled=option.disabled;
+      button.setAttribute("aria-pressed",String(option.selected));
+    }
+    if(lastEditorPreview===snapshot || editorPreviewFrame)return;
+    editorPreviewFrame=requestAnimationFrame(()=>{
+      editorPreviewFrame=0;
+      if(!editing || !$("dd-editoroverlay").open)return;
+      lastEditorPreview=editorSnapshot();
+      const chart={
+        ...editing, hidden:false,
+        title:$("dd-title").value.trim()||T("جدول بدون اسم","Untitled table"),
+        from:$("dd-modified-from").value, to:$("dd-modified-to").value,
+        pages:pageCount($("dd-pages").value),
+        accent:quarterWidth(editing) && $("dd-card-style").value==="accent"
+      };
+      editorPreviewGraph?.destroy();
+      editorPreviewGraph=null;
+      $("dd-editor-preview-card").replaceChildren(drawCard(chart,true));
+    });
   }
   function renderFieldValuePicker(target,template,field,source) {
     target.replaceChildren();
@@ -1459,8 +1513,10 @@
     valueChoices();
     initialEditorSnapshot=editorSnapshot();
     updateEditorSave();
-    $("dd-editoroverlay").classList.remove("dd-hidden");
+    $("dd-category-options").open=Boolean(editing.allValues || editing.selectedValues?.length);
+    $("dd-chart-colors").open=false;
     $("dd-editor-body").scrollTop=0;
+    $("dd-editoroverlay").showModal();
     $("dd-title").focus({preventScroll:true});
   }
   function updateEditorSource() {
@@ -1468,6 +1524,7 @@
     const dateKey=dateColumn(editing);
     const usesField=$("dd-dimension").value==="__fields";
     $("dd-axis-options").classList.toggle("dd-hidden",recent);
+    $("dd-editor-data-empty").classList.toggle("dd-hidden",!recent || Boolean(dateKey));
     $("dd-field-options").classList.toggle("dd-hidden",!usesField || recent);
     $("dd-modified-range").classList.toggle("dd-hidden",!dateKey);
     $("dd-page-count").classList.toggle("dd-hidden",recent || editing.dimension!=="__pages");
@@ -1485,7 +1542,6 @@
     const limit=$("dd-display-limit");
     limit.textContent=tooMany?T("الأعمدة متاحة حتى ١٠ وثائق ضمن نطاق التاريخ.","Bar charts are available for up to 10 documents in the date range."):"";
     limit.classList.toggle("dd-hidden",!limit.textContent);
-    $("dd-save").disabled=!recent&&!editing.dimension;
     renderTemplateFields();
     renderColorChoices();
     updateEditorSave();
@@ -1500,7 +1556,17 @@
     updateEditorSource();
     valueChoices();
   }
-  const closeEditor=()=>{$("dd-editoroverlay").classList.add("dd-hidden");editing=null;};
+  function closeEditor() {
+    if(!$("dd-editoroverlay").open)return;
+    $("dd-editoroverlay").close();
+    cancelAnimationFrame(editorPreviewFrame);
+    editorPreviewFrame=0;
+    lastEditorPreview="";
+    editorPreviewGraph?.destroy();
+    editorPreviewGraph=null;
+    $("dd-editor-preview-card").replaceChildren();
+    editing=null;
+  }
   function saveEditor() {
     if(!editing)return;
     editing.title=$("dd-title").value.trim()||T("جدول بدون اسم","Untitled table");
@@ -1727,11 +1793,19 @@
     $("dd-closeeditor").addEventListener("click",closeEditor);
     $("dd-cancel").addEventListener("click",closeEditor);
     $("dd-save").addEventListener("click",saveEditor);
-    $("dd-editoroverlay").addEventListener("click",event=>{
-      if(event.target===$("dd-editoroverlay"))closeEditor();
+    const editor=$("dd-editoroverlay");
+    editor.addEventListener("cancel",event=>{
+      event.preventDefault();
+      closeEditor();
     });
-    document.addEventListener("keydown",event=>{
-      if(event.key==="Escape")closeEditor();
+    editor.addEventListener("click",event=>{
+      if(event.target===editor)closeEditor();
+    });
+    editor.addEventListener("click",event=>{
+      const button=event.target.closest("[data-editor-type]");
+      if(!button || button.disabled)return;
+      $("dd-type").value=button.dataset.editorType;
+      $("dd-type").dispatchEvent(new Event("change"));
     });
     $("dd-type").addEventListener("change",event=>{
       if(!editing)return;

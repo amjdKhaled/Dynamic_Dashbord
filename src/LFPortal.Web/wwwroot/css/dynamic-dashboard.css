@@ -558,25 +558,115 @@ html:has(.dd-edit-mode) { overflow-anchor: none; }
 }
 
 .dd-editor {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  width: min(560px, 100vw);
+  inset: 0;
+  margin: auto;
+  width: min(900px, calc(100vw - 44px));
+  max-width: none;
+  height: min(720px, calc(100dvh - 56px));
+  max-height: none;
   padding: 0;
   overflow: hidden;
+  color: var(--isb-ink);
   background: var(--isb-surface);
-}
-.dd-editor-head { padding: 16px 22px; background: var(--dd-navy); color: #fff; }
-.dd-editor-head .dd-icon-btn { min-width: 36px; min-height: 36px; color: #fff; background: #ffffff1a; border-color: #ffffff40; }
-.dd-editor-body { overflow-y: auto; overscroll-behavior: contain; padding: 18px 22px 6px; background: var(--isb-field); }
-.dd-editor-section {
-  min-inline-size: 0;
-  margin: 0 0 14px;
-  padding: 8px 14px 14px;
   border: 1px solid var(--dd-border);
-  border-radius: 12px;
-  background: var(--isb-surface);
+  border-radius: 20px;
+  box-shadow: 0 24px 80px #071e3760;
 }
-.dd-editor-section legend { padding-inline: 8px; color: var(--dd-navy); font-weight: 700; }
-.dd-editor-section > .dd-label:first-of-type { margin-block-start: 5px; }
-.dd-editor > .dd-editor-actions { margin: 0; padding: 12px 22px; border-top: 1px solid var(--dd-border); }
-.dd-editor-body .dd-template-field-group { background: var(--isb-surface); }
+.dd-editor[open] { display: grid; grid-template-rows: auto minmax(0, 1fr); }
+.dd-editor::backdrop { background: #0a23366e; backdrop-filter: blur(3px); }
+.dd-editor-head {
+  padding: 15px 24px;
+  background: var(--isb-deep-sea) var(--isb-hdr-gradient);
+  color: white;
+  border-block-end: 3px solid var(--isb-gold);
+}
+.dd-editor-head .dd-icon-btn { min-width: 36px; min-height: 36px; color: #fff; background: #ffffff1a; border-color: #ffffff40; }
+.dd-editor-workspace {
+  display: grid;
+  grid-template-columns: minmax(300px, .88fr) minmax(0, 1.12fr);
+  min-height: 0;
+}
+.dd-editor-settings {
+  min-height: 0;
+  min-width: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto auto;
+  background: var(--isb-surface);
+  border-inline-end: 1px solid var(--dd-border);
+}
+.dd-editor-body, .dd-editor-preview {
+  min-width: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 18px 22px;
+}
+.dd-editor-preview { background: var(--isb-field); }
+.dd-editor-preview h3, .dd-editor-panel h3 {
+  margin: 0 0 12px;
+  color: var(--dd-navy);
+  font-size: 1rem;
+}
+.dd-editor-preview h3 {
+  border-inline-start: 3px solid var(--isb-gold);
+  padding-inline-start: 9px;
+}
+.dd-editor-preview .dd-card { min-height: 0; width: 100%; }
+.dd-editor-preview .dd-card-head strong { overflow-wrap: anywhere; }
+.dd-editor-preview .dashboard-round-layout { grid-template-columns: minmax(0, 1fr); }
+.dd-editor-panel + .dd-editor-panel { margin-block-start: 20px; }
+.dd-editor-panel .dd-control { min-height: 42px; }
+.dd-editor :is(.dd-control, button, summary):focus-visible {
+  outline: 2px solid var(--dd-blue);
+  outline-offset: 2px;
+}
+.dd-editor-types {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-block-start: 8px;
+}
+.dd-editor-types .dd-btn {
+  min-height: 44px;
+  padding-inline: 4px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 5px;
+}
+.dd-editor-types svg { width: 17px; height: 17px; flex: none; }
+.dd-editor-types .dd-btn[aria-pressed="true"] {
+  background: var(--dd-navy);
+  border-color: var(--dd-navy);
+  color: white;
+  box-shadow: inset 0 -3px var(--isb-gold);
+}
+.dd-editor .dd-btn:disabled { opacity: .55; cursor: default; }
+.dd-editor-filter { margin-block-start: 12px; border-block-start: 1px solid var(--dd-border); }
+.dd-editor-filter > summary {
+  min-height: 44px;
+  padding-block: 10px;
+  color: var(--dd-navy);
+  font-weight: 600;
+  cursor: pointer;
+}
+.dd-editor-panel #dd-value-list, .dd-editor-body #dd-color-list {
+  margin-block-start: 8px;
+  max-height: none;
+  overflow: visible;
+}
+.dd-editor-settings > .dd-warning { margin: 0 18px 6px; }
+.dd-editor-settings > .dd-editor-actions {
+  flex-direction: row-reverse;
+  margin: 0;
+  padding: 12px 18px;
+  border-top: 1px solid var(--dd-border);
+}
+@media (max-width: 640px) {
+  .dd-editor { width: calc(100vw - 16px); height: calc(100dvh - 16px); border-radius: 14px; }
+  .dd-editor-workspace {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) minmax(0, 36%);
+  }
+  .dd-editor-settings { border-inline-end: 0; border-block-end: 1px solid var(--dd-border); }
+  .dd-editor-body, .dd-editor-preview { padding: 14px 16px; }
+}

@@ -365,9 +365,13 @@
     const keys=unique(valuesFor(row,dimension).map(v=>groupKey(dimension,v)));
     return keys.length?keys:[EMPTY_VALUE];
   }
+  function configuredListValues(dimension) {
+    const options=fieldMeta(dimension)?.listValues;
+    return kind(dimension)==="list" && Array.isArray(options)
+      ? unique(options.filter(option=>typeof option==="string")):[];
+  }
   function observedValues(dimension, source=fieldRows(dimension)) {
-    // Counts come from distinct readable documents, NOT a hardcoded list or field definition choices.
-    const counts=new Map();
+    const counts=new Map(configuredListValues(dimension).map(value=>[value,0]));
     for(const row of source)
       for(const value of new Set(categoryKeys(row,dimension)))
         counts.set(value,(counts.get(value)||0)+1);
@@ -399,6 +403,12 @@
     const filter=new Set(chart.selectedValues);
     return source.filter(row=>categoryKeys(row,chart.dimension).some(v=>filter.has(v)!==Boolean(chart.allValues)));
   }
+  function templateFieldCategory(template,field,value) {
+    const fieldLabel=fieldMeta(field)?.name ?? field;
+    const valueLabel=value===EMPTY_VALUE?T("بدون قيمة","No value"):value;
+    return {key:JSON.stringify([template,field,value]),template,field:fieldLabel,valueLabel,
+      label:template+" · "+fieldLabel+" · "+valueLabel};
+  }
   function summaryCategories(row,chart,selected,templateFields,valueFilters) {
     const emptyLabel=T("بدون قيمة","No value");
     return categoryKeys(row,chart.dimension).flatMap(key=>{
@@ -410,14 +420,9 @@
         if(!row.fields || !Object.hasOwn(row.fields,field))return [];
         const values=valuesFor(row,field);
         const allowed=valueFilters.get(JSON.stringify([key,field]));
-        const fieldLabel=fieldMeta(field)?.name ?? field;
         return unique(values.length?values:[EMPTY_VALUE])
           .filter(value=>!allowed || allowed.has(value))
-          .map(value=>{
-            const valueLabel=value===EMPTY_VALUE?emptyLabel:value;
-            return {key:JSON.stringify([key,field,value]),template:label,field:fieldLabel,valueLabel,
-              label:label+" · "+fieldLabel+" · "+valueLabel};
-          });
+          .map(value=>templateFieldCategory(label,field,value));
       });
     });
   }
@@ -436,6 +441,27 @@
         if(!g.ids.has(row.id)){g.ids.add(row.id);g.docs.push(row);}
       }
     }
+    const addEmpty=category=>{
+      if(!map.has(category.key))map.set(category.key,{...category,docs:[],ids:new Set()});
+    };
+    const configured=configuredListValues(chart.dimension);
+    for(const value of configured) {
+      if(!selected.size || selected.has(value)!==Boolean(chart.allValues))addEmpty({key:value,label:value});
+    }
+    let includesConfiguredOptions=configured.length>0;
+    if(chart.dimension==="__template") {
+      for(const [template,fieldIds] of templateFields) {
+        if(selected.size && selected.has(template)===Boolean(chart.allValues))continue;
+        for(const field of fieldIds) {
+          const options=configuredListValues(field);
+          if(options.length)includesConfiguredOptions=true;
+          const allowed=valueFilters.get(JSON.stringify([template,field]));
+          for(const value of options) {
+            if(!allowed || allowed.has(value))addEmpty(templateFieldCategory(template,field,value));
+          }
+        }
+      }
+    }
     const list=[...map.values()].map(g=>({...g,value:g.ids.size}));
     if(chart.dimension==="__template" && templateFields.size) {
       list.sort((a,b)=>a.template.localeCompare(b.template,locale,{numeric:true}) ||
@@ -443,7 +469,7 @@
     } else if(chart.dimension==="__created"||chart.dimension==="__modified")
       list.sort((a,b)=>a.label.localeCompare(b.label));
     else list.sort((a,b)=>b.value-a.value||a.label.localeCompare(b.label,locale));
-    const isChart=!isTable(chart.type) && !["doughnut","pie"].includes(chart.type);
+    const isChart=!includesConfiguredOptions && !isTable(chart.type) && !["doughnut","pie"].includes(chart.type);
     return {groups:isChart?list.slice(0,30):list,extra:isChart?Math.max(0,list.length-30):0,
       totalGroups:list.length,items:source};
   }
@@ -1434,6 +1460,8 @@
     initialEditorSnapshot=editorSnapshot();
     updateEditorSave();
     $("dd-editoroverlay").classList.remove("dd-hidden");
+    $("dd-editor-body").scrollTop=0;
+    $("dd-title").focus({preventScroll:true});
   }
   function updateEditorSource() {
     const recent=isRecent(editing.type) || editing.type==="overview";

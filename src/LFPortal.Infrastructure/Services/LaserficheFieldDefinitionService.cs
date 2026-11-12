@@ -92,7 +92,8 @@ internal sealed class LaserficheFieldDefinitionService : ILaserficheFieldDefinit
                 IsRequired = r.IsRequired,
                 IsMultiValue = r.IsMultiValue,
                 Description = r.Description,
-                MaxLength = r.MaxLength
+                MaxLength = r.MaxLength,
+                ListValues = r.ListValues ?? Array.Empty<string>()
             })
             .AsReadOnly();
 
@@ -174,6 +175,9 @@ internal sealed class LaserficheFieldDefinitionService : ILaserficheFieldDefinit
 
         [JsonPropertyName("description")]
         public string? Description { get; init; }
+
+        [JsonPropertyName("listValues")]
+        public string[]? ListValues { get; init; }
 
         [JsonPropertyName("maxLength")]
         public int? MaxLength { get; init; }

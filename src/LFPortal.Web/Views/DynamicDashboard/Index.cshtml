@@ -102,61 +102,69 @@
                 <h2 id="dd-editor-title">@T("إعدادات الجدول", "Table settings")</h2>
                 <button type="button" id="dd-closeeditor" class="dd-icon-btn" title="@T("إغلاق", "Close")" aria-label="@T("إغلاق", "Close")">✕</button>
             </div>
-            <label class="dd-label" for="dd-title">@T("الاسم", "Name")</label>
-            <input class="dd-control" id="dd-title" maxlength="90" placeholder="@T("مثال: المعاملات حسب الإدارة", "Example: Transactions by department")" />
-            <label class="dd-label" for="dd-type">@T("نوع العرض", "Display type")</label>
-            <select class="dd-control" id="dd-type">
-                <option value="overview" id="dd-overview-type" hidden disabled>@T("العرض الأصلي للبطاقة", "Original widget view")</option>
-                <option value="bar">@T("أعمدة عمودية", "Vertical bars")</option>
-                <option value="horizontal">@T("أعمدة أفقية", "Horizontal bars")</option>
-                <option value="line">@T("خطي", "Line chart")</option>
-                <option value="doughnut">@T("دائري مجوف", "Doughnut chart")</option>
-                <option value="pie">@T("دائري", "Pie chart")</option>
-                <option value="table">@T("ملخص الإحصاءات", "Statistics summary")</option>
-                <option value="documents">@T("تفاصيل المستندات", "Document details")</option>
-                <option value="recent-created">@T("المستندات المنشأة", "Created documents")</option>
-                <option value="recent-modified">@T("سجل نشاط المستندات", "Document activity log")</option>
-                <option value="kpi">@T("بطاقة إجمالي", "Total card")</option>
-            </select>
-            <div id="dd-card-color" class="dd-hidden">
-            <label class="dd-label" for="dd-card-style">@T("لون البطاقة", "Card color")</label>
-            <select class="dd-control" id="dd-card-style">
-                <option value="standard">@T("عادي - أبيض", "Standard - white")</option>
-                <option value="accent">@T("مميز - كحلي بحد ذهبي", "Featured - navy with gold trim")</option>
-            </select>
+            <div class="dd-editor-body" id="dd-editor-body">
+                <fieldset class="dd-editor-section">
+                    <legend>@T("العرض", "Presentation")</legend>
+                    <label class="dd-label" for="dd-title">@T("الاسم", "Name")</label>
+                    <input class="dd-control" id="dd-title" maxlength="90" placeholder="@T("مثال: المعاملات حسب الإدارة", "Example: Transactions by department")" />
+                    <label class="dd-label" for="dd-type">@T("نوع العرض", "Display type")</label>
+                    <select class="dd-control" id="dd-type">
+                        <option value="overview" id="dd-overview-type" hidden disabled>@T("العرض الأصلي للبطاقة", "Original widget view")</option>
+                        <option value="bar">@T("أعمدة عمودية", "Vertical bars")</option>
+                        <option value="horizontal">@T("أعمدة أفقية", "Horizontal bars")</option>
+                        <option value="line">@T("خطي", "Line chart")</option>
+                        <option value="doughnut">@T("دائري مجوف", "Doughnut chart")</option>
+                        <option value="pie">@T("دائري", "Pie chart")</option>
+                        <option value="table">@T("ملخص الإحصاءات", "Statistics summary")</option>
+                        <option value="documents">@T("تفاصيل المستندات", "Document details")</option>
+                        <option value="recent-created">@T("المستندات المنشأة", "Created documents")</option>
+                        <option value="recent-modified">@T("سجل نشاط المستندات", "Document activity log")</option>
+                        <option value="kpi">@T("بطاقة إجمالي", "Total card")</option>
+                    </select>
+                    <div id="dd-card-color" class="dd-hidden">
+                        <label class="dd-label" for="dd-card-style">@T("لون البطاقة", "Card color")</label>
+                        <select class="dd-control" id="dd-card-style">
+                            <option value="standard">@T("عادي - أبيض", "Standard - white")</option>
+                            <option value="accent">@T("مميز - كحلي بحد ذهبي", "Featured - navy with gold trim")</option>
+                        </select>
+                    </div>
+                    <p id="dd-display-limit" class="dd-warning dd-hidden" role="status"></p>
+                </fieldset>
+                <fieldset id="dd-axis-options" class="dd-editor-section">
+                    <legend>@T("مصدر البيانات", "Data source")</legend>
+                    <label class="dd-label" for="dd-dimension">@T("البيانات / المحور التصنيفي", "Data / category axis")</label>
+                    <select class="dd-control" id="dd-dimension"></select>
+                    <div id="dd-field-options" class="dd-hidden">
+                        <label class="dd-label" for="dd-field">@T("الحقل", "Field")</label>
+                        <select class="dd-control" id="dd-field"></select>
+                    </div>
+                </fieldset>
+                <div id="dd-modified-range" class="dd-dates dd-hidden">
+                    <label class="dd-label">@T("من تاريخ", "From date") <input type="date" id="dd-modified-from" class="dd-control" /></label>
+                    <label class="dd-label">@T("إلى تاريخ", "To date") <input type="date" id="dd-modified-to" class="dd-control" /></label>
+                </div>
+                <div id="dd-page-count" class="dd-hidden">
+                    <label class="dd-label" for="dd-pages">@T("عدد الصفحات (مطابقة الرقم)", "Page count (exact match)")</label>
+                    <input type="text" inputmode="decimal" maxlength="24" id="dd-pages" class="dd-control" />
+                </div>
+                <fieldset id="dd-category-options" class="dd-editor-section">
+                    <legend>@T("القيم", "Values")</legend>
+                    <label class="dd-label" for="dd-value-search">@T("تحديد القيم (اختياري)", "Select values (optional)")</label>
+                    <div class="dd-values-actions">
+                        <input type="search" id="dd-value-search" class="dd-control" placeholder="@T("البحث عن قيمة...", "Search for a value...")" autocomplete="off" />
+                        <button type="button" id="dd-clear-values" class="dd-btn">@T("اختيار الكل", "Select all")</button>
+                    </div>
+                    <div id="dd-value-list" class="dd-value-list" aria-live="polite"></div>
+                </fieldset>
+                <div id="dd-template-fields" class="dd-hidden"></div>
+                <fieldset id="dd-chart-colors" class="dd-editor-section dd-hidden">
+                    <legend>@T("ألوان الرسم", "Chart colors")</legend>
+                    <label class="dd-label" for="dd-color-search">@T("ألوان الرسم البياني", "Chart colors")</label>
+                    <input type="search" class="dd-control" id="dd-color-search" placeholder="@T("البحث عن قيمة…", "Search values…")" />
+                    <div id="dd-color-list" class="dd-value-list"></div>
+                </fieldset>
+                <p id="dd-filter-error" class="dd-warning dd-hidden" role="alert"></p>
             </div>
-            <p id="dd-display-limit" class="dd-warning dd-hidden" role="status"></p>
-            <div id="dd-axis-options">
-            <label class="dd-label" for="dd-dimension">@T("البيانات / المحور التصنيفي", "Data / category axis")</label>
-            <select class="dd-control" id="dd-dimension"></select>
-            <div id="dd-field-options" class="dd-hidden">
-                <label class="dd-label" for="dd-field">@T("الحقل", "Field")</label>
-                <select class="dd-control" id="dd-field"></select>
-            </div>
-            </div>
-            <div id="dd-modified-range" class="dd-dates dd-hidden">
-                <label class="dd-label">@T("من تاريخ", "From date") <input type="date" id="dd-modified-from" class="dd-control" /></label>
-                <label class="dd-label">@T("إلى تاريخ", "To date") <input type="date" id="dd-modified-to" class="dd-control" /></label>
-            </div>
-            <div id="dd-page-count" class="dd-hidden">
-                <label class="dd-label" for="dd-pages">@T("عدد الصفحات (مطابقة الرقم)", "Page count (exact match)")</label>
-                <input type="text" inputmode="decimal" maxlength="24" id="dd-pages" class="dd-control" />
-            </div>
-            <div id="dd-category-options">
-            <label class="dd-label" for="dd-value-search">@T("القيم الموجودة في الوثائق (اختياري)", "Document values (optional)")</label>
-            <div class="dd-values-actions">
-                <input type="search" id="dd-value-search" class="dd-control" placeholder="@T("البحث عن قيمة...", "Search for a value...")" autocomplete="off" />
-                <button type="button" id="dd-clear-values" class="dd-btn">@T("اختيار الكل", "Select all")</button>
-            </div>
-            <div id="dd-value-list" class="dd-value-list" aria-live="polite"></div>
-            </div>
-            <div id="dd-template-fields" class="dd-hidden"></div>
-            <div id="dd-chart-colors" class="dd-hidden">
-                <label class="dd-label" for="dd-color-search">@T("ألوان الرسم البياني", "Chart colors")</label>
-                <input type="search" class="dd-control" id="dd-color-search" placeholder="@T("البحث عن قيمة…", "Search values…")" />
-                <div id="dd-color-list" class="dd-value-list"></div>
-            </div>
-            <p id="dd-filter-error" class="dd-warning dd-hidden" role="alert"></p>
             <div class="dd-editor-actions">
                 <button type="button" id="dd-cancel" class="dd-btn">@T("إلغاء", "Cancel")</button>
                 <button type="button" id="dd-save" class="dd-btn dd-btn-primary dd-hidden">@T("حفظ الجدول", "Save table")</button>

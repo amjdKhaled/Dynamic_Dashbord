@@ -244,7 +244,8 @@ public sealed class DynamicDashboardController : Controller
                 id = f.Id,
                 name = f.Name,
                 type = f.FieldType,
-                multi = f.IsMultiValue
+                multi = f.IsMultiValue,
+                listValues = f.ListValues
             }).ToArray());
         }
         catch (LaserficheException ex) when (ex.StatusCode is 401 or 403)
@@ -278,7 +279,7 @@ public sealed class DynamicDashboardController : Controller
                 foreach (var field in definitions.Values)
                 {
                     var key = FieldKey(field.Id);
-                    catalog[key] = new DashboardField(key, field.Name, field.FieldType, field.IsMultiValue);
+                    catalog[key] = new DashboardField(key, field.Name, field.FieldType, field.IsMultiValue, field.ListValues);
                 }
             }
             catch (LaserficheException ex) when (ex.StatusCode is 403 or 404)
@@ -444,7 +445,7 @@ public sealed class DynamicDashboardController : Controller
         }
     }
 
-    private sealed record DashboardField(string Id, string Name, string? Type, bool Multi);
+    private sealed record DashboardField(string Id, string Name, string? Type, bool Multi, IReadOnlyList<string>? ListValues = null);
 
     private static string FieldKey(int id) => id.ToString(System.Globalization.CultureInfo.InvariantCulture);
 

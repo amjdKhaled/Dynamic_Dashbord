@@ -28,4 +28,7 @@ public sealed record LFFieldDefinition
 
     /// <summary>Maximum allowed length for string fields. Null for non-string types.</summary>
     public int? MaxLength { get; init; }
+
+    /// <summary>Options configured for a list field.</summary>
+    public IReadOnlyList<string> ListValues { get; init; } = Array.Empty<string>();
 }

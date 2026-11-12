@@ -556,3 +556,27 @@ html:has(.dd-edit-mode) { overflow-anchor: none; }
   color: var(--dd-navy);
   font-weight: 700;
 }
+
+.dd-editor {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(560px, 100vw);
+  padding: 0;
+  overflow: hidden;
+  background: var(--isb-surface);
+}
+.dd-editor-head { padding: 16px 22px; background: var(--dd-navy); color: #fff; }
+.dd-editor-head .dd-icon-btn { min-width: 36px; min-height: 36px; color: #fff; background: #ffffff1a; border-color: #ffffff40; }
+.dd-editor-body { overflow-y: auto; overscroll-behavior: contain; padding: 18px 22px 6px; background: var(--isb-field); }
+.dd-editor-section {
+  min-inline-size: 0;
+  margin: 0 0 14px;
+  padding: 8px 14px 14px;
+  border: 1px solid var(--dd-border);
+  border-radius: 12px;
+  background: var(--isb-surface);
+}
+.dd-editor-section legend { padding-inline: 8px; color: var(--dd-navy); font-weight: 700; }
+.dd-editor-section > .dd-label:first-of-type { margin-block-start: 5px; }
+.dd-editor > .dd-editor-actions { margin: 0; padding: 12px 22px; border-top: 1px solid var(--dd-border); }
+.dd-editor-body .dd-template-field-group { background: var(--isb-surface); }

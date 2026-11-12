@@ -8,13 +8,14 @@
 }
 @section DashboardNavigation {
     <div class="dd-nav-actions" role="group" aria-label="@T("إجراءات اللوحة", "Dashboard actions")">
-        <button type="button" id="dd-refresh">@T("تحديث اللوحة", "Refresh dashboard")</button>
         <button type="button" id="dd-new-board" disabled>@T("إنشاء لوحة جديدة", "Create dashboard")</button>
         <button type="button" id="dd-customize" aria-pressed="false">@T("تخصيص اللوحة", "Customize dashboard")</button>
         <select class="dd-control" id="dd-board-list" aria-label="@T("اختيار اللوحة", "Select dashboard")" disabled>
             <option value="default">@T("اللوحة الرئيسية", "Main dashboard")</option>
         </select>
-        <button type="button" id="dd-rename-board" disabled>@T("تغيير الاسم", "Rename")</button>
+        <button type="button" id="dd-rename-board" class="dd-nav-icon" title="@T("تغيير اسم اللوحة", "Rename dashboard")" aria-label="@T("تغيير اسم اللوحة", "Rename dashboard")" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 16-1 5 5-1L20 8l-4-4L4 16Zm10-10 4 4"/></svg>
+        </button>
         <button type="button" id="dd-add" class="dd-nav-icon dd-toolbar-hidden" title="@T("إضافة جدول", "Add table")" aria-label="@T("إضافة جدول", "Add table")">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
         </button>
@@ -30,6 +31,11 @@
         <span aria-hidden="true">⌄</span>
     </button>
 }
+@section DashboardEndNavigation {
+    <button type="button" id="dd-refresh" class="dd-header-refresh" title="@T("تحديث اللوحة", "Refresh dashboard")" aria-label="@T("تحديث اللوحة", "Refresh dashboard")">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2 6M20 4v7h-7"/></svg>
+    </button>
+}
 @section Styles {
     <partial name="~/Views/Dashboard/_OverviewStyles.cshtml" />
     <link rel="stylesheet" href="~/css/dynamic-dashboard.css" asp-append-version="true" />
@@ -42,13 +48,11 @@
         <div class="dd-headline">
             <h1>@T("لوحة المعلومات", "Dynamic") <span>@T("الديناميكية", "Dashboard")</span></h1>
         </div>
-        <div class="dd-head-actions">
-            <div class="dd-head-group">
-                <button type="button" class="dd-btn dd-btn-primary dd-toolbar-hidden" id="dd-save-layout" disabled>@T("حفظ اللوحة", "Save dashboard")</button>
-            </div>
-        </div>
-        <span id="dd-layout-status" role="status"></span>
     </header>
+    <div class="dd-save-dock">
+        <span id="dd-layout-status" role="status"></span>
+        <button type="button" class="dd-btn dd-btn-primary dd-hidden" id="dd-save-layout" disabled>@T("حفظ اللوحة", "Save dashboard")</button>
+    </div>
     <div class="dd-layout">
         <section class="dd-workspace" aria-label="@T("محتوى اللوحة", "Dashboard content")">
             <p id="dd-warning" class="dd-warning dd-hidden" role="alert"></p>
@@ -108,11 +112,11 @@
                 <option value="line">@T("خطي", "Line chart")</option>
                 <option value="doughnut">@T("دائري مجوف", "Doughnut chart")</option>
                 <option value="pie">@T("دائري", "Pie chart")</option>
-                <option value="table">@T("جدول الإحصاءات", "Statistics table")</option>
-                <option value="documents">@T("قائمة المستندات", "Document list")</option>
-                <option value="recent-created">@T("جدول المستندات المنشأة", "Created documents table")</option>
-                <option value="recent-modified">@T("جدول نشاط المستندات", "Document activity table")</option>
-                <option value="kpi">@T("بطاقة", "Card")</option>
+                <option value="table">@T("ملخص الإحصاءات", "Statistics summary")</option>
+                <option value="documents">@T("تفاصيل المستندات", "Document details")</option>
+                <option value="recent-created">@T("المستندات المنشأة", "Created documents")</option>
+                <option value="recent-modified">@T("سجل نشاط المستندات", "Document activity log")</option>
+                <option value="kpi">@T("بطاقة إجمالي", "Total card")</option>
             </select>
             <div id="dd-card-color" class="dd-hidden">
             <label class="dd-label" for="dd-card-style">@T("لون البطاقة", "Card color")</label>
@@ -138,15 +142,6 @@
                 <label class="dd-label" for="dd-pages">@T("عدد الصفحات (مطابقة الرقم)", "Page count (exact match)")</label>
                 <input type="text" inputmode="decimal" maxlength="24" id="dd-pages" class="dd-control" />
             </div>
-            <div id="dd-template-comparison" class="dd-hidden">
-                @foreach (var side in new[] { 1, 2 })
-                {
-                    <label class="dd-label" for="dd-compare-template-@side">@(side == 1 ? T("القالب الأول", "First template") : T("القالب الثاني", "Second template"))</label>
-                    <select class="dd-control" id="dd-compare-template-@side"></select>
-                    <label class="dd-label" for="dd-compare-field-@side">@T("الحقل المراد مقارنته", "Field to compare")</label>
-                    <select class="dd-control" id="dd-compare-field-@side"></select>
-                }
-            </div>
             <div id="dd-category-options">
             <label class="dd-label" for="dd-value-search">@T("القيم الموجودة في الوثائق (اختياري)", "Document values (optional)")</label>
             <div class="dd-values-actions">
@@ -155,6 +150,7 @@
             </div>
             <div id="dd-value-list" class="dd-value-list" aria-live="polite"></div>
             </div>
+            <div id="dd-template-fields" class="dd-hidden"></div>
             <div id="dd-chart-colors" class="dd-hidden">
                 <label class="dd-label" for="dd-color-search">@T("ألوان الرسم البياني", "Chart colors")</label>
                 <input type="search" class="dd-control" id="dd-color-search" placeholder="@T("البحث عن قيمة…", "Search values…")" />

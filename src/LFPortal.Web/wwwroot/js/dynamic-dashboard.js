@@ -66,10 +66,10 @@
   const overviewAlert=overviewRoot.querySelector(".d-alert");
   const widgetTitle = chart => chart.title || overview.get(chart.id)?.title || T("جدول","Table");
   const EMPTY_VALUE = "\u0000no-value";
-  const validTypes = ["bar","horizontal","line","doughnut","pie","table","comparison","documents","kpi","recent-created","recent-modified","overview"];
+  const validTypes = ["bar","horizontal","line","doughnut","pie","table","documents","kpi","recent-created","recent-modified","overview"];
   const isRecent = type => type==="recent-created" || type==="recent-modified";
-  const isTable = type => type==="table" || type==="comparison" || type==="documents" || isRecent(type);
-  const dateColumn = chart => ["overview","comparison"].includes(chart.type) ? null : chart.type==="recent-modified" || (!isRecent(chart.type) && chart.dimension==="__modified")
+  const isTable = type => type==="table" || type==="documents" || isRecent(type);
+  const dateColumn = chart => chart.type==="overview" ? null : chart.type==="recent-modified" || (!isRecent(chart.type) && chart.dimension==="__modified")
     ? "modified" : chart.type==="recent-created" || chart.dimension==="__created" ? "created" : null;
   const isGraph = type => ["bar","horizontal","line","doughnut","pie"].includes(type);
   const nativeColors = new WeakMap();
@@ -120,7 +120,23 @@
 
   const numberSpans = [3,4,6,8,12];
   const desktopColumns = 10;
-  const comparisonViews=["table","bar","horizontal","line","doughnut","pie"];
+  async function dashboardFetch(url, options, allowCredentialError=false) {
+    const response=await fetch(url,options);
+    const finalUrl=new URL(response.url || url,location.href);
+    if(finalUrl.origin===location.origin && finalUrl.pathname==="/Login") {
+      location.assign(finalUrl.href);
+      throw new Error(T("انتهت الجلسة.","Session expired."));
+    }
+    if(response.status===401) {
+      const payload=await response.clone().json().catch(()=>null);
+      if(payload?.loginUrl || !allowCredentialError) {
+        const destination=location.pathname+location.search;
+        location.assign("/Login?returnUrl="+encodeURIComponent(destination));
+        throw new Error(T("انتهت الجلسة.","Session expired."));
+      }
+    }
+    return response;
+  }
   const vacantRows=new Map();
   const desktopGrid=()=>window.matchMedia("(min-width: 1100px)").matches;
   let desktopLayout = new Map();
@@ -135,12 +151,22 @@
 
   function normalChart(chart) {
     const oldName = chart.dimension==="__name";
-    const type = chart.type==="audit" ? "recent-modified" : chart.type;
+    const legacy=chart.type==="comparison";
+    const type=legacy && (isGraph(chart.comparisonView) || chart.comparisonView==="table")?chart.comparisonView:
+      legacy?"table":chart.type==="audit"?"recent-modified":chart.type;
+    const templateFields=Array.isArray(chart.templateFields)?chart.templateFields:
+      legacy && Array.isArray(chart.comparison)?chart.comparison.map(side=>({template:side?.template,fields:[side?.field]})):[];
+    const fieldsByTemplate=new Map();
+    for(const item of templateFields) {
+      if(typeof item?.template!=="string" || !Array.isArray(item.fields))continue;
+      const valid=item.fields.filter(field=>typeof field==="string" && isFieldDimension(field));
+      fieldsByTemplate.set(item.template,unique([...(fieldsByTemplate.get(item.template)??[]),...valid]));
+    }
     const title = chart.type==="audit" ? T("نشاط المستندات الأخير","Recent document activity") : String(chart.title ?? (overview.has(chart.id)?"":T("جدول","Table")));
     return {
       id:String(chart.id), title:title.replace(/^شارت(?= جديد$| بدون عنوان$|$)/,T("جدول","Table")).slice(0,90),
       type:validTypes.includes(type) && (type!=="overview" || chart.id.startsWith("overview-"))?type:"bar",
-      dimension:oldName?"__template":String(chart.dimension||"__template"),
+      dimension:oldName || legacy?"__template":String(chart.dimension||"__template"),
       span:cardSpan({...chart,type}),
       width:Number.isInteger(chart.width) && chart.width>=2 && chart.width<=desktopColumns?chart.width:null,
       slot:Number.isInteger(chart.slot?.row) && chart.slot.row>=0 && chart.slot.row<160 &&
@@ -151,13 +177,10 @@
       pages:pageCount(chart.pages),
       hidden:Boolean(chart.hidden),
       accent:chart.accent===undefined ? chart.id==="overview-folders-total" : Boolean(chart.accent),
-      ...(type==="comparison"?{comparisonView:comparisonViews.includes(chart.comparisonView)?chart.comparisonView:"table",comparison:[0,1].map(index=>({
-        template:String(chart.comparison?.[index]?.template ?? ""),
-        field:String(chart.comparison?.[index]?.field ?? "")
-      }))}:{}),
+      templateFields:[...fieldsByTemplate].filter(([,fields])=>fields.length).map(([template,fields])=>({template,fields})),
       colors:Object.fromEntries(Object.entries(chart.colors ?? {}).filter(([,color])=>palette.includes(color)).slice(0,500)),
-      allValues:Boolean(chart.allValues),
-      selectedValues:!oldName && Array.isArray(chart.selectedValues)
+      allValues:!legacy && Boolean(chart.allValues),
+      selectedValues:legacy?unique(templateFields.map(item=>item?.template)):!oldName && Array.isArray(chart.selectedValues)
         ? [...new Set(chart.selectedValues.filter(v=>typeof v==="string"))].slice(0,500) : []
     };
   }
@@ -180,7 +203,7 @@
     }
   }
   function updateSaveBar(message) {
-    $("dd-save-layout").classList.toggle("dd-toolbar-hidden",revision===savedRevision);
+    $("dd-save-layout").classList.toggle("dd-hidden",revision===savedRevision);
     $("dd-save-layout").disabled=!layoutReady || saving || deleting || revision===savedRevision;
     for(const id of ["dd-board-list","dd-new-board","dd-rename-board"])
       $(id).disabled=!layoutReady || saving || deleting;
@@ -240,7 +263,7 @@
     updateSaveBar();
     try {
       const token=root.querySelector('input[name="__RequestVerificationToken"]')?.value;
-      const response=await fetch("/DynamicDashboard/SaveLayout?boardId="+encodeURIComponent(activeBoard.id),{
+      const response=await dashboardFetch("/DynamicDashboard/SaveLayout?boardId="+encodeURIComponent(activeBoard.id),{
         method:"POST",credentials:"same-origin",
         headers:{...requestHeaders,"Content-Type":"application/json","RequestVerificationToken":token||""},
         body:JSON.stringify(layout)
@@ -263,7 +286,7 @@
       return;
     }
     try {
-      const response=await fetch("/DynamicDashboard/Layout",{credentials:"same-origin",cache:"no-store",headers:requestHeaders});
+      const response=await dashboardFetch("/DynamicDashboard/Layout",{credentials:"same-origin",cache:"no-store",headers:requestHeaders});
       if(!response.ok)throw new Error("HTTP "+response.status);
       const result=await response.json();
       boards.set(mainBoard.id,mainBoard);
@@ -373,14 +396,32 @@
     const filter=new Set(chart.selectedValues);
     return source.filter(row=>categoryKeys(row,chart.dimension).some(v=>filter.has(v)!==Boolean(chart.allValues)));
   }
+  function summaryCategories(row,chart,selected,templateFields) {
+    const emptyLabel=T("بدون قيمة","No value");
+    return categoryKeys(row,chart.dimension).flatMap(key=>{
+      if(selected.size && selected.has(key)===Boolean(chart.allValues))return [];
+      const label=key===EMPTY_VALUE?(chart.dimension==="__template"?T("بدون قالب","No template"):emptyLabel):key;
+      const fields=chart.dimension==="__template"?templateFields.get(key):null;
+      if(!fields?.length)return [{key,label}];
+      return fields.flatMap(field=>{
+        if(!row.fields || !Object.hasOwn(row.fields,field))return [];
+        const values=valuesFor(row,field);
+        return unique(values.length?values:[EMPTY_VALUE]).map(value=>({
+          key:JSON.stringify([key,field,value]),
+          label:label+" · "+(fieldMeta(field)?.name ?? field)+" · "+(value===EMPTY_VALUE?emptyLabel:value)
+        }));
+      });
+    });
+  }
   function summary(chart) {
     const source=selectedRows(chart);
     if(chart.type==="kpi")return {kpi:new Set(source.map(x=>x.id)).size,items:source,groups:[],extra:0};
     const map=new Map(),selected=new Set(chart.dimension==="__pages" && chart.pages!=null ? [] : chart.selectedValues);
+    const templateFields=new Map((chart.templateFields ?? []).map(item=>[item.template,item.fields]));
     for(const row of source) {
-      for(const key of new Set(categoryKeys(row,chart.dimension))) {
-        if(selected.size&&selected.has(key)===Boolean(chart.allValues))continue;
-        if(!map.has(key))map.set(key,{key,label:key===EMPTY_VALUE?T("بدون قيمة","No value"):key,docs:[],ids:new Set()});
+      for(const category of summaryCategories(row,chart,selected,templateFields)) {
+        const {key,label}=category;
+        if(!map.has(key))map.set(key,{key,label,docs:[],ids:new Set()});
         const g=map.get(key);
         if(!g.ids.has(row.id)){g.ids.add(row.id);g.docs.push(row);}
       }
@@ -471,9 +512,9 @@
           cell.dataset.label=headers[index];
           const text=document.createElement("span");
           text.textContent=value;
-          if(chart.type==="comparison" && index===0) {
+          if(chart.dimension==="__template" && index===0) {
             text.title=String(value);
-            text.className="dd-compare-value";
+            text.className="dd-template-value";
           }
           cell.appendChild(text);
         });
@@ -655,7 +696,7 @@
     const headText=document.createElement("div"),title=document.createElement("strong");
     title.textContent=chart.id.startsWith("base-")?presetTitle(widgetTitle(chart)):widgetTitle(chart);headText.appendChild(title);
     const sub=document.createElement("small");sub.className="dd-card-sub";
-    sub.textContent=type==="comparison"?T("مقارنة حقول القوالب","Template field comparison"):isTable(type)&&type!=="table"?T("قائمة المستندات","Document list"):(fieldMeta(chart.dimension)?.name||T("الوثائق","Documents"))+T(" · عدد الوثائق"," · Document count");
+    sub.textContent=isTable(type)&&type!=="table"?T("قائمة المستندات","Document list"):(fieldMeta(chart.dimension)?.name||T("الوثائق","Documents"))+T(" · عدد الوثائق"," · Document count");
     headText.appendChild(sub);
     const actions=document.createElement("div");actions.className="dd-card-actions";
     if(editMode) {
@@ -707,8 +748,6 @@
       } else {
         body.textContent=T("لا تتوفر البيانات الأصلية حاليًا.","Original data is currently unavailable.");
       }
-    } else if(type==="comparison") {
-      drawTemplateComparison(body,chart);
     } else if(type==="documents" || isRecent(type)) {
       drawDocumentTable(body,chart);
     } else {
@@ -782,7 +821,7 @@
         const gridColor=chart.accent?"#ffffff22":"#eef1f6";
         const config={
           type,
-          data:{labels:data.groups.map(g=>g.label),datasets:[{
+          data:{labels:data.groups.map(({label})=>label.length>52?label.slice(0,52)+"…":label),datasets:[{
             label:T("عدد الوثائق","Document count"),data:data.groups.map(g=>g.value),
             borderColor:palette[0],backgroundColor:colors,
             ...(type==="line"?{pointBackgroundColor:colors,pointBorderColor:colors,
@@ -792,7 +831,10 @@
           }]},
           options:{
             responsive:true,maintainAspectRatio:false,indexAxis:axis?"y":"x",
-            plugins:{legend:{display:false},tooltip:{backgroundColor:"#0b1c49"}},
+            plugins:{legend:{display:false},tooltip:{backgroundColor:"#0b1c49",callbacks:{
+              title:items=>data.groups[items[0]?.dataIndex]?.label ?? "",
+              label:item=>data.groups[item.dataIndex].value.toLocaleString(locale)
+            }}},
             scales:circ?{}:{
               x:{grid:{display:axis,color:gridColor},ticks:{font:{size:14},color:contrast,maxRotation:30,autoSkip:true}},
               y:{beginAtZero:true,grid:{color:axis?"transparent":gridColor},ticks:{font:{size:14},color:contrast}}
@@ -834,11 +876,43 @@
     });
     return el;
   }
-  function swapCards(first,second) {
+  function swapCards(first,second,moveRows=true) {
     const left=charts[first], right=charts[second];
     const from=desktopLayout.get(left.id), to=desktopLayout.get(right.id);
     [charts[first],charts[second]]=[right,left];
     if(!from || !to || !window.matchMedia("(min-width: 1100px)").matches)return;
+    if(!moveRows && from.row!==to.row && from.width!==to.width) {
+      freezeSlots();
+      left.slot=null;
+      right.slot=null;
+      const moves=[{item:left,destination:to,source:from},{item:right,destination:from,source:to}]
+        .sort((a,b)=>b.destination.row-a.destination.row);
+      for(const {item,destination,source} of moves) {
+        const width=desktopWidth(item);
+        const occupied=Array(desktopColumns).fill(false);
+        for(const peer of charts) {
+          if(peer.slot?.row!==destination.row)continue;
+          occupied.fill(true,peer.slot.column,peer.slot.column+desktopWidth(peer));
+        }
+        const fits=column=>column+width<=desktopColumns && !occupied.slice(column,column+width).some(Boolean);
+        const column=fits(destination.column)?destination.column:occupied.findIndex((_,index)=>fits(index));
+        if(column>=0) {
+          item.slot={row:destination.row,column};
+          continue;
+        }
+        const insertRow=destination.row+(source.row<destination.row?1:0);
+        for(const peer of charts)if(peer.slot?.row>=insertRow)peer.slot.row++;
+        for(const [row,height] of [...vacantRows].sort(([a],[b])=>b-a)) {
+          if(row<insertRow)continue;
+          vacantRows.delete(row);
+          vacantRows.set(row+1,height);
+        }
+        item.slot={row:insertRow,column:0};
+      }
+      charts.sort((a,b)=>(a.slot?.row??160)-(b.slot?.row??160) ||
+        (a.slot?.column??0)-(b.slot?.column??0));
+      return;
+    }
     const swapRows=from.row!==to.row && from.width!==to.width;
     const reorderRow=from.row===to.row && from.width!==to.width;
     if(reorderRow) {
@@ -874,7 +948,7 @@
     const index=charts.findIndex(card=>card.id===id);
     const target=index+offset;
     if(index<0 || target<0 || target>=charts.length)return;
-    swapCards(index,target);
+    swapCards(index,target,false);
     markChanged();render();
   }
   function stepCardSpan(chart, direction, cycle=false) {
@@ -1090,89 +1164,68 @@
     });
   }
   const editorFields=["dd-title","dd-type","dd-card-style","dd-dimension","dd-field","dd-modified-from","dd-modified-to","dd-pages"];
-  const editorSnapshot=()=>JSON.stringify([editorFields.map(id=>$(id).value),editing.allValues,editing.selectedValues,editing.colors,editing.comparison]);
+  const editorSnapshot=()=>JSON.stringify([editorFields.map(id=>$(id).value),editing.allValues,editing.selectedValues,editing.colors,editing.templateFields]);
   let initialEditorSnapshot="";
   function updateEditorSave() {
     $("dd-save").classList.toggle("dd-hidden",!editing || initialEditorSnapshot===editorSnapshot());
   }
-  function drawTemplateComparison(body,chart) {
-    const sides=chart.comparison ?? [];
-    const groups=new Map();
-    sides.forEach(({template,field},index)=>{
-      for(const row of rows) {
-        if(row.template!==template)continue;
-        for(const value of new Set(valuesFor(row,field))) {
-          if(!groups.has(value))groups.set(value,[new Map(),new Map()]);
-          groups.get(value)[index].set(row.id,row);
-        }
+  function renderTemplateFields() {
+    const target=$("dd-template-fields");
+    target.replaceChildren();
+    const enabled=editing.dimension==="__template" && (editing.type==="table" || isGraph(editing.type));
+    const selected=new Set(editing.selectedValues);
+    const templates=enabled?observedValues("__template").filter(item=>item.value!==EMPTY_VALUE &&
+      selected.has(item.value)!==Boolean(editing.allValues)):[];
+    target.classList.toggle("dd-hidden",!templates.length);
+    if(!templates.length)return;
+    const title=document.createElement("p");
+    title.className="dd-label";
+    title.textContent=T("حقول القوالب المختارة (اختياري)","Fields from selected templates (optional)");
+    target.appendChild(title);
+    const available=new Map(templates.map(item=>[item.value,new Set()]));
+    for(const row of rows) {
+      const catalog=available.get(row.template);
+      if(catalog)for(const field of Object.keys(row.fields ?? {}))catalog.add(field);
+    }
+    const selectedFields=new Map((editing.templateFields ?? []).map(item=>[item.template,new Set(item.fields)]));
+    for(const template of templates) {
+      const details=document.createElement("details");
+      details.className="dd-template-field-group";
+      const caption=document.createElement("summary");
+      const choices=fields.filter(field=>available.get(template.value).has(String(field.id)));
+      const picked=selectedFields.get(template.value) ?? new Set();
+      const updateCaption=()=>{caption.textContent=template.label+(picked.size?" · "+picked.size.toLocaleString(locale):"");};
+      updateCaption();
+      details.open=true;
+      details.appendChild(caption);
+      if(!choices.length) {
+        const empty=document.createElement("p");
+        empty.className="dd-values-help";
+        empty.textContent=T("لا توجد حقول متاحة من مستندات هذا القالب.","No fields are available from this template’s documents.");
+        details.appendChild(empty);
       }
-    });
-    const headers=sides.map(({template,field})=>template+" · "+(fieldMeta(field)?.name ?? field));
-    const values=[...groups].sort(([a],[b])=>a.localeCompare(b,locale));
-    const open=([value,counts],side)=>openArchive(value,
-      (side===undefined?counts:[counts[side]]).flatMap(docs=>[...docs.values()]));
-    const view=chart.comparisonView;
-    if(view==="table" || !window.Chart || !values.length) {
-      drawTable(body,chart,[T("القيمة","Value"),...headers],values,
-        ([value,counts])=>[value,...counts.map(docs=>docs.size.toLocaleString(locale))],open);
-      return;
-    }
-
-    const plotted=values.slice(0,20);
-    if(plotted.length<values.length) {
-      const note=document.createElement("small");
-      note.className="dd-chart-note";
-      note.textContent=T("يظهر الرسم أول ٢٠ قيمة. يعرض الجدول جميع القيم.","The chart shows the first 20 values. The table shows all values.");
-      body.appendChild(note);
-    }
-    const shorten=value=>value.length>32?value.slice(0,32)+"…":value;
-    const stage=document.createElement("div");
-    stage.className="dd-chart-stage dd-comparison-stage";
-    const canvas=document.createElement("canvas");
-    stage.appendChild(canvas);
-    body.appendChild(stage);
-    const circular=["doughnut","pie"].includes(view);
-    const colors=plotted.map((_,index)=>palette[index%palette.length]);
-    if(circular) {
-      const rings=document.createElement("small");
-      rings.className="dd-chart-note";
-      rings.textContent=T("الخارجية: ","Outer: ")+headers[0]+T(" · الداخلية: "," · Inner: ")+headers[1];
-      body.appendChild(rings);
-    }
-    instances.push(new Chart(canvas,{
-      type:view==="horizontal"?"bar":view,
-      data:{
-        labels:plotted.map(([value])=>shorten(value)),
-        datasets:headers.map((label,side)=>({
-          label,data:plotted.map(([,counts])=>counts[side].size),
-          backgroundColor:circular?colors:palette[side],borderColor:palette[side],fill:false
-        }))
-      },
-      options:{
-        responsive:true,maintainAspectRatio:false,indexAxis:view==="horizontal"?"y":"x",
-        plugins:{legend:{display:!circular},tooltip:{callbacks:{
-          title:items=>plotted[items[0]?.dataIndex]?.[0] ?? "",
-          label:item=>item.dataset.label+" · "+item.formattedValue
-        }}},
-        onClick:(_,points)=>{
-          const point=points[0];
-          if(point)open(plotted[point.index],point.datasetIndex);
-        }
+      for(const field of choices) {
+        const label=document.createElement("label");
+        label.className="dd-value-option";
+        const checkbox=document.createElement("input");
+        checkbox.type="checkbox";
+        const id=String(field.id);
+        checkbox.checked=picked.has(id);
+        checkbox.addEventListener("change",()=>{
+          if(checkbox.checked)picked.add(id);
+          else picked.delete(id);
+          selectedFields.set(template.value,picked);
+          editing.templateFields=[...selectedFields].filter(([,ids])=>ids.size)
+            .map(([template,ids])=>({template,fields:[...ids]}));
+          updateCaption();
+          renderColorChoices();
+          updateEditorSave();
+        });
+        label.append(checkbox,document.createTextNode(field.name));
+        details.appendChild(label);
       }
-    }));
-  }
-  function updateComparisonChoices() {
-    const templates=unique(rows.map(row=>row.template)).sort((a,b)=>a.localeCompare(b,locale));
-    editing.comparison??=[{template:"",field:""},{template:"",field:""}];
-    editing.comparison.forEach((side,index)=>{
-      const template=$("dd-compare-template-"+(index+1));
-      const field=$("dd-compare-field-"+(index+1));
-      selectOptions(template,templates.map(value=>({value,label:value})),side.template,T("اختر القالب","Select a template"));
-      const available=new Set(rows.filter(row=>row.template===side.template).flatMap(row=>Object.keys(row.fields ?? {})));
-      selectOptions(field,fields.filter(item=>available.has(String(item.id))).map(item=>({value:item.id,label:item.name})),
-        side.field,T("اختر الحقل","Select a field"));
-      field.disabled=!side.template || field.options.length===1;
-    });
+      target.appendChild(details);
+    }
   }
   function openEditor(id) {
     if(!editMode || busy || deleting)return;
@@ -1188,7 +1241,7 @@
     };
     $("dd-overview-type").hidden=!editing.id.startsWith("overview-");
     $("dd-overview-type").disabled=$("dd-overview-type").hidden;
-    $("dd-title").value=editing.id.startsWith("base-")?presetTitle(widgetTitle(editing)):widgetTitle(editing);$("dd-type").value=editing.type==="comparison"?editing.comparisonView:editing.type;
+    $("dd-title").value=editing.id.startsWith("base-")?presetTitle(widgetTitle(editing)):widgetTitle(editing);$("dd-type").value=editing.type;
     $("dd-modified-from").value=editing.from||"";
     $("dd-modified-to").value=editing.to||"";
     $("dd-pages").value=editing.pages??"";
@@ -1197,9 +1250,8 @@
     const isField=Boolean(editing.dimension) && !BUILTIN.some(f=>f.id===editing.dimension);
     selectOptions($("dd-dimension"),[
       ...BUILTIN.map(f=>({value:f.id,label:f.name})),
-      {value:"__fields",label:T("حقول","Fields")},
-      {value:"__compare",label:T("مقارنة حقول القوالب","Compare template fields")}
-    ],editing.type==="comparison"?"__compare":isField?"__fields":editing.dimension,null);
+      {value:"__fields",label:T("حقول","Fields")}
+    ],isField?"__fields":editing.dimension,null);
     const fieldOptions=fields.map(f=>({value:String(f.id),label:f.name+(f.multi?T(" (قيم متعددة)"," (multiple values)"):"")}));
     if(isField&&!fieldOptions.some(f=>f.value===editing.dimension))
       fieldOptions.push({value:editing.dimension,label:T("حقل محفوظ (","Saved field (")+editing.dimension+")"});
@@ -1213,13 +1265,10 @@
     $("dd-editoroverlay").classList.remove("dd-hidden");
   }
   function updateEditorSource() {
-    const comparison=editing.type==="comparison";
-    const recent=comparison || isRecent(editing.type) || editing.type==="overview";
-    $("dd-template-comparison").classList.toggle("dd-hidden",!comparison);
-    if(comparison)updateComparisonChoices();
+    const recent=isRecent(editing.type) || editing.type==="overview";
     const dateKey=dateColumn(editing);
     const usesField=$("dd-dimension").value==="__fields";
-    $("dd-axis-options").classList.toggle("dd-hidden",recent && !comparison);
+    $("dd-axis-options").classList.toggle("dd-hidden",recent);
     $("dd-field-options").classList.toggle("dd-hidden",!usesField || recent);
     $("dd-modified-range").classList.toggle("dd-hidden",!dateKey);
     $("dd-page-count").classList.toggle("dd-hidden",recent || editing.dimension!=="__pages");
@@ -1227,7 +1276,7 @@
     const draft={...editing,from:$("dd-modified-from").value,to:$("dd-modified-to").value};
     const tooMany=!recent && dateColumnsLimited(draft);
     for(const option of $("dd-type").options) {
-      option.disabled=comparison?!comparisonViews.includes(option.value):option.value==="overview"?option.hidden:isBar(option.value) && tooMany;
+      option.disabled=option.value==="overview"?option.hidden:isBar(option.value) && tooMany;
     }
     if($("dd-type").selectedOptions[0]?.disabled) {
       editing.type="documents";
@@ -1237,22 +1286,14 @@
     const limit=$("dd-display-limit");
     limit.textContent=tooMany?T("الأعمدة متاحة حتى ١٠ وثائق ضمن نطاق التاريخ.","Bar charts are available for up to 10 documents in the date range."):"";
     limit.classList.toggle("dd-hidden",!limit.textContent);
-    $("dd-save").disabled=comparison ? ![1,2].every(side=>$("dd-compare-template-"+side).value && $("dd-compare-field-"+side).value) : !recent&&!editing.dimension;
+    $("dd-save").disabled=!recent&&!editing.dimension;
+    renderTemplateFields();
     renderColorChoices();
     updateEditorSave();
   }
   function changeDimension() {
     if(!editing)return;
-    const source=$("dd-dimension").value;
-    if(source==="__compare") {
-      editing.type="comparison";
-      editing.comparisonView=comparisonViews.includes($("dd-type").value)?$("dd-type").value:"table";
-      $("dd-type").value=editing.comparisonView;
-      updateEditorSource();
-      return;
-    }
-    if(editing.type==="comparison")editing.type=$("dd-type").value;
-    editing.dimension=source==="__fields"?$("dd-field").value:$("dd-dimension").value;
+    editing.dimension=$("dd-dimension").value==="__fields"?$("dd-field").value:$("dd-dimension").value;
     editing.selectedValues=[];
     editing.allValues=false;
     editing.colors={};
@@ -1264,14 +1305,14 @@
   function saveEditor() {
     if(!editing)return;
     editing.title=$("dd-title").value.trim()||T("جدول بدون اسم","Untitled table");
-    if(editing.type!=="comparison")editing.type=$("dd-type").value;
+    editing.type=$("dd-type").value;
     editing.accent=quarterWidth(editing) && $("dd-card-style").value==="accent";
     if($("dd-save").disabled)return;
     editing.from=dateColumn(editing)?$("dd-modified-from").value:"";
     editing.to=dateColumn(editing)?$("dd-modified-to").value:"";
     editing.pages=editing.dimension==="__pages"?pageCount($("dd-pages").value):null;
     const invalidRange=editing.from && editing.to && editing.from>editing.to;
-    const invalidPages=!["overview","comparison"].includes(editing.type) && !isRecent(editing.type) && editing.dimension==="__pages" && $("dd-pages").value.trim()!=="" && editing.pages===null;
+    const invalidPages=editing.type!=="overview" && !isRecent(editing.type) && editing.dimension==="__pages" && $("dd-pages").value.trim()!=="" && editing.pages===null;
     if(invalidRange || invalidPages) {
       const error=$("dd-filter-error");
       error.textContent=invalidRange?T("تاريخ البداية يجب أن يسبق تاريخ النهاية أو يطابقه.","The start date must be on or before the end date."):T("أدخل رقمًا عشريًا أو صحيحًا يبدأ من صفر.","Enter a nonnegative number.");
@@ -1301,7 +1342,7 @@
     $("dd-grid").setAttribute("aria-busy","true");
     $("dd-warning").classList.add("dd-hidden");
     try {
-      const records=await fetch("/DynamicDashboard/Rows",{credentials:"same-origin",cache:"no-store",headers:requestHeaders});
+      const records=await dashboardFetch("/DynamicDashboard/Rows",{credentials:"same-origin",cache:"no-store",headers:requestHeaders});
       if(records.status===409)throw new Error(T("تغيّرت الجلسة أو المستودع. أعد تحميل الصفحة.","The session or repository changed. Reload the page."));
       if(!records.ok)throw new Error([401,403].includes(records.status)
         ?T("لا توجد صلاحية لقراءة بيانات هذه الجلسة. سجل الدخول من جديد.","You cannot read data in this session. Sign in again.")
@@ -1349,7 +1390,7 @@
       message.textContent=T("جارٍ قراءة المستودعات…","Loading repositories…");
       dialog.showModal();
       try {
-        const response=await fetch("/DynamicDashboard/Repositories",
+        const response=await dashboardFetch("/DynamicDashboard/Repositories",
           {credentials:"same-origin",cache:"no-store",headers:requestHeaders});
         if(!response.ok)throw new Error();
         const result=await response.json();
@@ -1375,9 +1416,9 @@
       submit.disabled=true;
       message.textContent="";
       try {
-        const response=await fetch(form.action,{
+        const response=await dashboardFetch(form.action,{
           method:"POST",credentials:"same-origin",headers:requestHeaders,body:new FormData(form)
-        });
+        },true);
         const result=await response.json().catch(()=>({}));
         if(!response.ok || !result.url)throw new Error(result.error||T("تعذر تبديل المستودع.","Could not switch repositories."));
         window.location.assign(result.url);
@@ -1425,7 +1466,7 @@
       try {
         if(boards.has(id)) {
           const token=root.querySelector('input[name="__RequestVerificationToken"]')?.value;
-          const response=await fetch("/DynamicDashboard/DeleteLayout?boardId="+encodeURIComponent(id),{
+          const response=await dashboardFetch("/DynamicDashboard/DeleteLayout?boardId="+encodeURIComponent(id),{
             method:"POST",credentials:"same-origin",
             headers:{...requestHeaders,"RequestVerificationToken":token||""}
           });
@@ -1488,21 +1529,10 @@
     });
     $("dd-type").addEventListener("change",event=>{
       if(!editing)return;
-      if(editing.type==="comparison")editing.comparisonView=event.target.value;
-      else editing.type=event.target.value;
+      editing.type=event.target.value;
       updateEditorSource();
       valueChoices();
     });
-    for(const side of [1,2]) {
-      $("dd-compare-template-"+side).addEventListener("change",event=>{
-        editing.comparison[side-1]={template:event.target.value,field:""};
-        updateEditorSource();
-      });
-      $("dd-compare-field-"+side).addEventListener("change",event=>{
-        editing.comparison[side-1].field=event.target.value;
-        updateEditorSource();
-      });
-    }
     $("dd-dimension").addEventListener("change",changeDimension);
     $("dd-field").addEventListener("change",changeDimension);
     $("dd-value-search").addEventListener("input",valueChoices);

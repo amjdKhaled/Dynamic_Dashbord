@@ -437,7 +437,10 @@
       }
     }
     const list=[...map.values()].map(g=>({...g,value:g.ids.size}));
-    if(chart.dimension==="__created"||chart.dimension==="__modified")
+    if(chart.dimension==="__template" && templateFields.size) {
+      list.sort((a,b)=>a.template.localeCompare(b.template,locale,{numeric:true}) ||
+        (a.field??"").localeCompare(b.field??"",locale) || b.value-a.value || a.label.localeCompare(b.label,locale));
+    } else if(chart.dimension==="__created"||chart.dimension==="__modified")
       list.sort((a,b)=>a.label.localeCompare(b.label));
     else list.sort((a,b)=>b.value-a.value||a.label.localeCompare(b.label,locale));
     const isChart=!isTable(chart.type) && !["doughnut","pie"].includes(chart.type);
@@ -522,6 +525,7 @@
           cell.dataset.label=headers[index];
           const text=document.createElement("span");
           text.textContent=value;
+          if(index===0 && item.field && chart.dimension==="__template")text.classList.add("dd-template-tag");
           if(chart.dimension==="__template" && index===0) {
             text.title=String(value);
             text.className="dd-template-value";
@@ -912,7 +916,11 @@
         const gridColor=chart.accent?"#ffffff22":"#eef1f6";
         const config={
           type,
-          data:{labels:data.groups.map(({label})=>label.length>52?label.slice(0,52)+"…":label),datasets:[{
+          data:{labels:data.groups.map(group=>{
+            const shorten=(label,limit)=>label.length>limit?label.slice(0,limit)+"…":label;
+            if(group.field && !circ)return [group.template,shorten(group.field,32),shorten(group.valueLabel,36)];
+            return shorten(group.label,52);
+          }),datasets:[{
             label:T("عدد الوثائق","Document count"),data:data.groups.map(g=>g.value),
             borderColor:palette[0],backgroundColor:colors,
             ...(type==="line"?{pointBackgroundColor:colors,pointBorderColor:colors,
@@ -1059,7 +1067,7 @@
   }
   function nextCardSpan(chart) { return stepCardSpan(chart,1,true); }
 
-  function setCardSpan(card,chart,width) {
+  function setCardSpan(card,chart,width,edge="end") {
     if(desktopWidth(chart)===width)return;
     const current=desktopLayout.get(chart.id);
     const oldWidth=desktopWidth(chart);
@@ -1069,69 +1077,82 @@
       freezeSlots();
       const peers=charts.filter(item=>desktopLayout.get(item.id)?.row===current.row)
         .sort((a,b)=>a.slot.column-b.slot.column);
+      const desiredColumn=Math.max(0,Math.min(desktopColumns-width,
+        current.column+(edge==="start"?oldWidth-width:0)));
+      const overlaps=peers.some(item=>item!==chart && item.slot.column<desiredColumn+width &&
+        item.slot.column+desktopWidth(item)>desiredColumn);
       const remaining=[...peers];
-      if(width>oldWidth) {
-        let occupied=remaining.reduce((total,item)=>total+desktopWidth(item),0);
-        for(const item of [...remaining].reverse()) {
-          if(item===chart || occupied<=desktopColumns)continue;
-          const size=desktopWidth(item);
-          item.width=Math.max(minimumWidth(item),size-(occupied-desktopColumns));
-          occupied-=size-item.width;
-        }
-        const overflow=[];
-        for(const item of [...remaining].reverse()) {
-          if(item===chart || occupied<=desktopColumns)continue;
-          overflow.unshift(item);
-          remaining.splice(remaining.indexOf(item),1);
-          occupied-=desktopWidth(item);
-        }
-        if(overflow.length) {
-          for(const item of charts)if(item.slot?.row>current.row)item.slot.row++;
-          for(const [row,height] of [...vacantRows].sort(([a],[b])=>b-a)) {
-            if(row<=current.row)continue;
-            vacantRows.delete(row);
-            vacantRows.set(row+1,height);
+      if(!overlaps) {
+        chart.slot={row:current.row,column:desiredColumn};
+      } else {
+        if(width>oldWidth) {
+          let occupied=remaining.reduce((total,item)=>total+desktopWidth(item),0);
+          for(const item of [...remaining].reverse()) {
+            if(item===chart || occupied<=desktopColumns)continue;
+            const size=desktopWidth(item);
+            item.width=Math.max(minimumWidth(item),size-(occupied-desktopColumns));
+            occupied-=size-item.width;
           }
-          let column=0;
-          for(const item of overflow) {
-            item.slot={row:current.row+1,column};
-            column+=desktopWidth(item);
+          const overflow=[];
+          for(const item of [...remaining].reverse()) {
+            if(item===chart || occupied<=desktopColumns)continue;
+            overflow.unshift(item);
+            remaining.splice(remaining.indexOf(item),1);
+            occupied-=desktopWidth(item);
+          }
+          if(overflow.length) {
+            for(const item of charts)if(item.slot?.row>current.row)item.slot.row++;
+            for(const [row,height] of [...vacantRows].sort(([a],[b])=>b-a)) {
+              if(row<=current.row)continue;
+              vacantRows.delete(row);
+              vacantRows.set(row+1,height);
+            }
+            let column=0;
+            for(const item of overflow) {
+              item.slot={row:current.row+1,column};
+              column+=desktopWidth(item);
+            }
           }
         }
-      }
-      let column=0;
-      for(const item of remaining) {
-        item.slot={row:current.row,column};
-        column+=desktopWidth(item);
+        let column=0;
+        for(const item of remaining) {
+          item.slot={row:current.row,column};
+          column+=desktopWidth(item);
+        }
       }
     }
     markChanged();render();
     const updated=[...$("dd-grid").children].find(widget=>widget.dataset.id===card.dataset.id);
-    updated?.querySelector(".dd-resize-handle")?.focus({preventScroll:true});
+    updated?.querySelector(".dd-resize-"+edge)?.focus({preventScroll:true});
   }
   function attachResize(card,chart) {
-    const handle=iconButton(chart.type==="kpi"?T("تغيير عرض بطاقة الأرقام","Resize number card"):T("تغيير عرض الجدول أو الرسم","Resize table or chart"),"↔",
-      event=>{if(event.detail===0)setCardSpan(card,chart,nextCardSpan(chart));});
-    handle.classList.add("dd-resize-handle");
+    attachResizeHandle(card,chart,"end");
+    attachResizeHandle(card,chart,"start");
+  }
+  function attachResizeHandle(card,chart,edge) {
+    const rtl=getComputedStyle(document.documentElement).direction==="rtl";
+    const right=(edge==="start")===rtl;
+    const handle=iconButton(right?T("تغيير العرض من اليمين","Resize from the right"):T("تغيير العرض من اليسار","Resize from the left"),"↔",
+      event=>{if(event.detail===0)setCardSpan(card,chart,nextCardSpan(chart),edge);});
+    handle.classList.add("dd-resize-handle","dd-resize-"+edge);
     card.appendChild(handle);
     handle.addEventListener("pointerdown",event=>{
       if(event.button!==0 || !event.isPrimary)return;
       event.preventDefault();
       handle.focus({preventScroll:true});
       handle.setPointerCapture(event.pointerId);
-      const rtl=getComputedStyle(card).direction==="rtl";
       const widths=Array.from({length:desktopColumns-minimumWidth(chart)+1},(_,i)=>i+minimumWidth(chart));
       const grid=$("dd-grid");
       const gap=parseFloat(getComputedStyle(grid).columnGap)||0;
       const gridWidth=grid.clientWidth;
       const widthFor=width=>(gridWidth+gap)*width/desktopColumns-gap;
       const preview=document.createElement("div");
-      preview.className="dd-resize-preview";
+      preview.className="dd-resize-preview dd-preview-"+edge;
       preview.setAttribute("aria-hidden","true");
       card.appendChild(preview);
       let nextSpan=desktopWidth(chart);
       const update=next=>{
-        const distance=(next.clientX-event.clientX)*(rtl?-1:1);
+        const distance=(next.clientX-event.clientX)*(right?1:-1);
         const target=widthFor(desktopWidth(chart))+distance;
         const width=Math.max(widthFor(widths[0]),Math.min(widthFor(widths.at(-1)),target));
         preview.style.setProperty("--dd-preview-width",width+"px");
@@ -1147,7 +1168,7 @@
       const finish=next=>{
         update(next);
         cleanup();
-        setCardSpan(card,chart,nextSpan);
+        setCardSpan(card,chart,nextSpan,edge);
       };
       update(event);
       handle.addEventListener("pointermove",update);
@@ -1157,8 +1178,7 @@
     handle.addEventListener("keydown",event=>{
       if(!["ArrowLeft","ArrowRight"].includes(event.key))return;
       event.preventDefault();
-      const rtl=getComputedStyle(card).direction==="rtl";
-      setCardSpan(card,chart,stepCardSpan(chart,(event.key==="ArrowLeft")===rtl?1:-1));
+      setCardSpan(card,chart,stepCardSpan(chart,(event.key==="ArrowRight")===right?1:-1),edge);
     });
   }
   function render() {
@@ -1480,7 +1500,14 @@
     if(overview.get(editing.id)?.title===editing.title)editing.title="";
     const entry=normalChart(editing);
     const index=charts.findIndex(c=>c.id===entry.id);
-    if(index>=0)charts[index]=entry;else charts.push(entry);
+    if(index>=0) {
+      charts[index]=entry;
+    } else {
+      const occupiedRows=[...arrangeDesktop(charts).values()].map(slot=>slot.row);
+      const lastRow=Math.max(-1,...occupiedRows,...vacantRows.keys());
+      entry.slot={row:lastRow+1,column:0};
+      charts.push(entry);
+    }
     markChanged();closeEditor();render();
   }
   async function refresh() {

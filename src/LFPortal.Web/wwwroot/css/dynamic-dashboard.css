@@ -545,3 +545,14 @@ html:has(.dd-edit-mode) { overflow-anchor: none; }
 .site-header:has(.dd-header-refresh) .lang-switcher { margin-inline: 0; }
 .dd-template-value-picker:empty { display: none; }
 .site-header:has(.dd-header-refresh) .dd-repo-switch { margin-inline: 0; }
+
+.dd-resize-handle.dd-resize-start { inset-inline-start: 0; inset-inline-end: auto; }
+.dd-resize-preview.dd-preview-start { inset-inline-start: auto; inset-inline-end: 0; }
+.dd-template-tag {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 6px;
+  background: var(--isb-field);
+  color: var(--dd-navy);
+  font-weight: 700;
+}

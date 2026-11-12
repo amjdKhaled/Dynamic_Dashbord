@@ -691,6 +691,56 @@
     }
   }
 
+  function dropPlacement(layout, sourceId, targetId) {
+    const source=layout.get(sourceId);
+    const target=layout.get(targetId);
+    const column=Math.min(target.column,desktopColumns-source.width);
+    const placed={row:target.row,column,width:source.width};
+    const overlaps=(slot,start,width)=>slot.column<start+width && slot.column+slot.width>start;
+    const next=new Map(layout);
+    next.delete(sourceId);
+    const displaced=[...next].filter(([,slot])=>slot.row===placed.row && overlaps(slot,column,placed.width))
+      .sort(([,a],[,b])=>a.column-b.column);
+    for(const [id] of displaced)next.delete(id);
+    next.set(sourceId,placed);
+
+    let insertedRow=null;
+    if(displaced.length) {
+      const row=placed.row+1;
+      const width=displaced.reduce((sum,[,slot])=>sum+slot.width,0);
+      const occupied=[...next.values()].filter(slot=>slot.row===row);
+      let start=0;
+      while(start+width<=desktopColumns && occupied.some(slot=>overlaps(slot,start,width)))start++;
+      if(start+width>desktopColumns) {
+        insertedRow=row;
+        for(const [id,slot] of next)if(slot.row>=row)next.set(id,{...slot,row:slot.row+1});
+        start=0;
+      }
+      for(const [id,slot] of displaced) {
+        next.set(id,{row,column:start,width:slot.width});
+        start+=slot.width;
+      }
+    }
+    return {next,placed,insertedRow};
+  }
+
+  function applyDesktopDrop(sourceId,targetId) {
+    const {next,insertedRow}=dropPlacement(desktopLayout,sourceId,targetId);
+    if(insertedRow!==null) {
+      for(const [row,height] of [...vacantRows].sort(([a],[b])=>b-a)) {
+        if(row<insertedRow)continue;
+        vacantRows.delete(row);
+        vacantRows.set(row+1,height);
+      }
+    }
+    for(const chart of charts) {
+      const slot=next.get(chart.id);
+      if(slot)chart.slot={row:slot.row,column:slot.column};
+    }
+    charts.sort((a,b)=>(a.slot?.row??160)-(b.slot?.row??160) ||
+      (a.slot?.column??0)-(b.slot?.column??0));
+  }
+
   function drawCard(chart) {
     const type=displayType(chart);
     const ghost=Boolean(chart.hidden);
@@ -699,6 +749,7 @@
     const documentTable=type==="documents" || isRecent(type);
     el.classList.toggle("dd-full-card",documentTable || chart.span===12);
     el.classList.toggle("dd-quarter-card",quarterWidth(chart) && chart.span===3);
+    el.classList.toggle("dd-number-card",quarterWidth(chart));
     el.classList.toggle("dd-graph",!isTable(type)&&type!=="kpi"&&type!=="overview");
     el.dataset.id=chart.id;
     gridPosition(el,desktopLayout.get(chart.id));
@@ -900,23 +951,36 @@
     });
     el.addEventListener("dragover",event=>{
       if(editMode && draggedCard && draggedCard!==chart.id){
-        event.preventDefault();el.classList.add("dd-drop-target");
+        event.preventDefault();
+        el.classList.add("dd-drop-target");
+        const preview=$("dd-grid").querySelector(".dd-drop-preview");
+        if(preview) {
+          const source=desktopLayout.get(draggedCard),target=desktopLayout.get(chart.id);
+          gridPosition(preview,{row:target.row,column:Math.min(target.column,desktopColumns-source.width),width:source.width});
+          preview.hidden=false;
+        }
       }
     });
-    el.addEventListener("dragleave",event=>{if(!el.contains(event.relatedTarget))el.classList.remove("dd-drop-target");});
+    el.addEventListener("dragleave",event=>{
+      if(el.contains(event.relatedTarget))return;
+      el.classList.remove("dd-drop-target");
+      const preview=$("dd-grid").querySelector(".dd-drop-preview");
+      if(preview)preview.hidden=true;
+    });
     el.addEventListener("drop",event=>{
       if(!editMode || busy || deleting)return;
       event.preventDefault();const source=event.dataTransfer?.getData("text/plain");
       if(!source||source!==draggedCard||source===chart.id)return;
       const i=charts.findIndex(c=>c.id===source),j=charts.findIndex(c=>c.id===chart.id);
       if(i<0||j<0)return;
-      swapCards(i,j,true);
+      if(desktopGrid())applyDesktopDrop(source,chart.id);
+      else swapCards(i,j);
       draggedCard=null;
       markChanged();render();
     });
     return el;
   }
-  function swapCards(first,second,fromDrag=false) {
+  function swapCards(first,second) {
     const left=charts[first], right=charts[second];
     const from=desktopLayout.get(left.id), to=desktopLayout.get(right.id);
     [charts[first],charts[second]]=[right,left];
@@ -940,7 +1004,7 @@
           item.slot={row:destination.row,column};
           continue;
         }
-        const insertRow=destination.row+(fromDrag || source.row<destination.row?1:0);
+        const insertRow=destination.row+(source.row<destination.row?1:0);
         for(const peer of charts)if(peer.slot?.row>=insertRow)peer.slot.row++;
         for(const [row,height] of [...vacantRows].sort(([a],[b])=>b-a)) {
           if(row<insertRow)continue;

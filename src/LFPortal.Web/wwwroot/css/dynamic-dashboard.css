@@ -121,6 +121,7 @@ body:has(.dd-page.dd-is-loading) > :is(.site-header,.site-footer){display:none}
 .dd-repository-dialog p{color:var(--dd-muted)}
 /* Cards use whole columns. The content determines the row height. */
 .dd-grid{grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch}
+.dd-grid > .dd-number-card { align-self: start; }
 .dd-card{position:relative;grid-column:auto}
 .dd-card.dd-full-card{grid-column:1/-1}
 .dd-edit-mode .dd-card:has(.dd-resize-handle) .dd-visual{padding-block-end:48px}

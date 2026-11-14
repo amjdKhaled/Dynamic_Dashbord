@@ -1349,6 +1349,7 @@
       || (snapshot===initialEditorSnapshot && charts.some(chart=>chart.id===editing.id));
     for(const button of $("dd-editoroverlay").querySelectorAll("[data-editor-type]")) {
       const option=[...$("dd-type").options].find(option=>option.value===button.dataset.editorType);
+      button.hidden=option.hidden;
       button.disabled=option.disabled;
       button.setAttribute("aria-pressed",String(option.selected));
     }
@@ -1515,7 +1516,9 @@
     updateEditorSave();
     $("dd-category-options").open=Boolean(editing.allValues || editing.selectedValues?.length);
     $("dd-chart-colors").open=false;
+    $("dd-editor-preview-details").open=!window.matchMedia("(max-width: 700px)").matches;
     $("dd-editor-body").scrollTop=0;
+    $("dd-editor-preview-details").parentElement.scrollTop=0;
     $("dd-editoroverlay").showModal();
     $("dd-title").focus({preventScroll:true});
   }

@@ -105,10 +105,11 @@
             <div class="dd-editor-settings">
                 <div class="dd-editor-body" id="dd-editor-body">
                     <section id="dd-editor-display" class="dd-editor-panel">
+                        <h3>@T("العرض", "Display")</h3>
                         <label class="dd-label" for="dd-title">@T("الاسم", "Name")</label>
                         <input class="dd-control" id="dd-title" maxlength="90" placeholder="@T("مثال: المعاملات حسب الإدارة", "Example: Transactions by department")" />
-                        <label class="dd-label" for="dd-type">@T("نوع العرض", "Display type")</label>
-                        <select class="dd-control" id="dd-type">
+                        <p class="dd-label" id="dd-editor-type-label">@T("نوع العرض", "Display type")</p>
+                        <select id="dd-type" hidden>
                             <option value="overview" id="dd-overview-type" hidden disabled>@T("العرض الأصلي للبطاقة", "Original widget view")</option>
                             <option value="bar">@T("أعمدة عمودية", "Vertical bars")</option>
                             <option value="horizontal">@T("أعمدة أفقية", "Horizontal bars")</option>
@@ -121,10 +122,18 @@
                             <option value="recent-modified">@T("سجل نشاط المستندات", "Document activity log")</option>
                             <option value="kpi">@T("بطاقة إجمالي", "Total card")</option>
                         </select>
-                        <div class="dd-editor-types" role="group" aria-label="@T("أنواع العرض السريعة", "Quick display choices")">
-                            <button class="dd-btn" type="button" data-editor-type="table"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h18v16H3zM3 9h18M3 14h18M10 9v11"/></svg> @T("ملخص", "Summary")</button>
-                            <button class="dd-btn" type="button" data-editor-type="bar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 20h18M6 16v-5m6 5V5m6 11V8"/></svg> @T("عمودي", "Vertical")</button>
-                            <button class="dd-btn" type="button" data-editor-type="horizontal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4v16m4-13h6m-6 5h12m-12 5h9"/></svg> @T("أفقي", "Horizontal")</button>
+                        <div class="dd-editor-types" role="group" aria-labelledby="dd-editor-type-label">
+                            <button class="dd-btn" type="button" data-editor-type="table" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h18v16H3zM3 9h18M3 14h18M10 9v11"/></svg> @T("ملخص", "Summary")</button>
+                            <button class="dd-btn" type="button" data-editor-type="bar" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 20h18M6 16v-5m6 5V5m6 11V8"/></svg> @T("عمودي", "Vertical")</button>
+                            <button class="dd-btn" type="button" data-editor-type="horizontal" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4v16m4-13h6m-6 5h12m-12 5h9"/></svg> @T("أفقي", "Horizontal")</button>
+                            <button class="dd-btn" type="button" data-editor-type="line" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 18l6-7 4 3 8-9M3 4v16h18"/></svg> @T("خطي", "Line")</button>
+                            <button class="dd-btn" type="button" data-editor-type="doughnut" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18m0 5a4 4 0 1 0 0 8 4 4 0 0 0 0-8"/></svg> @T("دائري مجوف", "Doughnut")</button>
+                            <button class="dd-btn" type="button" data-editor-type="pie" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v9h9A9 9 0 1 1 12 3zM15 3v6h6a9 9 0 0 0-6-6"/></svg> @T("دائري", "Pie")</button>
+                            <button class="dd-btn" type="button" data-editor-type="kpi" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h18v14H3zM8 13l3-3v5m4-5h2v5h-2z"/></svg> @T("إجمالي", "Total")</button>
+                            <button class="dd-btn" type="button" data-editor-type="documents" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h8l4 4v14H6zM9 12h6m-6 4h6"/></svg> @T("المستندات", "Documents")</button>
+                            <button class="dd-btn" type="button" data-editor-type="recent-created" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h8l4 4v14H6zM12 10v6m-3-3h6"/></svg> @T("الأحدث إنشاءً", "Recently created")</button>
+                            <button class="dd-btn" type="button" data-editor-type="recent-modified" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-7M3 4v5h5m4-2v5l4 2"/></svg> @T("سجل النشاط", "Activity log")</button>
+                            <button class="dd-btn" type="button" data-editor-type="overview" aria-pressed="false" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h18v14H3zM3 10h18m-11 0v9"/></svg> @T("العرض الأصلي", "Original view")</button>
                         </div>
                         <div id="dd-card-color" class="dd-hidden">
                             <label class="dd-label" for="dd-card-style">@T("لون البطاقة", "Card color")</label>
@@ -138,7 +147,7 @@
                     <section id="dd-editor-data" class="dd-editor-panel">
                         <h3>@T("البيانات والتصفية", "Data and filters")</h3>
                         <div id="dd-axis-options">
-                            <label class="dd-label" for="dd-dimension">@T("البيانات / المحور التصنيفي", "Data / category axis")</label>
+                            <label class="dd-label" for="dd-dimension">@T("التجميع حسب", "Group by")</label>
                             <select class="dd-control" id="dd-dimension"></select>
                             <div id="dd-field-options" class="dd-hidden">
                                 <label class="dd-label" for="dd-field">@T("الحقل", "Field")</label>
@@ -179,8 +188,10 @@
                 </div>
             </div>
             <section class="dd-editor-preview" aria-labelledby="dd-editor-preview-title">
-                <h3 id="dd-editor-preview-title">@T("معاينة مباشرة", "Live preview")</h3>
-                <div id="dd-editor-preview-card"></div>
+                <details id="dd-editor-preview-details" open>
+                    <summary id="dd-editor-preview-title">@T("معاينة مباشرة", "Live preview")</summary>
+                    <div id="dd-editor-preview-card"></div>
+                </details>
             </section>
         </div>
     </dialog>

@@ -240,34 +240,36 @@ body:has(.dd-page.dd-is-loading) > :is(.site-header,.site-footer){display:none}
 .dd-edit-mode .dd-card.dd-quarter-card .dd-card-head { padding: 12px 10px 8px; }
 .dd-edit-mode .dd-card.dd-quarter-card .dd-visual { padding-inline: 10px; }
 
-/* Opt-in card appearance matching the navy/gold folder statistics card.
+/* Opt-in card appearance using the ISB identity surface from brand-tokens.css:
+   navy-to-blue gradient, fading dot grid and gold edge, the same as the site header.
    Applies only when the user selects the style in the card editor. */
 .dd-card.dd-accent-card,
 .dd-card.dd-native-widget.dd-accent-card {
-  background: #0d3850;
+  background: var(--isb-deep-sea) var(--isb-hdr-gradient);
   color: #fff;
-  border: 1px solid #0d3850;
-  border-bottom: 4px solid #bf972c;
-  box-shadow: 0 8px 20px #0d385026;
+  /* No navy side edge: it would show as a dark line along the blue end. */
+  border: 0;
+  border-bottom: 4px solid var(--isb-gold);
+  box-shadow: var(--isb-card-shadow);
 }
 .dd-card.dd-accent-card .dd-card-head,
 .dd-card.dd-accent-card .dd-visual {
-  background-color: #0d3850;
+  background-color: transparent;
   color: #fff;
 }
 .dd-card.dd-accent-card .dd-card-head { border-color: #ffffff24; }
-.dd-card.dd-accent-card .dd-card-head strong { color: #fff; border-inline-start-color: #bf972c; }
+.dd-card.dd-accent-card .dd-card-head strong { color: #fff; border-inline-start-color: var(--isb-gold); }
 .dd-card.dd-accent-card .dd-card-sub,
 .dd-card.dd-accent-card .dd-kpi small,
 .dd-card.dd-accent-card .dd-chart-note { color: #d6e5ee; }
 .dd-card.dd-accent-card .dd-kpi,
 .dd-card.dd-accent-card .dd-kpi small { color: #fff; }
-.dd-card.dd-accent-card .dd-card-actions .dd-icon-btn { background: #eff5fa; color: #0d3850; }
+.dd-card.dd-accent-card .dd-card-actions .dd-icon-btn { background: #eff5fa; color: var(--isb-deep-sea); }
 .dd-card.dd-accent-card .dd-card-actions .dd-icon-btn:hover,
 .dd-card.dd-accent-card .dd-card-actions .dd-icon-btn:focus-visible {
-  background: #bf972c; color: #0d3850;
+  background: var(--isb-gold); color: var(--isb-deep-sea);
 }
-.dd-card.dd-accent-card .dd-table th { background: #164962; color: #fff; }
+.dd-card.dd-accent-card .dd-table th { background: #ffffff1a; color: #fff; }
 .dd-card.dd-accent-card .dd-table td { color: #f0f7fb; }
 .dd-card.dd-accent-card .dd-table td a { color: #f3cb70; }
 .dd-card.dd-accent-card .dd-table td,
@@ -280,8 +282,11 @@ body:has(.dd-page.dd-is-loading) > :is(.site-header,.site-footer){display:none}
 
 /* The original repository-backed number cards can receive the same user-selected theme. */
 .dd-card.dd-native-widget.dd-accent-card > .dd-visual > :is(.folder-kpi-card,.d-card:has(.d-kpi-val)) {
-  background: #0d3850 !important;
+  background: var(--isb-deep-sea) var(--isb-hdr-gradient) !important;
   color: #fff !important;
+  border: 0;
+  border-bottom: 4px solid var(--isb-gold);
+  border-radius: 18px;
   box-shadow: none;
 }
 .dd-card.dd-native-widget.dd-accent-card .d-kpi-val,
@@ -302,16 +307,26 @@ body:has(.dd-page.dd-is-loading) > :is(.site-header,.site-footer){display:none}
 .dd-card.dd-native-widget:not(.dd-accent-card) .folder-kpi-value,
 .dd-card.dd-native-widget:not(.dd-accent-card) .folder-kpi-label { color: #0d3850 !important; }
 
-/* Match the reference card's rounded navy surface, subtle diamond motif,
+/* Match the reference card's rounded identity surface, header dot grid,
    prominent icon and number, without changing standard cards. */
 .dd-card.dd-accent-card { border-radius: 18px; }
-.dd-card.dd-accent-card .dd-visual { background-color: transparent; }
-.dd-card.dd-accent-card .dd-card-head { background-color: transparent; }
-.dd-card.dd-accent-card .dd-visual:has(.dd-kpi) {
-  background-color: #0d3850;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'%3E%3Cpath d='M40 12 63 40 40 68 17 40Z M23 23h34v34H23z' fill='none' stroke='%23ffffff' stroke-opacity='.11' stroke-width='1.2'/%3E%3C/svg%3E");
-  background-size: 80px 80px;
+.dd-card.dd-accent-card .dd-visual:has(.dd-kpi) { isolation: isolate; }
+/* Same dot grid as .isb-hdr: right half only, fading toward the left. */
+.dd-card.dd-accent-card .dd-visual:has(.dd-kpi)::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 45%;
+  right: 0;
+  background-image: var(--isb-hdr-dots);
+  background-size: var(--isb-hdr-dots-size);
+  -webkit-mask-image: var(--isb-hdr-dots-fade);
+  mask-image: var(--isb-hdr-dots-fade);
+  pointer-events: none;
+  z-index: 0;
 }
+.dd-card.dd-accent-card .dd-visual:has(.dd-kpi) > * { position: relative; z-index: 1; }
 .dd-card.dd-accent-card .dd-kpi {
   display: flex;
   flex-direction: column;
@@ -336,10 +351,6 @@ body:has(.dd-page.dd-is-loading) > :is(.site-header,.site-footer){display:none}
 }
 .dd-kpi-feature-icon { display: inline-flex; width: 28px; height: 28px; color: #fff; }
 .dd-kpi-feature-icon svg { width: 100%; height: 100%; }
-.dd-card.dd-native-widget.dd-accent-card .folder-kpi-card {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'%3E%3Cpath d='M40 12 63 40 40 68 17 40Z M23 23h34v34H23z' fill='none' stroke='%23ffffff' stroke-opacity='.11' stroke-width='1.2'/%3E%3C/svg%3E") !important;
-  background-size: 80px 80px;
-}
 
 /* Keep every edit action visible within the card, even at one fifth of a row. */
 .dd-edit-mode .dd-card-actions .dd-icon-btn {
@@ -368,11 +379,11 @@ body:has(.dd-page.dd-is-loading) > :is(.site-header,.site-footer){display:none}
 .dd-edit-mode .dd-card.dd-accent-card .dd-card-head strong { color: var(--isb-ink); }
 .dd-edit-mode .dd-card.dd-accent-card .dd-card-sub { color: var(--dd-muted); }
 .dd-edit-mode .dd-card.dd-accent-card > .dd-visual {
-  background-color: #0d3850;
+  background: var(--isb-deep-sea) var(--isb-hdr-gradient);
   border-radius: 14px;
-  border-bottom: 4px solid #bf972c;
+  border-bottom: 4px solid var(--isb-gold);
 }
-.dd-edit-mode .dd-card.dd-native-widget.dd-accent-card > .dd-visual > .folder-kpi-card {
+.dd-edit-mode .dd-card.dd-native-widget.dd-accent-card > .dd-visual > :is(.folder-kpi-card,.d-card:has(.d-kpi-val)) {
   border-bottom: 0;
 }
 .dd-edit-mode .dd-card.dd-accent-card:has(.dd-resize-handle) > .dd-visual {
@@ -402,10 +413,12 @@ body:has(.dd-page.dd-is-loading) > :is(.site-header,.site-footer){display:none}
   }
 }
 
-/* The overview card already supplies the featured surface and gold edge. */
-.dd-card.dd-native-widget.dd-accent-card:has(> .dd-visual > .folder-kpi-card):not(.dd-drop-target) {
+/* The overview number card already supplies the featured surface and gold edge.
+   The outer frame stays invisible on every side, or its navy edge shows as a
+   second ring around the blue end of the gradient and beside the gold corners. */
+.dd-card.dd-native-widget.dd-accent-card:has(> .dd-visual > .folder-kpi-card, > .dd-visual > .d-card > .d-kpi-val):not(.dd-drop-target, .dd-edit-mode .dd-card) {
   background: transparent;
-  border-bottom-color: transparent;
+  border-color: transparent;
   box-shadow: none;
 }
 /* Reserve action slots so switching editing modes does not reflow the toolbar. */

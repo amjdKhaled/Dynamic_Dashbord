@@ -11,7 +11,7 @@ const groupStart=source.indexOf("  function groupKey(id,value) {");
 const utilitiesStart=source.indexOf("  const isRecent =");
 const utilitiesEnd=source.indexOf("  const tablePages",utilitiesStart);
 const dayStart=source.indexOf("  function dayKey");
-const groupEnd=source.indexOf("  function openArchive(title, docs) {",groupStart);
+const groupEnd=source.indexOf("  let pendingNotice=",groupStart);
 assert.ok(valuesStart>=0 && valuesEnd>valuesStart && groupStart>=0 && groupEnd>groupStart,
   "The actual aggregation functions must be present in the bundled script");
 

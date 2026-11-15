@@ -114,7 +114,7 @@
   const boards = new Map();
   const mainBoard = {id:"default",name:T("اللوحة الرئيسية","Main dashboard"),layout:null};
   let activeBoard = {...mainBoard};
-  let partial = false, busy = false, editMode = false, revision = 0, savedRevision = 0, saving = false, hasSaved = false, layoutReady = false, deleting = false;
+  let partial = false, busy = false, editMode = false, revision = 0, savedRevision = 0, saving = false, savedFlash = false, layoutReady = false, deleting = false;
 
   const quarterWidth = chart => chart.type==="kpi" || (chart.type==="overview" && overview.get(chart.id)?.span===3);
 
@@ -190,7 +190,6 @@
   function loadConfig(config) {
     if (config && Array.isArray(config.charts)) {
       charts = config.charts.filter(c=>c && typeof c.id==="string").slice(0,80).map(normalChart);
-      hasSaved=true;
       if(config.version!==2 && config.version!==3 && activeBoard.id!=="default") {
         for(const card of defaults.filter(item=>isRecent(item.type))) {
           if(charts.length<60 && !charts.some(item=>item.type===card.type))
@@ -218,9 +217,15 @@
     $("dd-repository").disabled=deleting;
     $("dd-layout-status").textContent=message ?? (saving?T("جارٍ الحفظ…","Saving…")
       :revision!==savedRevision?T("تغييرات غير محفوظة","Unsaved changes")
-      :hasSaved?T("تم الحفظ","Saved"):"");
+      :savedFlash?T("تم الحفظ","Saved"):"");
+  }
+  let savedFlashTimer;
+  function clearSavedFlash() {
+    clearTimeout(savedFlashTimer);
+    savedFlash=false;
   }
   function markChanged() {
+    clearSavedFlash();
     revision++;
     updateSaveBar();
   }
@@ -228,7 +233,9 @@
     const items=[...boards.values()].filter(board=>board.id!==activeBoard.id);
     items.push(activeBoard);
     items.sort((a,b)=>a.id==="default"?-1:b.id==="default"?1:a.name.localeCompare(b.name,locale));
-    selectOptions($("dd-board-list"),items.map(board=>({value:board.id,label:board.id==="default"?presetTitle(board.name):board.name})),activeBoard.id,null);
+    const list=$("dd-board-list");
+    selectOptions(list,items.map(board=>({value:board.id,label:board.id==="default"?presetTitle(board.name):board.name})),activeBoard.id,null);
+    $("dd-board-current").textContent=list.selectedOptions[0]?.textContent ?? activeBoard.name;
   }
   function rememberBoard() {
     const url=new URL(window.location.href);
@@ -250,7 +257,7 @@
     }
     revision=0;
     savedRevision=0;
-    hasSaved=false;
+    clearSavedFlash();
     tablePages.clear();
     loadConfig(board.layout);
     syncBoardPicker();
@@ -258,7 +265,8 @@
     render();
   }
   async function saveLayout() {
-    if(!layoutReady || saving || deleting || revision===savedRevision)return;
+    if(revision===savedRevision)return true;
+    if(!layoutReady || saving || deleting)return false;
     saving=true;
     const snapshot=revision;
     const layout={version:3,name:activeBoard.name,charts:structuredClone(charts),vacantRows:[...vacantRows],updatedAt:Date.now()};
@@ -273,11 +281,18 @@
       });
       if(!response.ok)throw new Error("HTTP "+response.status);
       savedRevision=snapshot;
-      hasSaved=true;
+      clearSavedFlash();
+      savedFlash=true;
+      savedFlashTimer=setTimeout(()=>{
+        savedFlash=false;
+        if(revision===savedRevision && !saving && !deleting)updateSaveBar();
+      },3000);
       boards.set(activeBoard.id,{id:activeBoard.id,name:layout.name,layout});
       rememberBoard();
+      return revision===savedRevision;
     } catch {
       message=T("تعذر الحفظ. حاول مرة أخرى.","Could not save. Try again.");
+      return false;
     } finally {
       saving=false;
       updateSaveBar(message);
@@ -534,9 +549,9 @@
     });
   }
 
-  function openArchive(title, docs) {
+  async function openArchive(title, docs) {
     const ids = [...new Set(docs.map(doc => doc.id))];
-    if (!ids.length) return;
+    if (editMode || !ids.length) return;
     const entryIds=ids.join(",");
     if(entryIds.length>300000) {
       showNotice(T("عدد النتائج أكبر من سعة فتح الأرشيف دفعة واحدة. ضيّق التصفية.","Too many results to open at once. Narrow the filters."));
@@ -556,8 +571,9 @@
       input.value = value;
       form.appendChild(input);
     }
+    if(!await confirmLeaving())return;
     root.appendChild(form);
-    form.submit();
+    navigateApproved(()=>form.submit());
   }
 
   function dateColumnsLimited(chart, source=selectedRows(chart)) {
@@ -784,50 +800,71 @@
   }
 
   function dropPlacement(layout, sourceId, targetId) {
-    const source=layout.get(sourceId);
-    const target=layout.get(targetId);
-    const column=Math.min(target.column,desktopColumns-source.width);
-    const placed={row:target.row,column,width:source.width};
-    const overlaps=(slot,start,width)=>slot.column<start+width && slot.column+slot.width>start;
+    const source=layout.get(sourceId),target=layout.get(targetId);
     const next=new Map(layout);
+    const rowItems=row=>[...next].filter(([,slot])=>slot.row===row).sort(([,a],[,b])=>a.column-b.column);
+    const place=(items,row)=>{
+      let column=0;
+      for(const [id,slot] of items) {
+        next.set(id,{row,column,width:slot.width});
+        column+=slot.width;
+      }
+    };
     next.delete(sourceId);
-    const displaced=[...next].filter(([,slot])=>slot.row===placed.row && overlaps(slot,column,placed.width))
-      .sort(([,a],[,b])=>a.column-b.column);
-    for(const [id] of displaced)next.delete(id);
-    next.set(sourceId,placed);
-
-    let insertedRow=null;
-    if(displaced.length) {
-      const row=placed.row+1;
-      const width=displaced.reduce((sum,[,slot])=>sum+slot.width,0);
-      const occupied=[...next.values()].filter(slot=>slot.row===row);
-      let start=0;
-      while(start+width<=desktopColumns && occupied.some(slot=>overlaps(slot,start,width)))start++;
-      if(start+width>desktopColumns) {
-        insertedRow=row;
-        for(const [id,slot] of next)if(slot.row>=row)next.set(id,{...slot,row:slot.row+1});
-        start=0;
-      }
-      for(const [id,slot] of displaced) {
-        next.set(id,{row,column:start,width:slot.width});
-        start+=slot.width;
-      }
+    if(source.row===target.row) {
+      const items=[...rowItems(source.row),[sourceId,source]];
+      const column=([id,slot])=>id===sourceId?target.column:id===targetId?source.column:slot.column;
+      items.sort((a,b)=>column(a)-column(b));
+      place(items,source.row);
+      return {next,placed:next.get(sourceId),insertedRow:null};
     }
-    return {next,placed,insertedRow};
+
+    const column=Math.min(target.column,desktopColumns-source.width);
+    const items=rowItems(target.row);
+    const displaced=items.filter(([,slot])=>slot.column<column+source.width && slot.column+slot.width>column);
+    const movedIds=new Set(displaced.map(([id])=>id));
+    const first=items.findIndex(([id])=>movedIds.has(id));
+    const remaining=items.filter(([id])=>!movedIds.has(id));
+    remaining.splice(first,0,[sourceId,source]);
+    for(const [id] of displaced)next.delete(id);
+    place(remaining,target.row);
+
+    const origin=rowItems(source.row);
+    const position=origin.findIndex(([,slot])=>slot.column>=source.column);
+    origin.splice(position<0?origin.length:position,0,...displaced);
+    const rows=[[]];
+    let width=0;
+    for(const item of origin) {
+      if(width+item[1].width>desktopColumns) {
+        rows.push([]);
+        width=0;
+      }
+      rows.at(-1).push(item);
+      width+=item[1].width;
+    }
+    const addedRows=rows.length-1;
+    const insertedRow=addedRows?source.row+1:null;
+    if(insertedRow!==null)
+      for(const [id,slot] of next)if(slot.row>=insertedRow)next.set(id,{...slot,row:slot.row+addedRows});
+    rows.forEach((items,index)=>place(items,source.row+index));
+    return {next,placed:next.get(sourceId),insertedRow,addedRows};
   }
 
   function applyDesktopDrop(sourceId,targetId) {
-    const {next,insertedRow}=dropPlacement(desktopLayout,sourceId,targetId);
+    const {next,insertedRow,addedRows}=dropPlacement(desktopLayout,sourceId,targetId);
     if(insertedRow!==null) {
       for(const [row,height] of [...vacantRows].sort(([a],[b])=>b-a)) {
         if(row<insertedRow)continue;
         vacantRows.delete(row);
-        vacantRows.set(row+1,height);
+        vacantRows.set(row+addedRows,height);
       }
     }
     for(const chart of charts) {
       const slot=next.get(chart.id);
-      if(slot)chart.slot={row:slot.row,column:slot.column};
+      if(slot) {
+        chart.slot={row:slot.row,column:slot.column};
+        vacantRows.delete(slot.row);
+      }
     }
     charts.sort((a,b)=>(a.slot?.row??160)-(b.slot?.row??160) ||
       (a.slot?.column??0)-(b.slot?.column??0));
@@ -882,6 +919,7 @@
     }
     header.append(headText,actions);el.appendChild(header);
     const body=document.createElement("div");body.className="dd-visual";
+    body.inert=editMode;
     el.appendChild(body);
     if(editMode)attachResize(el,chart);
     if(ghost) {
@@ -1068,8 +1106,7 @@
         el.classList.add("dd-drop-target");
         const preview=$("dd-grid").querySelector(".dd-drop-preview");
         if(preview) {
-          const source=desktopLayout.get(draggedCard),target=desktopLayout.get(chart.id);
-          gridPosition(preview,{row:target.row,column:Math.min(target.column,desktopColumns-source.width),width:source.width});
+          gridPosition(preview,dropPlacement(desktopLayout,draggedCard,chart.id).placed);
           preview.hidden=false;
         }
       }
@@ -1094,74 +1131,17 @@
     return el;
   }
   function swapCards(first,second) {
-    const left=charts[first], right=charts[second];
-    const from=desktopLayout.get(left.id), to=desktopLayout.get(right.id);
+    const left=charts[first],right=charts[second];
+    const slots=[desktopLayout.get(left.id),desktopLayout.get(right.id)];
     [charts[first],charts[second]]=[right,left];
-    if(!from || !to || !window.matchMedia("(min-width: 1100px)").matches)return;
-    if(from.row!==to.row && from.width!==to.width) {
-      freezeSlots();
-      left.slot=null;
-      right.slot=null;
-      const moves=[{item:left,destination:to,source:from},{item:right,destination:from,source:to}]
-        .sort((a,b)=>b.destination.row-a.destination.row);
-      for(const {item,destination,source} of moves) {
-        const width=desktopWidth(item);
-        const occupied=Array(desktopColumns).fill(false);
-        for(const peer of charts) {
-          if(peer.slot?.row!==destination.row)continue;
-          occupied.fill(true,peer.slot.column,peer.slot.column+desktopWidth(peer));
-        }
-        const fits=column=>column+width<=desktopColumns && !occupied.slice(column,column+width).some(Boolean);
-        const column=fits(destination.column)?destination.column:occupied.findIndex((_,index)=>fits(index));
-        if(column>=0) {
-          item.slot={row:destination.row,column};
-          continue;
-        }
-        const insertRow=destination.row+(source.row<destination.row?1:0);
-        for(const peer of charts)if(peer.slot?.row>=insertRow)peer.slot.row++;
-        for(const [row,height] of [...vacantRows].sort(([a],[b])=>b-a)) {
-          if(row<insertRow)continue;
-          vacantRows.delete(row);
-          vacantRows.set(row+1,height);
-        }
-        item.slot={row:insertRow,column:0};
-      }
-      charts.sort((a,b)=>(a.slot?.row??160)-(b.slot?.row??160) ||
-        (a.slot?.column??0)-(b.slot?.column??0));
-      return;
-    }
-    const reorderRow=from.row===to.row && from.width!==to.width;
-    if(reorderRow) {
-      const row=charts.filter(item=>desktopLayout.get(item.id)?.row===from.row)
-        .sort((a,b)=>{
-          const column=item=>item===left?to.column:item===right?from.column:desktopLayout.get(item.id).column;
-          return column(a)-column(b);
-        });
-      let column=0;
-      for(const item of row) {
-        item.slot={row:from.row,column};
-        column+=desktopLayout.get(item.id).width;
-      }
-    }
-    for(const item of charts) {
-      const slot=desktopLayout.get(item.id);
-      if(!slot || (reorderRow && slot.row===from.row))continue;
-      let {row,column}=slot;
-      if(item===left || item===right) {
-        const destination=item===left?to:from;
-        row=destination.row;
-        column=Math.min(destination.column,desktopColumns-slot.width);
-      }
-      item.slot={row,column};
-    }
-    charts.sort((a,b)=>(a.slot?.row??160)-(b.slot?.row??160) ||
-      (a.slot?.column??0)-(b.slot?.column??0));
+    [right.slot,left.slot]=slots.map(slot=>slot?{row:slot.row,column:slot.column}:null);
   }
   function moveCard(id, offset) {
     const index=charts.findIndex(card=>card.id===id);
     const target=index+offset;
     if(index<0 || target<0 || target>=charts.length)return;
-    swapCards(index,target);
+    if(desktopGrid())applyDesktopDrop(id,charts[target].id);
+    else swapCards(index,target);
     markChanged();render();
   }
   function stepCardSpan(chart, direction, cycle=false) {
@@ -1766,7 +1746,7 @@
     dialog.addEventListener("close",()=>{password.value="";});
     form.addEventListener("submit",async event=>{
       event.preventDefault();
-      if(saving || revision!==savedRevision && !await showNotice(T("توجد تغييرات غير محفوظة. تبديل المستودع؟","There are unsaved changes. Switch repositories?"),T("تبديل المستودع","Switch repository")))return;
+      if(!await confirmLeaving())return;
       submit.disabled=true;
       message.textContent="";
       try {
@@ -1775,7 +1755,7 @@
         },true);
         const result=await response.json().catch(()=>({}));
         if(!response.ok || !result.url)throw new Error(result.error||T("تعذر تبديل المستودع.","Could not switch repositories."));
-        window.location.assign(result.url);
+        navigateApproved(()=>window.location.assign(result.url));
       } catch(error) {
         password.value="";
         message.textContent=error.message;
@@ -1784,24 +1764,79 @@
     });
   }
 
+  function confirmLeaving() {
+    if(saving || deleting)return Promise.resolve(false);
+    if(revision===savedRevision)return Promise.resolve(true);
+    const dialog=$("dd-leave-dialog");
+    if(dialog.open)return Promise.resolve(false);
+    dialog.returnValue="cancel";
+    $("dd-leave-save").disabled=!layoutReady;
+    $("dd-leave-error").hidden=true;
+    dialog.showModal();
+    return new Promise(resolve=>{
+      dialog.addEventListener("close",()=>resolve(dialog.returnValue==="discard" || dialog.returnValue==="saved"),{once:true});
+    });
+  }
+
+  let approvedNavigation=false;
+  function navigateApproved(callback) {
+    approvedNavigation=true;
+    callback();
+  }
+  function wireLeaveGuard() {
+    const dialog=$("dd-leave-dialog");
+    const save=$("dd-leave-save"),discard=$("dd-leave-discard"),cancel=$("dd-leave-cancel");
+    dialog.addEventListener("cancel",event=>{if(saving)event.preventDefault();});
+    save.addEventListener("click",async()=>{
+      save.disabled=discard.disabled=cancel.disabled=true;
+      const saved=await saveLayout();
+      save.disabled=discard.disabled=cancel.disabled=false;
+      if(saved)dialog.close("saved");
+      else {
+        const error=$("dd-leave-error");
+        error.textContent=T("تعذر حفظ التغييرات. حاول مرة أخرى أو ابقَ في اللوحة.","Could not save the changes. Try again or stay on the dashboard.");
+        error.hidden=false;
+        save.focus();
+      }
+    });
+    document.addEventListener("click",async event=>{
+      const link=event.target.closest?.("a[href]");
+      if(!link || event.defaultPrevented || revision===savedRevision ||
+         event.button!==0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey ||
+         link.hasAttribute("download") || (link.target && link.target!=="_self"))return;
+      const url=new URL(link.href,location.href);
+      if(!["http:","https:"].includes(url.protocol) ||
+         (url.hash && url.origin===location.origin && url.pathname===location.pathname && url.search===location.search))return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if(await confirmLeaving()) {
+        navigateApproved(()=>location.assign(url.href));
+      }
+    },true);
+    window.addEventListener("beforeunload",event=>{
+      if(approvedNavigation || revision===savedRevision)return;
+      event.preventDefault();
+      event.returnValue="";
+    });
+    window.addEventListener("pageshow",()=>{approvedNavigation=false;});
+  }
+
   function wireBoards() {
     const dialog=$("dd-board-dialog");
     const name=$("dd-board-name");
     const list=$("dd-board-list");
     let creating=false;
-    const canLeave=async()=>!saving && !deleting && (revision===savedRevision ||
-      await showNotice(T("توجد تغييرات غير محفوظة. هل تتابع؟","There are unsaved changes. Continue?"),T("متابعة","Continue")));
     list.addEventListener("change",async()=>{
       const board=boards.get(list.value);
       list.value=activeBoard.id;
-      if(!await canLeave())return;
+      if(!await confirmLeaving())return;
       if(board) {
         activateBoard(board);
         rememberBoard();
       }
     });
     const open=async create=>{
-      if(create && !await canLeave())return;
+      if(create && !await confirmLeaving())return;
       creating=create;
       $("dd-board-dialog-title").textContent=create?T("لوحة جديدة","New dashboard"):T("تغيير اسم اللوحة","Rename dashboard");
       $("dd-board-error").textContent="";
@@ -1854,7 +1889,7 @@
           byte=>byte.toString(16).padStart(2,"0")).join("");
         editMode=true;
         activateBoard({id,name:value,layout:{version:3,charts:[]}});
-        hasSaved=false;
+        clearSavedFlash();
       } else activeBoard.name=value;
       syncBoardPicker();
       markChanged();
@@ -1864,6 +1899,7 @@
   function wire() {
     wireRepositorySwitch();
     wireBoards();
+    wireLeaveGuard();
     $("dd-save-layout").addEventListener("click",saveLayout);
     window.addEventListener("pageshow",event=>{if(event.persisted)window.location.reload();});
     $("dd-refresh").addEventListener("click",refresh);

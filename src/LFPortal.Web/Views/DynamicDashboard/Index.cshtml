@@ -11,18 +11,24 @@
         <button type="button" id="dd-new-board" disabled>@T("إنشاء لوحة جديدة", "Create dashboard")</button>
         <button type="button" id="dd-customize" aria-pressed="false">@T("تخصيص اللوحة", "Customize dashboard")</button>
         <div class="dd-board-controls" role="group" aria-label="@T("أدوات اللوحة", "Dashboard controls")">
-            <select class="dd-control" id="dd-board-list" aria-label="@T("اختيار اللوحة", "Select dashboard")" disabled>
-                <option value="default">@T("اللوحة الرئيسية", "Main dashboard")</option>
-            </select>
-            <button type="button" id="dd-rename-board" class="dd-nav-icon" title="@T("تغيير اسم اللوحة", "Rename dashboard")" aria-label="@T("تغيير اسم اللوحة", "Rename dashboard")" disabled>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 16-1 5 5-1L20 8l-4-4L4 16Zm10-10 4 4"/></svg>
-            </button>
-            <button type="button" id="dd-add" class="dd-nav-icon dd-toolbar-hidden" title="@T("إضافة جدول", "Add table")" aria-label="@T("إضافة جدول", "Add table")">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-            </button>
-            <button type="button" id="dd-delete-board" class="dd-nav-icon dd-delete-board dd-toolbar-hidden" title="@T("حذف اللوحة", "Delete dashboard")" aria-label="@T("حذف اللوحة", "Delete dashboard")" disabled>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 3v7m4-7v7"/></svg>
-            </button>
+            <div class="dd-board-picker">
+                <span id="dd-board-current" aria-hidden="true">@T("اللوحة الرئيسية", "Main dashboard")</span>
+                <span aria-hidden="true">⌄</span>
+                <select class="dd-control" id="dd-board-list" aria-label="@T("اختيار اللوحة", "Select dashboard")" disabled>
+                    <option value="default">@T("اللوحة الرئيسية", "Main dashboard")</option>
+                </select>
+            </div>
+            <div class="dd-board-tools">
+                <button type="button" id="dd-rename-board" class="dd-nav-icon" title="@T("تغيير اسم اللوحة", "Rename dashboard")" aria-label="@T("تغيير اسم اللوحة", "Rename dashboard")" disabled>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 16-1 5 5-1L20 8l-4-4L4 16Zm10-10 4 4"/></svg>
+                </button>
+                <button type="button" id="dd-add" class="dd-nav-icon dd-toolbar-hidden" title="@T("إضافة جدول", "Add table")" aria-label="@T("إضافة جدول", "Add table")">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                </button>
+                <button type="button" id="dd-delete-board" class="dd-nav-icon dd-delete-board dd-toolbar-hidden" title="@T("حذف اللوحة", "Delete dashboard")" aria-label="@T("حذف اللوحة", "Delete dashboard")" disabled>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 3v7m4-7v7"/></svg>
+                </button>
+            </div>
         </div>
     </div>
 }
@@ -73,6 +79,20 @@
         </section>
     </div>
     </div>
+    <dialog id="dd-leave-dialog" class="dd-leave-dialog" aria-labelledby="dd-leave-title" aria-describedby="dd-leave-description">
+        <div class="dd-leave-header">
+            <h2 id="dd-leave-title">@T("تغييرات غير محفوظة", "Unsaved changes")</h2>
+        </div>
+        <div class="dd-leave-content">
+            <p id="dd-leave-description">@T("هل تريد حفظ تغييرات اللوحة قبل المغادرة؟", "Save your dashboard changes before leaving?")</p>
+            <p id="dd-leave-error" class="dd-warning" role="alert" hidden></p>
+            <form method="dialog" class="dd-leave-actions">
+                <button type="button" id="dd-leave-save" class="dd-btn dd-btn-primary">@T("حفظ ومتابعة", "Save and continue")</button>
+                <button value="discard" id="dd-leave-discard" class="dd-btn">@T("متابعة دون حفظ", "Continue without saving")</button>
+                <button value="cancel" id="dd-leave-cancel" class="dd-btn" autofocus>@T("البقاء", "Stay")</button>
+            </form>
+        </div>
+    </dialog>
     <dialog id="dd-board-dialog" class="dd-repository-dialog" aria-labelledby="dd-board-dialog-title">
         <form>
             <strong id="dd-board-dialog-title"></strong>

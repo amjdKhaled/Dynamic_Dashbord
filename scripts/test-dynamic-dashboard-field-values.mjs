@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const source=readFileSync(new URL("../src/LFPortal.Web/wwwroot/js/dynamic-dashboard.js",import.meta.url),"utf8");
-const valuesStart=source.indexOf("  function valuesFor(row,id) {");
+const valuesStart=source.indexOf("  function listValue(value) {");
 const valuesEnd=source.indexOf("  function number(value) {",valuesStart);
 const groupStart=source.indexOf("  function groupKey(id,value) {");
 const utilitiesStart=source.indexOf("  const isRecent =");
@@ -18,12 +18,15 @@ assert.ok(valuesStart>=0 && valuesEnd>valuesStart && groupStart>=0 && groupEnd>g
 const documentStart=source.indexOf("  function dateColumnsLimited(");
 const documentEnd=source.indexOf("  function drawTable(",documentStart);
 const sizing=source.slice(source.indexOf("  function cardSpan("),source.indexOf("  function normalChart("));
-const implementation=sizing+source.slice(valuesStart,valuesEnd)+"\n"+source.slice(utilitiesStart,utilitiesEnd)
+const cardTypes=source.slice(source.indexOf("  const quarterWidth"),source.indexOf("  const desktopColumns"));
+const implementation=cardTypes+sizing+source.slice(valuesStart,valuesEnd)+"\n"+source.slice(utilitiesStart,utilitiesEnd)
   +source.slice(dayStart,groupEnd)+source.slice(documentStart,documentEnd);
-const make=new Function("seedRows",[
+const make=new Function("seedRows","definitions = {}",[
   'const EMPTY_VALUE="\\u0000no-value";',
   'const unique=values=>[...new Set(values.filter(v=>v!==null&&v!==undefined&&String(v).trim()!=="").map(String))];',
   'const dateStamp=value=>{const time=Date.parse(value);return Number.isFinite(time)?new Date(time):null;};',
+  'const T=(ar,en)=>ar, locale="ar", fieldMeta=id=>definitions[id];',
+  'const kind=id=>definitions[id]?.type ?? "text";',
   'let rows=seedRows;',
   implementation,
   'return {observedValues,selectedRows,summary,pageCount,displayType,documentRows,cardSpan};'
@@ -140,4 +143,18 @@ test("circular charts keep every matching template and its label",()=>{
     assert.equal(result.groups.length,35);
     assert.equal(result.extra,0);
   }
+});
+
+test("list labels merge invisible variants and keep unused configured options",()=>{
+  const fixture=make([
+    {id:1,template:"طلبات",fields:{"123":["عادية", "عادية\u200f "]}},
+    {id:2,template:"طلبات",fields:{"123":["عادية\u00a0"]}},
+    {id:3,template:"آخر",fields:{"123":["عالية"]}}
+  ],{"123":{type:"list",name:"الأولوية",listValues:["عادية","حرجة","عالية"]}});
+  const config={...chart("__template",["طلبات"],"table"),templateFields:[{template:"طلبات",fields:["123"]}]};
+  assert.deepEqual(Object.fromEntries(fixture.summary(config).groups.map(group=>[group.valueLabel,group.value])),
+    {"عادية":2,"حرجة":0,"عالية":0});
+  const filtered={...config,templateValueFilters:[{template:"طلبات",field:"123",values:["عادية\u200f"]}]};
+  assert.deepEqual(fixture.summary(filtered).groups.map(group=>group.value),[2]);
+  assert.equal(fixture.observedValues("123").find(option=>option.value==="عالية").count,1);
 });

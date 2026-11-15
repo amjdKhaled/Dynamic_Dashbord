@@ -10,8 +10,6 @@
         link.id = "lf-dynamic-dashboard-btn";
         link.className = "btn browseNavButton";
         link.href = DASHBOARD_BASE_URL + "/DynamicDashboard";
-        link.target = "_blank";
-        link.rel = "noopener noreferrer";
         link.style.cssText = "display:inline-flex;align-items:center;gap:6px;padding:6px 10px;color:#fff;text-decoration:none;white-space:nowrap";
         link.innerHTML = '<svg width="16" height="16" viewBox="0 0 18 18" fill="none" stroke="currentColor" aria-hidden="true"><path d="M2 2h5v5H2zm9 0h5v5h-5zM2 11h5v5H2zm9 0h5v5h-5z"/></svg> Dynamic Dashboard';
         const menu = doc.createElement("ul");

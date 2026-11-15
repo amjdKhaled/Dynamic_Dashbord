@@ -147,24 +147,21 @@
                encodeURIComponent(_win.location.origin + _win.location.pathname);
     }
 
-    /**
-     * Opens the Dashboard in a new tab using a single programmatic anchor.
-     *
-     * The anchor opens exactly one Dashboard tab and explicitly retains its
-     * opener so searches can return to the authenticated Web Client SPA.
-     *
-     * @param {string} url  Full Dashboard URL including query parameters.
-     */
     function openDashboard(url) {
-        var a = _doc.createElement('a');
-        a.href   = url;
-        a.target = '_blank';
-        // Retain the connection to this trusted, authenticated Web Client tab.
-        a.rel    = 'opener';
-        a.style.display = 'none';
-        _doc.body.appendChild(a);
-        a.click();
-        _doc.body.removeChild(a);
+        _win.location.assign(url);
+    }
+
+    function showLaunchError(message) {
+        var notice = _doc.getElementById('lf-dashboard-launch-error');
+        if (!notice) {
+            notice = _doc.createElement('p');
+            notice.id = 'lf-dashboard-launch-error';
+            notice.setAttribute('role', 'alert');
+            notice.style.cssText = 'padding:10px 16px;margin:0;background:#fff3d0;color:#293545';
+            var navbar = _doc.getElementById('rightNavbar');
+            (navbar ? navbar.parentElement : _doc.body).appendChild(notice);
+        }
+        notice.textContent = message;
     }
 
     /**
@@ -205,8 +202,8 @@
         // the URL must have been injected by the deployment step.
         if (!DASHBOARD_BASE_URL || DASHBOARD_BASE_URL.indexOf('://') < 0) {
             console.error('[LFDashboard] DASHBOARD_BASE_URL was not patched at deploy time: ' + DASHBOARD_BASE_URL);
-            alert(
-                'The Dashboard button is not configured.\n\n' +
+            showLaunchError(
+                'The Dashboard button is not configured. ' +
                 'The Dashboard URL was not set when the Web Client integration\n' +
                 'was deployed. Ask your administrator to re-run the Dashboard\n' +
                 'installer or the Deploy-WebClientButton script.'
@@ -218,8 +215,8 @@
         var repo = getRepository();
         if (!repo) {
             console.warn('[LFDashboard] Unable to determine active Laserfiche repository.');
-            alert(
-                'Could not detect the active Laserfiche repository.\n\n' +
+            showLaunchError(
+                'Could not detect the active Laserfiche repository. ' +
                 'Please ensure you are logged in and viewing a repository,\n' +
                 'then try again.  Check the browser console for details.'
             );
@@ -232,8 +229,6 @@
         var url = buildDashboardUrl(repo);
         console.log('[LFDashboard] Opening Dashboard: ' + url);
 
-        // openDashboard() uses a single programmatic anchor click.
-        // There is no conditional fallback — nothing else can open a second tab.
         openDashboard(url);
     }
 

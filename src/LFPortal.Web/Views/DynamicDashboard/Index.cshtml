@@ -10,18 +10,20 @@
     <div class="dd-nav-actions" role="group" aria-label="@T("إجراءات اللوحة", "Dashboard actions")">
         <button type="button" id="dd-new-board" disabled>@T("إنشاء لوحة جديدة", "Create dashboard")</button>
         <button type="button" id="dd-customize" aria-pressed="false">@T("تخصيص اللوحة", "Customize dashboard")</button>
-        <select class="dd-control" id="dd-board-list" aria-label="@T("اختيار اللوحة", "Select dashboard")" disabled>
-            <option value="default">@T("اللوحة الرئيسية", "Main dashboard")</option>
-        </select>
-        <button type="button" id="dd-rename-board" class="dd-nav-icon" title="@T("تغيير اسم اللوحة", "Rename dashboard")" aria-label="@T("تغيير اسم اللوحة", "Rename dashboard")" disabled>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 16-1 5 5-1L20 8l-4-4L4 16Zm10-10 4 4"/></svg>
-        </button>
-        <button type="button" id="dd-add" class="dd-nav-icon dd-toolbar-hidden" title="@T("إضافة جدول", "Add table")" aria-label="@T("إضافة جدول", "Add table")">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-        </button>
-        <button type="button" id="dd-delete-board" class="dd-nav-icon dd-delete-board dd-toolbar-hidden" title="@T("حذف اللوحة", "Delete dashboard")" aria-label="@T("حذف اللوحة", "Delete dashboard")" disabled>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 3v7m4-7v7"/></svg>
-        </button>
+        <div class="dd-board-controls" role="group" aria-label="@T("أدوات اللوحة", "Dashboard controls")">
+            <select class="dd-control" id="dd-board-list" aria-label="@T("اختيار اللوحة", "Select dashboard")" disabled>
+                <option value="default">@T("اللوحة الرئيسية", "Main dashboard")</option>
+            </select>
+            <button type="button" id="dd-rename-board" class="dd-nav-icon" title="@T("تغيير اسم اللوحة", "Rename dashboard")" aria-label="@T("تغيير اسم اللوحة", "Rename dashboard")" disabled>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 16-1 5 5-1L20 8l-4-4L4 16Zm10-10 4 4"/></svg>
+            </button>
+            <button type="button" id="dd-add" class="dd-nav-icon dd-toolbar-hidden" title="@T("إضافة جدول", "Add table")" aria-label="@T("إضافة جدول", "Add table")">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            </button>
+            <button type="button" id="dd-delete-board" class="dd-nav-icon dd-delete-board dd-toolbar-hidden" title="@T("حذف اللوحة", "Delete dashboard")" aria-label="@T("حذف اللوحة", "Delete dashboard")" disabled>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 3v7m4-7v7"/></svg>
+            </button>
+        </div>
     </div>
 }
 @section RepositoryNavigation {
@@ -49,6 +51,13 @@
             <h1>@T("لوحة المعلومات", "Dynamic") <span>@T("الديناميكية", "Dashboard")</span></h1>
         </div>
     </header>
+    <div id="dd-notice" class="dd-notice" hidden>
+        <p id="dd-notice-text" role="status"></p>
+        <div id="dd-notice-actions">
+            <button type="button" class="dd-btn" id="dd-notice-cancel">@T("إلغاء", "Cancel")</button>
+            <button type="button" class="dd-btn dd-btn-primary" id="dd-notice-accept"></button>
+        </div>
+    </div>
     <div class="dd-save-dock">
         <span id="dd-layout-status" role="status"></span>
         <button type="button" class="dd-btn dd-btn-primary dd-hidden" id="dd-save-layout" disabled>@T("حفظ اللوحة", "Save dashboard")</button>
@@ -98,7 +107,13 @@
     </dialog>
     <dialog id="dd-editoroverlay" class="dd-editor" aria-labelledby="dd-editor-title">
         <div class="dd-editor-head">
-            <h2 id="dd-editor-title">@T("إعدادات الجدول", "Table settings")</h2>
+            <div class="dd-editor-heading">
+                <h2 id="dd-editor-title">@T("إعدادات الجدول", "Table settings")</h2>
+                <label class="dd-editor-name" for="dd-title">
+                    <span>@T("اسم الجدول", "Table name")</span>
+                    <input class="dd-control" id="dd-title" maxlength="90" placeholder="@T("مثال: المعاملات حسب الإدارة", "Example: Transactions by department")" />
+                </label>
+            </div>
             <button type="button" id="dd-closeeditor" class="dd-icon-btn" title="@T("إغلاق", "Close")" aria-label="@T("إغلاق", "Close")">✕</button>
         </div>
         <div class="dd-editor-workspace">
@@ -106,8 +121,6 @@
                 <div class="dd-editor-body" id="dd-editor-body">
                     <section id="dd-editor-display" class="dd-editor-panel">
                         <h3>@T("العرض", "Display")</h3>
-                        <label class="dd-label" for="dd-title">@T("الاسم", "Name")</label>
-                        <input class="dd-control" id="dd-title" maxlength="90" placeholder="@T("مثال: المعاملات حسب الإدارة", "Example: Transactions by department")" />
                         <p class="dd-label" id="dd-editor-type-label">@T("نوع العرض", "Display type")</p>
                         <select id="dd-type" hidden>
                             <option value="overview" id="dd-overview-type" hidden disabled>@T("العرض الأصلي للبطاقة", "Original widget view")</option>
@@ -189,7 +202,7 @@
             </div>
             <section class="dd-editor-preview" aria-labelledby="dd-editor-preview-title">
                 <details id="dd-editor-preview-details" open>
-                    <summary id="dd-editor-preview-title">@T("معاينة مباشرة", "Live preview")</summary>
+                    <summary id="dd-editor-preview-title">@T("مثال على شكل العرض", "Display example")</summary>
                     <div id="dd-editor-preview-card"></div>
                 </details>
             </section>

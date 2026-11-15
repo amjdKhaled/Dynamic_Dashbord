@@ -627,9 +627,6 @@ html:has(.dd-edit-mode) { overflow-anchor: none; }
   border-inline-start: 3px solid var(--isb-gold);
   padding-inline-start: 9px;
 }
-.dd-editor-preview .dd-card { min-height: 0; width: 100%; }
-.dd-editor-preview .dd-card-head strong { overflow-wrap: anywhere; }
-.dd-editor-preview .dashboard-round-layout { grid-template-columns: minmax(0, 1fr); }
 .dd-editor-panel + .dd-editor-panel { margin-block-start: 20px; padding-block-start: 16px; border-block-start: 1px solid var(--dd-border); }
 .dd-editor-panel .dd-control { min-height: 42px; }
 .dd-editor :is(.dd-control, button, summary):focus-visible {
@@ -699,4 +696,37 @@ html:has(.dd-edit-mode) { overflow-anchor: none; }
   }
   .dd-editor-preview summary { margin: 0; padding-block: 12px; }
   .dd-editor-preview details[open] { padding-block-end: 12px; }
+}
+
+.dd-board-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-inline-size: 100%;
+  padding: 3px;
+  border: 1px solid #ffffff36;
+  border-radius: 24px;
+}
+.dd-board-controls #dd-board-list { min-inline-size: 0; flex: 1; }
+.dd-editor-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 20px; min-width: 0; }
+.dd-editor-name { display: flex; align-items: center; gap: 8px; font-size: .875rem; }
+.dd-editor-name .dd-control { min-height: 40px; width: min(18rem, 38vw); }
+.dd-editor .dd-dates { gap: 10px; }
+.dd-editor .dd-dates label, .dd-editor .dd-dates input { font-size: 1rem; }
+.dd-editor .dd-dates input { min-height: 48px; padding: 8px; min-width: 0; }
+.dd-kpi-range { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px 18px; margin-block-start: 12px; font-size: 1rem; font-weight: 600; }
+.dd-editor-preview #dd-editor-preview-card { padding: 14px; background: var(--isb-surface); border: 1px solid var(--dd-border); border-radius: 10px; }
+.dd-example-chart { position: relative; height: 240px; }
+.dd-example-total { font-size: 2rem; color: var(--dd-navy); }
+.dd-card .dd-table-wrap { inline-size: 100%; max-inline-size: 100%; overflow-x: auto; }
+.dd-document-table .dd-table td { overflow-wrap: anywhere; }
+.dd-document-table .dd-table td:nth-child(n+4) { font-variant-numeric: tabular-nums; }
+.dd-notice { padding: 12px 16px; margin: 10px 0; border: 1px solid var(--dd-border); border-inline-start: 4px solid var(--isb-gold); border-radius: 8px; background: var(--isb-surface); color: var(--dd-navy); }
+.dd-notice p { margin: 0 0 8px; }
+.dd-notice [hidden] { display: none; }
+.dd-repository-dialog > .dd-notice { margin-block-end: 0; }
+@media (max-width: 480px) {
+  .dd-editor-name { flex-wrap: wrap; }
+  .dd-editor-name .dd-control { width: 100%; }
+  .dd-editor .dd-dates { grid-template-columns: 1fr; }
 }

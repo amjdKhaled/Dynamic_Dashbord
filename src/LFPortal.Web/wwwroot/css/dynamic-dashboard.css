@@ -402,7 +402,9 @@ body:has(.dd-page.dd-is-loading) > :is(.site-header,.site-footer){display:none}
   .dd-grid > .dd-card:is(.dd-full-card,.dd-quarter-card) {
     grid-column: var(--dd-column) / span var(--dd-width);
   }
-  .dd-empty-slot { display: block; min-height: 72px; }
+  .dd-empty-slot { display: block; min-height: 0; align-self: stretch; }
+  .dd-empty-slot.dd-drop-end { min-height: 44px; border: 1px dashed var(--dd-border); border-radius: 8px; }
+  .dd-card.dd-drop-displaced { outline: 2px dashed var(--isb-gold); outline-offset: -2px; }
   .dd-drop-preview:not([hidden]) {
     display: block;
     pointer-events: none;
@@ -430,8 +432,15 @@ body:has(.dd-page.dd-is-loading) > :is(.site-header,.site-footer){display:none}
 .dd-toolbar-hidden { display: none !important; }
 /* Keep the dashboard actions beside Settings, with wrapping for narrow headers. */
 .site-header:has(.dd-nav-actions) { flex-wrap: wrap; height: auto; }
-.site-header__nav:has(.dd-nav-actions) { flex-wrap: wrap; flex-shrink: 1; min-width: 0; }
-.dd-nav-actions { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.site-header:has(.dd-nav-actions) > .site-header__nav { flex-wrap: wrap; min-inline-size: 0; }
+@media (min-width: 1024px) {
+  .site-header:has(.dd-nav-actions) { flex-wrap: nowrap; }
+  .site-header:has(.dd-nav-actions) > .site-header__nav { flex: none; }
+  .site-header:has(.dd-nav-actions) .dd-nav-actions { margin-inline-end: auto; }
+  .site-header:has(.dd-nav-actions) .dd-header-refresh { margin-inline-start: 0; }
+}
+.dd-nav-actions { display: flex; align-items: center; gap: 6px; flex: 0 1 auto; min-inline-size: 0; max-inline-size: 100%; }
+.dd-nav-actions > button { flex: none; white-space: nowrap; }
 .dd-nav-actions button {
   font: inherit;
   font-size: .875rem;
@@ -693,26 +702,40 @@ html:has(.dd-edit-mode) { overflow-anchor: none; }
 
 .dd-board-controls {
   display: flex;
-  flex-wrap: wrap;
+  flex: 0 1 auto;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   min-inline-size: 0;
-  max-inline-size: 100%;
+  padding: 4px;
+  border: 1px solid #ffffff42;
+  border-radius: 11px;
+  background: #ffffff08;
 }
 .dd-board-picker {
   position: relative;
   display: flex;
+  flex-wrap: nowrap;
+  flex: 1 1 auto;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  min-inline-size: min(10rem, 100%);
-  max-inline-size: min(35rem, 84vw);
-  padding: 8px 12px;
-  border-radius: 8px;
+  gap: 8px;
+  inline-size: max-content;
+  min-inline-size: 0;
+  min-block-size: 38px;
+  padding-inline: 10px;
+  border-radius: 7px;
   color: white;
   background: var(--isb-on-dark-pill);
 }
-#dd-board-current { white-space: normal; overflow-wrap: anywhere; font-weight: 600; }
+#dd-board-current {
+  min-inline-size: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+}
+.dd-board-picker > span + span { flex: none; }
 .dd-board-picker:focus-within { outline: 2px solid var(--isb-gold); outline-offset: 2px; }
 .dd-nav-actions .dd-board-picker #dd-board-list {
   position: absolute;
@@ -722,10 +745,14 @@ html:has(.dd-edit-mode) { overflow-anchor: none; }
   opacity: 0;
   cursor: pointer;
 }
-.dd-board-tools { display: flex; gap: 3px; align-items: center; }
+.dd-board-tools { display: flex; flex: none; gap: 2px; align-items: center; }
 .dd-nav-actions .dd-board-tools .dd-nav-icon {
   border-radius: 8px;
-  background: var(--isb-on-dark-pill);
+  background: transparent;
+}
+@media (max-width: 640px) {
+  .dd-nav-actions { flex-wrap: wrap; }
+  .dd-board-controls { flex-basis: 100%; }
 }
 .dd-nav-actions #dd-customize[aria-pressed=true] {
   border-radius: 8px;

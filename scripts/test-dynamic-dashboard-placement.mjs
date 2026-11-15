@@ -13,7 +13,8 @@ test("a wide widget swaps into the target row and packs displaced widgets into i
     ["a",slot(0,0,2)],["b",slot(0,2,2)],["c",slot(0,4,2)],["d",slot(0,6,2)],["e",slot(0,8,2)],
     ["unrelated",slot(1,0,5)],["source",slot(2,0,6)],["peer",slot(2,6,4)]
   ]);
-  const {next,placed,insertedRow}=dropPlacement(positions,"source","a");
+  const {next,placed,insertedRow,displaced}=dropPlacement(positions,"source","a");
+  assert.deepEqual(displaced,["a","b","c"]);
   assert.deepEqual(placed,slot(0,0,6));
   for(const [i,id] of ["a","b","c"].entries())assert.deepEqual(next.get(id),slot(2,i*2,2));
   assert.deepEqual(next.get("peer"),slot(2,6,4));

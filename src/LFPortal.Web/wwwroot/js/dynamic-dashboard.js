@@ -235,7 +235,9 @@
     items.sort((a,b)=>a.id==="default"?-1:b.id==="default"?1:a.name.localeCompare(b.name,locale));
     const list=$("dd-board-list");
     selectOptions(list,items.map(board=>({value:board.id,label:board.id==="default"?presetTitle(board.name):board.name})),activeBoard.id,null);
-    $("dd-board-current").textContent=list.selectedOptions[0]?.textContent ?? activeBoard.name;
+    const label=$("dd-board-current");
+    label.title=label.textContent=list.selectedOptions[0]?.textContent ?? activeBoard.name;
+    list.title=label.title;
   }
   function rememberBoard() {
     const url=new URL(window.location.href);
@@ -745,53 +747,76 @@
     element.style.setProperty("--dd-width",width);
   }
 
+  function clearDropHighlight() {
+    const grid=$("dd-grid");
+    grid.querySelectorAll(".dd-drop-target,.dd-drop-displaced").forEach(card=>
+      card.classList.remove("dd-drop-target","dd-drop-displaced"));
+    const preview=grid.querySelector(".dd-drop-preview");
+    if(preview)preview.hidden=true;
+  }
+
   function clearDropSlots() {
+    clearDropHighlight();
     $("dd-grid").querySelectorAll(".dd-empty-slot,.dd-drop-preview").forEach(node=>node.remove());
   }
 
+  function showPlacement(plan) {
+    clearDropHighlight();
+    const grid=$("dd-grid");
+    const preview=grid.querySelector(".dd-drop-preview");
+    if(!preview)return;
+    gridPosition(preview,plan.placed);
+    preview.hidden=false;
+    for(const card of grid.querySelectorAll(".dd-card")) {
+      const id=card.dataset.id;
+      if(plan.displaced?.includes(id))card.classList.add("dd-drop-displaced");
+    }
+  }
+
   function showDropSlots(chart) {
-    if(!window.matchMedia("(min-width: 1100px)").matches)return;
-    const width=desktopWidth(chart), grid=$("dd-grid");
+    if(!desktopGrid())return;
+    const width=desktopWidth(chart),grid=$("dd-grid");
     const rowCount=Math.max(0,...[...desktopLayout.values()].map(slot=>slot.row+1),...[...vacantRows.keys()].map(row=>row+1));
+    const preview=document.createElement("div");
+    preview.className="dd-drop-preview";preview.hidden=true;grid.appendChild(preview);
     const occupied=Array.from({length:rowCount+1},()=>Array(desktopColumns).fill(false));
     for(const slot of desktopLayout.values())
       occupied[slot.row].fill(true,slot.column,slot.column+slot.width);
-
-    const preview=document.createElement("div");
-    preview.className="dd-drop-preview";preview.hidden=true;grid.appendChild(preview);
     for(let row=0;row<=rowCount && row<160;row++) {
-      for(let cell=0;cell<desktopColumns;cell++) {
-        if(occupied[row][cell])continue;
-        let start=cell,end=cell+1;
-        while(start>0 && !occupied[row][start-1])start--;
+      for(let start=0;start<desktopColumns;) {
+        if(occupied[row][start]){start++;continue;}
+        let end=start+1;
         while(end<desktopColumns && !occupied[row][end])end++;
-        const peers=charts.filter(item=>item!==chart && desktopLayout.get(item.id)?.row===row);
-        const repack=end-start<width && peers.reduce((used,item)=>used+desktopWidth(item),width)<=desktopColumns;
-        if(end-start<width && !repack)continue;
-        const column=repack?Math.min(cell,desktopColumns-width):Math.min(cell,end-width);
+        const column=start;
+        start=end;
+        if(end-column<width)continue;
         const zone=document.createElement("div");
-        zone.className="dd-empty-slot";zone.setAttribute("aria-hidden","true");
-        gridPosition(zone,{row,column:cell,width:1});
+        zone.className="dd-empty-slot"+(row===rowCount?" dd-drop-end":"");
+        zone.setAttribute("aria-hidden","true");
+        gridPosition(zone,{row,column,width:end-column});
+        const placed={row,column,width};
         zone.addEventListener("dragover",event=>{
           if(draggedCard!==chart.id)return;
           event.preventDefault();event.dataTransfer.dropEffect="move";
-          gridPosition(preview,{row,column,width});preview.hidden=false;
+          if(preview.hidden)showPlacement({placed});
         });
-        zone.addEventListener("dragleave",()=>{preview.hidden=true;});
+        zone.addEventListener("dragleave",clearDropHighlight);
         zone.addEventListener("drop",event=>{
-          if(draggedCard!==chart.id || busy)return;
+          if(draggedCard!==chart.id || busy || deleting)return;
           event.preventDefault();
-          freezeSlots();
-          chart.slot={row,column};
-          if(repack) {
-            let start=0;
-            for(const item of [...peers,chart].sort((a,b)=>a.slot.column-b.slot.column)) {
-              item.slot={row,column:start};
-              start+=desktopWidth(item);
+          const next=new Map(desktopLayout);
+          const source=next.get(chart.id);
+          next.set(chart.id,placed);
+          if(source.row!==placed.row) {
+            let column=0;
+            const peers=[...next].filter(([,slot])=>slot.row===source.row)
+              .sort(([,a],[,b])=>a.column-b.column);
+            for(const [id,slot] of peers) {
+              next.set(id,{...slot,column});
+              column+=slot.width;
             }
           }
-          charts.sort((left,right)=>(left.slot ? left.slot.row*desktopColumns+left.slot.column : Infinity) -
-            (right.slot ? right.slot.row*desktopColumns+right.slot.column : Infinity));
+          applyPlacement({next,insertedRow:null});
           draggedCard=null;markChanged();render();
         });
         grid.appendChild(zone);
@@ -816,7 +841,7 @@
       const column=([id,slot])=>id===sourceId?target.column:id===targetId?source.column:slot.column;
       items.sort((a,b)=>column(a)-column(b));
       place(items,source.row);
-      return {next,placed:next.get(sourceId),insertedRow:null};
+      return {next,placed:next.get(sourceId),insertedRow:null,displaced:[targetId]};
     }
 
     const column=Math.min(target.column,desktopColumns-source.width);
@@ -847,11 +872,14 @@
     if(insertedRow!==null)
       for(const [id,slot] of next)if(slot.row>=insertedRow)next.set(id,{...slot,row:slot.row+addedRows});
     rows.forEach((items,index)=>place(items,source.row+index));
-    return {next,placed:next.get(sourceId),insertedRow,addedRows};
+    return {next,placed:next.get(sourceId),insertedRow,addedRows,displaced:[...movedIds]};
   }
 
   function applyDesktopDrop(sourceId,targetId) {
-    const {next,insertedRow,addedRows}=dropPlacement(desktopLayout,sourceId,targetId);
+    applyPlacement(dropPlacement(desktopLayout,sourceId,targetId));
+  }
+
+  function applyPlacement({next,insertedRow,addedRows}) {
     if(insertedRow!==null) {
       for(const [row,height] of [...vacantRows].sort(([a],[b])=>b-a)) {
         if(row<insertedRow)continue;
@@ -859,13 +887,18 @@
         vacantRows.set(row+addedRows,height);
       }
     }
+    const rows=[...new Set([...next.values()].map(slot=>slot.row).concat([...vacantRows.keys()]))].sort((a,b)=>a-b);
+    const positions=new Map(rows.map((row,index)=>[row,index]));
     for(const chart of charts) {
       const slot=next.get(chart.id);
       if(slot) {
-        chart.slot={row:slot.row,column:slot.column};
+        chart.slot={row:positions.get(slot.row),column:slot.column};
         vacantRows.delete(slot.row);
       }
     }
+    const empty=[...vacantRows];
+    vacantRows.clear();
+    for(const [row,height] of empty)vacantRows.set(positions.get(row),height);
     charts.sort((a,b)=>(a.slot?.row??160)-(b.slot?.row??160) ||
       (a.slot?.column??0)-(b.slot?.column??0));
   }
@@ -1101,21 +1134,16 @@
       $("dd-grid").querySelectorAll(".dd-drop-target").forEach(card=>card.classList.remove("dd-drop-target"));
     });
     el.addEventListener("dragover",event=>{
-      if(editMode && draggedCard && draggedCard!==chart.id){
-        event.preventDefault();
-        el.classList.add("dd-drop-target");
-        const preview=$("dd-grid").querySelector(".dd-drop-preview");
-        if(preview) {
-          gridPosition(preview,dropPlacement(desktopLayout,draggedCard,chart.id).placed);
-          preview.hidden=false;
-        }
-      }
+      if(!editMode || !draggedCard || draggedCard===chart.id || busy || deleting)return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect="move";
+      if(el.classList.contains("dd-drop-target"))return;
+      if(desktopGrid())showPlacement(dropPlacement(desktopLayout,draggedCard,chart.id));
+      else clearDropHighlight();
+      el.classList.add("dd-drop-target");
     });
     el.addEventListener("dragleave",event=>{
-      if(el.contains(event.relatedTarget))return;
-      el.classList.remove("dd-drop-target");
-      const preview=$("dd-grid").querySelector(".dd-drop-preview");
-      if(preview)preview.hidden=true;
+      if(!el.contains(event.relatedTarget))clearDropHighlight();
     });
     el.addEventListener("drop",event=>{
       if(!editMode || busy || deleting)return;
@@ -1138,10 +1166,17 @@
   }
   function moveCard(id, offset) {
     const index=charts.findIndex(card=>card.id===id);
-    const target=index+offset;
-    if(index<0 || target<0 || target>=charts.length)return;
-    if(desktopGrid())applyDesktopDrop(id,charts[target].id);
-    else swapCards(index,target);
+    if(index<0)return;
+    if(desktopGrid()) {
+      const order=[...desktopLayout].sort(([,a],[,b])=>a.row-b.row || a.column-b.column);
+      const target=order[order.findIndex(([key])=>key===id)+offset];
+      if(!target)return;
+      applyDesktopDrop(id,target[0]);
+    } else {
+      const target=index+offset;
+      if(target<0 || target>=charts.length)return;
+      swapCards(index,target);
+    }
     markChanged();render();
   }
   function stepCardSpan(chart, direction, cycle=false) {

@@ -7,10 +7,16 @@ Never modifies the existing Dashboard website, app pool or ProgramData store.
 Uses a dedicated app pool, publish folder, loopback HTTP binding and isolated
 settings/DPAPI credentials. Run in an elevated Windows PowerShell with IIS and
 the ASP.NET Core Hosting Bundle installed.
+-HttpsPort with -CertificateThumbprint adds one HTTPS binding on all addresses
+(for the machine name, as LFDS sign-in needs) using a certificate that is already
+in LocalMachine\My. The loopback HTTP binding stays for the readiness check.
+Later updates may omit both: an existing HTTPS binding is kept as it is.
 .EXAMPLE
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\build\install-dynamic-dashboard-iis.ps1
 .EXAMPLE
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\build\install-dynamic-dashboard-iis.ps1 -PublishedPath 'C:\Builds\WebApp' -Port 5190
+.EXAMPLE
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\build\install-dynamic-dashboard-iis.ps1 -Port 5189 -HttpsPort 5191 -CertificateThumbprint 48FEA4604BDCD5E66286640D617430447A4E6870
 #>
 [CmdletBinding()]
 param(
@@ -18,6 +24,8 @@ param(
     [string]$WebRoot = '',
     [string]$DataRoot = '',
     [string]$PublishedPath = '',
+    [ValidateRange(0,65535)][int]$HttpsPort = 0,
+    [string]$CertificateThumbprint = '',
     [switch]$PlanOnly
 )
 Set-StrictMode -Version 2
@@ -71,9 +79,24 @@ $repoRoot = Canonical (Join-Path $PSScriptRoot '..')
 if ((Overlaps $root $repoRoot) -or (Overlaps $data $repoRoot)) {
     throw 'Never publish into the source repository or put runtime credentials there.'
 }
+# Copied thumbprints often carry spaces or an invisible direction mark; keep hex only.
+$CertificateThumbprint = ($CertificateThumbprint -replace '[^0-9A-Fa-f]', '').ToUpperInvariant()
+$machineHost = $env:COMPUTERNAME.ToLowerInvariant()
+if ($HttpsPort -ne 0) {
+    if ($HttpsPort -lt 1024) { throw '-HttpsPort must be between 1024 and 65535.' }
+    if ($HttpsPort -eq $Port) { throw '-HttpsPort must differ from the loopback -Port.' }
+    if ($CertificateThumbprint.Length -ne 40) {
+        throw '-HttpsPort needs -CertificateThumbprint: the 40-character thumbprint of a certificate in LocalMachine\My.'
+    }
+} elseif ($CertificateThumbprint) {
+    throw '-CertificateThumbprint is only used together with -HttpsPort.'
+}
 Write-Host "Target IIS website : $siteName"
 Write-Host "Application pool   : $poolName"
 Write-Host "Loopback address   : http://127.0.0.1:$Port/"
+if ($HttpsPort) {
+    Write-Host "HTTPS address      : https://$($machineHost):$HttpsPort/ (certificate $CertificateThumbprint)"
+}
 Write-Host "Publish directory  : $root"
 Write-Host "Private data home  : $data"
 if ($PlanOnly) {
@@ -115,18 +138,32 @@ foreach ($site in $sites) {
             $parts[1] -eq [string]$Port -and $site.Name -ine $siteName) {
             throw "HTTP port $Port is already bound by IIS site '$($site.Name)'. Choose -Port 5190."
         }
+        if ($HttpsPort -and $parts.Count -ge 2 -and
+            $parts[1] -eq [string]$HttpsPort -and $site.Name -ine $siteName) {
+            throw "Port $HttpsPort is already bound by IIS site '$($site.Name)'. Choose another -HttpsPort."
+        }
     }
 }
 $existingSite = Get-Website -Name $siteName -ErrorAction SilentlyContinue
+$existingHttps = ''
 if ($existingSite) {
     $physical = Canonical ([Environment]::ExpandEnvironmentVariables([string]$existingSite.PhysicalPath))
     if ($physical -ine $root) {
         throw "Existing $siteName site points to $physical; refusing to repoint it."
     }
+    # Allowed: the loopback HTTP binding, plus at most one HTTPS binding added by -HttpsPort.
     $bindings = @(Get-WebBinding -Name $siteName)
-    if ($bindings.Count -ne 1 -or $bindings[0].protocol -ne 'http' -or
-        [string]$bindings[0].bindingInformation -ine "127.0.0.1:$($Port):") {
-        throw "Existing $siteName bindings differ from 127.0.0.1:$Port. Refusing to change bindings."
+    $httpBindings = @($bindings | Where-Object { $_.protocol -eq 'http' })
+    $httpsBindings = @($bindings | Where-Object { $_.protocol -eq 'https' })
+    if ($httpBindings.Count -ne 1 -or
+        [string]$httpBindings[0].bindingInformation -ine "127.0.0.1:$($Port):" -or
+        $httpsBindings.Count -gt 1 -or
+        $bindings.Count -ne ($httpBindings.Count + $httpsBindings.Count)) {
+        throw "Existing $siteName bindings differ from 127.0.0.1:$Port (plus at most one https binding). Refusing to change bindings."
+    }
+    if ($httpsBindings.Count -eq 1) { $existingHttps = [string]$httpsBindings[0].bindingInformation }
+    if ($HttpsPort -and $existingHttps -and $existingHttps -ine "*:$($HttpsPort):") {
+        throw "Existing https binding is $existingHttps; refusing to move it to *:$($HttpsPort):."
     }
     $effectivePool = [string](& $appcmd list app "$siteName/" /text:applicationPool)
     if ($LASTEXITCODE -ne 0 -or $effectivePool.Trim() -ine $poolName) {
@@ -152,6 +189,30 @@ if (-not $existingSite) {
 }
 if (-not $existingSite -and $existingPool) {
     throw "Application pool $poolName already exists without a matching site. Inspect IIS manually."
+}
+# Check the HTTPS port and certificate before anything is changed.
+if ($HttpsPort -and $existingHttps) {
+    $sslBinding = Get-Item "IIS:\SslBindings\0.0.0.0!$HttpsPort" -ErrorAction SilentlyContinue
+    if (-not $sslBinding -or [string]$sslBinding.Thumbprint -ine $CertificateThumbprint) {
+        throw "The existing https binding on port $HttpsPort uses a different certificate. Refusing to change it."
+    }
+} elseif ($HttpsPort) {
+    $certificate = Get-Item "Cert:\LocalMachine\My\$CertificateThumbprint" -ErrorAction SilentlyContinue
+    if (-not $certificate) {
+        throw "Certificate $CertificateThumbprint is not in LocalMachine\My. Import it there first."
+    }
+    if (-not $certificate.HasPrivateKey) {
+        throw "Certificate $CertificateThumbprint has no private key, so IIS cannot use it for HTTPS."
+    }
+    if ($certificate.NotAfter -le (Get-Date)) {
+        throw "Certificate $CertificateThumbprint expired on $($certificate.NotAfter)."
+    }
+    if (@(Get-NetTCPConnection -State Listen -LocalPort $HttpsPort -ErrorAction SilentlyContinue).Count -gt 0) {
+        throw "Port $HttpsPort is already listening. Choose another -HttpsPort."
+    }
+    if (Test-Path "IIS:\SslBindings\0.0.0.0!$HttpsPort") {
+        throw "An SSL certificate binding already exists for 0.0.0.0:$HttpsPort. Inspect it with: netsh http show sslcert ipport=0.0.0.0:$HttpsPort"
+    }
 }
 if (Test-Path -LiteralPath $root) {
     $marker = Join-Path $root '.dynamic_dashboard.owned'
@@ -205,6 +266,11 @@ if ($LASTEXITCODE -ne 0) { throw 'Failed to secure the independent data director
 
 if (-not $existingSite) {
     New-Website -Name $siteName -PhysicalPath $root -Port $Port -IPAddress '127.0.0.1' -ApplicationPool $poolName | Out-Null
+}
+if ($HttpsPort -and -not $existingHttps) {
+    New-WebBinding -Name $siteName -Protocol https -IPAddress '*' -Port $HttpsPort
+    (Get-WebBinding -Name $siteName -Protocol https).AddSslCertificate($CertificateThumbprint, 'My')
+    Write-Host "Added https binding *:$HttpsPort with certificate $CertificateThumbprint."
 }
 try {
     if ((Get-WebAppPoolState -Name $poolName).Value -eq 'Started') {
@@ -284,3 +350,8 @@ if (-not $passed) {
 Write-Host "dynamic_dashboard IIS site is running and verified." -ForegroundColor Green
 Write-Host "Open $url/ (redirects to DynamicDashboard), or $url/DynamicDashboard" -ForegroundColor Cyan
 Write-Host "Configure this independent website using $url/Settings and $url/Login." -ForegroundColor Cyan
+$httpsNow = @(Get-WebBinding -Name $siteName -Protocol https)
+if ($httpsNow.Count -eq 1) {
+    $httpsPortNow = ([string]$httpsNow[0].bindingInformation).Split(':')[1]
+    Write-Host "HTTPS by machine name: https://$($machineHost):$httpsPortNow/DynamicDashboard" -ForegroundColor Cyan
+}

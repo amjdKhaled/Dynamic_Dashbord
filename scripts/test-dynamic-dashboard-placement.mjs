@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 const script=readFileSync(new URL("../src/LFPortal.Web/wwwroot/js/dynamic-dashboard.js",import.meta.url),"utf8");
 const {dropPlacement,emptyPlacement}=new Function("desktopColumns",
   script.slice(script.indexOf("  function emptyPlacement("),script.indexOf("  function bindCardDrag("))+
-  script.slice(script.indexOf("  function dropPlacement("),script.indexOf("  function planCardSwap("))+
+  script.slice(script.indexOf("  function swapIntoSourceRow("),script.indexOf("  function planCardSwap("))+
   "\nreturn {dropPlacement,emptyPlacement};")(10);
 const slot=(row,column,width)=>({row,column,width});
 const cardWidth=()=>2;
@@ -52,20 +52,33 @@ test("different-width cards fit into one another's slots without moving interven
   assert.deepEqual(next.get("a"),slot(0,5,3));
 });
 
-test("a KPI dropped onto a wider chart fits next to it in the lower row",()=>{
+test("a KPI swaps with a wider chart using two top-row slots",()=>{
   const positions=new Map([
-    ["a",slot(0,0,2)],["peer",slot(0,2,2)],["chart",slot(1,0,5)],["doughnut",slot(1,5,5)]
+    ["a",slot(0,0,2)],["peer",slot(0,2,2)],["other",slot(0,4,2)],
+    ["chart",slot(1,0,5)],["doughnut",slot(1,5,5)]
   ]);
   const {next,placed,insertedRow}=dropPlacement(positions,"a","chart",id=>id==="chart"?3:2);
   assert.deepEqual(placed,slot(1,0,2));
-  assert.deepEqual(next.get("chart"),slot(1,2,3));
-  for(const id of ["peer","doughnut"])assert.deepEqual(next.get(id),positions.get(id));
+  assert.deepEqual(next.get("chart"),slot(0,0,4));
+  assert.deepEqual(next.get("peer"),slot(1,2,2));
+  for(const id of ["other","doughnut"])assert.deepEqual(next.get(id),positions.get(id));
   assert.equal(insertedRow,null);
 });
 
-test("a KPI can move below a full-width table at its minimum size",()=>{
+test("a chart moves up into free columns without displacing extra cards",()=>{
   const positions=new Map([
-    ["a",slot(0,0,2)],["table-left",slot(1,0,5)],["table-right",slot(1,5,5)],["following",slot(2,0,5)]
+    ["a",slot(0,0,2)],["other",slot(0,4,2)],["chart",slot(1,0,5)],["doughnut",slot(1,5,5)]
+  ]);
+  const {next,placed,insertedRow}=dropPlacement(positions,"a","chart",id=>id==="chart"?3:2);
+  assert.deepEqual(placed,slot(1,0,2));
+  assert.deepEqual(next.get("chart"),slot(0,0,4));
+  for(const id of ["other","doughnut"])assert.deepEqual(next.get(id),positions.get(id));
+  assert.equal(insertedRow,null);
+});
+
+test("a KPI can move below a table when neither row has sufficient width",()=>{
+  const positions=new Map([
+    ["a",slot(0,0,2)],["b",slot(0,2,2)],["c",slot(0,4,2)],["d",slot(0,6,2)],["e",slot(0,8,2)],["table-left",slot(1,0,5)],["table-right",slot(1,5,5)],["following",slot(2,0,5)]
   ]);
   const {next,placed,insertedRow,addedRows}=dropPlacement(positions,"a","table-left",id=>id==="a"?2:5);
   assert.deepEqual(placed,slot(2,0,2));

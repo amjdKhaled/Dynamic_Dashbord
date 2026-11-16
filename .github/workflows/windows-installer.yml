@@ -8,6 +8,9 @@ on:
       - "config/**"
       - "installer/**"
       - "src/**"
+      - "!src/LFPortal.Web/wwwroot/css/dynamic-dashboard.css"
+      - "!src/LFPortal.Web/wwwroot/js/dynamic-dashboard.js"
+      - "!src/LFPortal.Web/Views/DynamicDashboard/**"
       - "Directory.Build.props"
       - "LFPortal.sln"
       - ".config/dotnet-tools.json"
@@ -15,8 +18,14 @@ on:
   push:
     branches: [main]
     tags: ["v*"]
-    paths-ignore:
-      - "Release/**"
+    paths:
+      - "**"
+      - "!Release/**"
+      - "!src/LFPortal.Web/wwwroot/css/dynamic-dashboard.css"
+      - "!src/LFPortal.Web/wwwroot/js/dynamic-dashboard.js"
+      - "!src/LFPortal.Web/Views/DynamicDashboard/**"
+      - "!scripts/test-dynamic-dashboard-placement.mjs"
+      - "!.github/workflows/windows-installer.yml"
 
 permissions:
   contents: write

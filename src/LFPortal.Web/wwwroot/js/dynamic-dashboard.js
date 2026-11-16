@@ -1010,6 +1010,37 @@
     });
   }
 
+  function swapIntoSourceRow(layout,sourceId,targetId,minWidth) {
+    const source=layout.get(sourceId),target=layout.get(targetId);
+    const peers=[...layout].filter(([id,slot])=>id!==sourceId && slot.row===source.row)
+      .sort(([,a],[,b])=>a.column-b.column);
+    let best;
+    for(let width=target.width;width>=minWidth(targetId);width--) {
+      const first=Math.max(0,source.column+source.width-width);
+      const last=Math.min(source.column,desktopColumns-width);
+      for(let column=last;column>=first;column--) {
+        const end=column+width;
+        const overlaps=peers.filter(([,slot])=>slot.column<end && slot.column+slot.width>column);
+        if(overlaps.some(([,slot])=>slot.column<column || slot.column+slot.width>end))continue;
+        const needed=source.width+overlaps.reduce((total,[,slot])=>total+slot.width,0);
+        if(needed>target.width || best && best.overlaps.length<=overlaps.length)continue;
+        best={column,width,overlaps};
+      }
+    }
+    if(!best)return null;
+
+    const next=new Map(layout);
+    const placed={row:target.row,column:target.column,width:source.width};
+    next.set(sourceId,placed);
+    next.set(targetId,{row:source.row,column:best.column,width:best.width});
+    let column=target.column+source.width;
+    for(const [id,slot] of best.overlaps) {
+      next.set(id,{row:target.row,column,width:slot.width});
+      column+=slot.width;
+    }
+    return {next,placed,insertedRow:null,displaced:[targetId,...best.overlaps.map(([id])=>id)],resize:true};
+  }
+
   function dropPlacement(layout,sourceId,targetId,minWidth) {
     const source=layout.get(sourceId),target=layout.get(targetId);
     if(!source || !target || sourceId===targetId)return null;
@@ -1039,6 +1070,10 @@
 
     const required=block.reduce((total,[id])=>total+minWidth(id),0);
     if(width<minWidth(sourceId) || required>source.width) {
+      if(source.row!==target.row && target.width>source.width) {
+        const swap=swapIntoSourceRow(layout,sourceId,targetId,minWidth);
+        if(swap)return swap;
+      }
       // Fit the two cards around the target without disturbing its neighbors.
       const left=track[index-1]?.[1];
       const start=left?left.column+left.width:0;

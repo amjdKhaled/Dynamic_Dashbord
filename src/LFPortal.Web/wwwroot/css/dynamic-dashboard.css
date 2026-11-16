@@ -429,6 +429,7 @@ body:has(.dd-page.dd-is-loading) > :is(.site-header,.site-footer){display:none}
 .dd-toolbar-hidden { display: none !important; }
 /* Keep the dashboard actions beside Settings, with wrapping for narrow headers. */
 .site-header:has(.dd-nav-actions) { flex-wrap: wrap; height: auto; }
+.site-header:has(.dd-board-trigger[aria-expanded="true"]) { position: relative; z-index: 30; }
 .site-header:has(.dd-nav-actions) > .site-header__nav { flex-wrap: wrap; min-inline-size: 0; }
 @media (min-width: 1024px) {
   .site-header:has(.dd-nav-actions) { flex-wrap: nowrap; }

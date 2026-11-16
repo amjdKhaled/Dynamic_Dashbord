@@ -270,7 +270,7 @@
         else
         {
             <div class="d-tbl-wrap">
-                <table class="d-tbl" id="table1">
+                <table class="d-tbl" id="table1" data-viewer-first="@(activityTable.ByGroups ? "true" : "false")">
                     <thead><tr><th>@L["User"]</th>@if (activityTable.ByGroups) {<th>@L["UserGroup"]</th>}<th>@L["DocumentsCreated"]</th><th>@L["LastActivity"]</th></tr></thead>
                     <tbody>
                         @foreach (var u in userActivity)
@@ -732,7 +732,8 @@ if(docActEl){
     const overview = document.getElementById("dashboard-overview");
     const ROWS_PER_PAGE = 10;
 
-    overview.querySelectorAll(".table-pagination").forEach(function (pagination) {
+    // Called again when a table's rows change order (the live counts below).
+    function setupPagination(pagination) {
         const tableId = pagination.dataset.table;
         const listId = pagination.dataset.list;
         const table = tableId ? document.getElementById(tableId) : null;
@@ -845,6 +846,53 @@ if(docActEl){
         }
 
         showPage(1);
+    }
+    overview.querySelectorAll(".table-pagination").forEach(setupPagination);
+
+    // «المستندات حسب نشاط المستخدم» counts the documents the board has just read from Laserfiche
+    // (on every load and «تحديث اللوحة»), not the overview's snapshot, which is kept up to 15 minutes.
+    // Names are exact, as on the server. The people and their order rules stay the server's.
+    document.addEventListener("dd:rows", event => {
+        const table = document.getElementById("table1");
+        const docs = event.detail;
+        if (!table || !table.tBodies[0] || !Array.isArray(docs)) return;
+        const byName = new Map();
+        for (const doc of docs) {
+            const name = String(doc?.creator ?? "").trim();
+            if (!name) continue;
+            const seen = byName.get(name) ?? { count: 0, last: NaN };
+            const when = Date.parse(doc.modified || doc.created || "");
+            seen.count += 1;
+            if (!Number.isNaN(when) && !(seen.last >= when)) seen.last = when;
+            byName.set(name, seen);
+        }
+        const ago = time => {
+            if (Number.isNaN(time)) return "-";
+            const minutes = (Date.now() - time) / 60000;
+            if (minutes < 1) return "Just now";
+            if (minutes < 60) return `${Math.floor(minutes)}m ago`;
+            if (minutes < 1440) return `${Math.floor(minutes / 60)}h ago`;
+            if (minutes < 43200) return `${Math.floor(minutes / 1440)}d ago`;
+            return `${Math.floor(minutes / 43200)}mo ago`;
+        };
+        const body = table.tBodies[0];
+        const rows = Array.from(body.rows);
+        const nameOf = row => row.querySelector("bdi")?.textContent ?? "";
+        for (const row of rows) {
+            const seen = byName.get(nameOf(row));
+            const count = seen?.count ?? 0;
+            row.dataset.count = String(count);
+            row.cells[row.cells.length - 2].textContent = count.toLocaleString("en-US");
+            row.cells[row.cells.length - 1].textContent = ago(seen?.last ?? NaN);
+        }
+        // The viewer stays first (with the portal's people); the rest by documents, then by name.
+        const fixed = table.dataset.viewerFirst === "true" ? rows.slice(0, 1) : [];
+        const rest = rows.slice(fixed.length).sort((a, b) =>
+            Number(b.dataset.count) - Number(a.dataset.count) ||
+            nameOf(a).localeCompare(nameOf(b), undefined, { sensitivity: "base" }));
+        body.append(...fixed, ...rest);
+        const pager = document.querySelector('.table-pagination[data-table="table1"]');
+        if (pager) setupPagination(pager);
     });
 
     overview.querySelectorAll("[data-archive-url]").forEach(element => {

@@ -2000,6 +2000,8 @@
       const result=await records.json();
       if(!Array.isArray(result.fields)||!Array.isArray(result.rows))throw new Error(T("استجابة غير متوقعة من Laserfiche.","Unexpected response from Laserfiche."));
       fields=result.fields;rows=result.rows;partial=Boolean(result.fieldDataIncomplete);
+      // The overview's «المستندات حسب نشاط المستخدم» counts these live documents (_Overview.cshtml).
+      document.dispatchEvent(new CustomEvent("dd:rows",{detail:rows}));
       if(partial){
         $("dd-warning").textContent=T("بعض بيانات الحقول لم ترجع كاملة من Laserfiche. تعرض الجداول القيم المتاحة فقط.","Laserfiche returned incomplete field data. Widgets show available values only.");
         $("dd-warning").classList.remove("dd-hidden");

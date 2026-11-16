@@ -140,7 +140,6 @@
   const vacantRows=new Map();
   const desktopGrid=()=>window.matchMedia("(min-width: 1100px)").matches;
   let desktopLayout = new Map();
-  let draggedCard = null;
 
   function cardSpan(chart) {
     if(chart.span==null)return chart.wide || isTable(chart.type)?12:quarterWidth(chart)?3:6;
@@ -204,7 +203,32 @@
       while(charts.length>80)charts.splice(charts.findLastIndex(chart=>!overview.has(chart.id)),1);
     }
   }
+  let savedBoardState;
+  function boardState() {
+    return {name:activeBoard.name,charts:structuredClone(charts),vacantRows:[...vacantRows]};
+  }
+  function revertLayout() {
+    if(!savedBoardState || saving || deleting || revision===savedRevision)return;
+    closeEditor();
+    activeBoard.name=savedBoardState.name;
+    charts=structuredClone(savedBoardState.charts);
+    vacantRows.clear();
+    for(const [row,height] of savedBoardState.vacantRows)vacantRows.set(row,height);
+    tablePages.clear();
+    revision=savedRevision;
+    clearSavedFlash();
+    syncBoardPicker();
+    render();
+    updateSaveBar(T("تم التراجع عن التعديلات","Changes reverted"));
+    savedFlashTimer=setTimeout(()=>{
+      if(revision===savedRevision && !saving && !deleting)updateSaveBar();
+    },3000);
+    $("dd-customize").focus({preventScroll:true});
+  }
   function updateSaveBar(message) {
+    const revert=$("dd-revert-layout");
+    revert.classList.toggle("dd-hidden",revision===savedRevision);
+    revert.disabled=!savedBoardState || saving || deleting || revision===savedRevision;
     $("dd-save-layout").classList.toggle("dd-hidden",revision===savedRevision);
     $("dd-save-layout").disabled=!layoutReady || saving || deleting || revision===savedRevision;
     for(const id of ["dd-board-list","dd-new-board","dd-rename-board"])
@@ -262,6 +286,7 @@
     clearSavedFlash();
     tablePages.clear();
     loadConfig(board.layout);
+    savedBoardState=boardState();
     syncBoardPicker();
     updateSaveBar();
     render();
@@ -271,7 +296,7 @@
     if(!layoutReady || saving || deleting)return false;
     saving=true;
     const snapshot=revision;
-    const layout={version:3,name:activeBoard.name,charts:structuredClone(charts),vacantRows:[...vacantRows],updatedAt:Date.now()};
+    const layout={version:3,...boardState(),updatedAt:Date.now()};
     let message;
     updateSaveBar();
     try {
@@ -283,6 +308,7 @@
       });
       if(!response.ok)throw new Error("HTTP "+response.status);
       savedRevision=snapshot;
+      savedBoardState=layout;
       clearSavedFlash();
       savedFlash=true;
       savedFlashTimer=setTimeout(()=>{
@@ -753,6 +779,7 @@
       card.classList.remove("dd-drop-target","dd-drop-displaced"));
     const preview=grid.querySelector(".dd-drop-preview");
     if(preview)preview.hidden=true;
+    grid.querySelector(".dd-drop-row-line")?.remove();
   }
 
   function clearDropSlots() {
@@ -794,34 +821,148 @@
         zone.className="dd-empty-slot"+(row===rowCount?" dd-drop-end":"");
         zone.setAttribute("aria-hidden","true");
         gridPosition(zone,{row,column,width:end-column});
-        const placed={row,column,width};
-        zone.addEventListener("dragover",event=>{
-          if(draggedCard!==chart.id)return;
-          event.preventDefault();event.dataTransfer.dropEffect="move";
-          if(preview.hidden)showPlacement({placed});
-        });
-        zone.addEventListener("dragleave",clearDropHighlight);
-        zone.addEventListener("drop",event=>{
-          if(draggedCard!==chart.id || busy || deleting)return;
-          event.preventDefault();
-          const next=new Map(desktopLayout);
-          const source=next.get(chart.id);
-          next.set(chart.id,placed);
-          if(source.row!==placed.row) {
-            let column=0;
-            const peers=[...next].filter(([,slot])=>slot.row===source.row)
-              .sort(([,a],[,b])=>a.column-b.column);
-            for(const [id,slot] of peers) {
-              next.set(id,{...slot,column});
-              column+=slot.width;
-            }
-          }
-          applyPlacement({next,insertedRow:null});
-          draggedCard=null;markChanged();render();
-        });
+        zone.dataset.row=row;
+        zone.dataset.column=column;
         grid.appendChild(zone);
       }
     }
+  }
+
+  function emptyPlacement(layout,sourceId,placed) {
+    const next=new Map(layout),source=next.get(sourceId);
+    next.set(sourceId,placed);
+    if(source.row!==placed.row) {
+      const peers=[...next].filter(([,slot])=>slot.row===source.row)
+        .sort(([,a],[,b])=>a.column-b.column);
+      let column=0;
+      for(const [id,slot] of peers) {
+        next.set(id,{...slot,column});
+        column+=slot.width;
+      }
+    }
+    return {next,placed,insertedRow:null};
+  }
+
+  function bindCardDrag(handle,card,chart) {
+    handle.addEventListener("pointerdown",start=>{
+      if(!editMode || busy || deleting || saving || !start.isPrimary || start.button!==0)return;
+      const grid=$("dd-grid");
+      handle.setPointerCapture(start.pointerId);
+      let ghost,plan,targetKey,frame=0;
+      let pointer=start;
+      const bounds=card.getBoundingClientRect();
+      const offsetX=start.clientX-bounds.left,offsetY=start.clientY-bounds.top;
+      function rowBoundary(x,y) {
+        const gridRect=grid.getBoundingClientRect();
+        if(x<gridRect.left || x>gridRect.right)return;
+        const rows=new Map();
+        for(const node of grid.querySelectorAll(".dd-card")) {
+          const row=desktopLayout.get(node.dataset.id).row;
+          const rect=node.getBoundingClientRect();
+          const prior=rows.get(row);
+          rows.set(row,prior?{top:Math.min(prior.top,rect.top),bottom:Math.max(prior.bottom,rect.bottom)}:rect);
+        }
+        let bottom=gridRect.top-12;
+        for(const [row,rect] of [...rows].sort(([a],[b])=>a-b)) {
+          if(y>=bottom && y<rect.top)return {row,top:(bottom+rect.top)/2,left:gridRect.left,width:gridRect.width};
+          bottom=rect.bottom;
+        }
+      }
+      function update() {
+        const {clientX:x,clientY:y}=pointer;
+        ghost.style.transform="translate3d("+(x-offsetX)+"px,"+(y-offsetY)+"px,0)";
+        const hit=document.elementFromPoint(x,y);
+        const target=hit?.closest("#dd-grid .dd-card");
+        const gap=hit?.closest("#dd-grid .dd-empty-slot");
+        const id=target?.dataset.id;
+        const boundary=desktopGrid() && !target && !gap?rowBoundary(x,y):null;
+        const key=boundary?"row:"+boundary.row:id===chart.id?null:id ?? gap;
+        if(key===targetKey) {
+          const line=grid.querySelector(".dd-drop-row-line");
+          if(line && boundary)line.style.top=boundary.top+"px";
+          return;
+        }
+        targetKey=key;
+        plan=null;
+        clearDropHighlight();
+        if(!key)return;
+        if(boundary) {
+          const next=new Map([...desktopLayout].map(([id,slot])=>[id,slot.row>=boundary.row?{...slot,row:slot.row+1}:slot]));
+          plan=emptyPlacement(next,chart.id,{row:boundary.row,column:0,width:desktopWidth(chart)});
+          plan.insertedRow=boundary.row;
+          plan.addedRows=1;
+          const line=document.createElement("div");
+          line.className="dd-drop-row-line";
+          line.style.cssText="top:"+boundary.top+"px;left:"+boundary.left+"px;width:"+boundary.width+"px";
+          grid.append(line);
+        } else if(desktopGrid()) {
+          plan=id?dropPlacement(desktopLayout,chart.id,id):emptyPlacement(desktopLayout,chart.id,{
+            row:Number(gap.dataset.row),column:Number(gap.dataset.column),width:desktopWidth(chart)
+          });
+          showPlacement(plan);
+        } else if(id)plan={id};
+        target?.classList.add("dd-drop-target");
+      }
+      function scrollNearEdge() {
+        const margin=64,y=pointer.clientY;
+        const available=window.innerHeight;
+        const speed=y<margin?-Math.ceil((margin-y)/5):y>available-margin?Math.ceil((y-available+margin)/5):0;
+        if(speed) {
+          window.scrollBy(0,speed);
+          update();
+        }
+        frame=requestAnimationFrame(scrollNearEdge);
+      }
+      function move(event) {
+        if(event.pointerId!==start.pointerId)return;
+        pointer=event;
+        if(!ghost) {
+          if(Math.hypot(event.clientX-start.clientX,event.clientY-start.clientY)<7)return;
+          ghost=document.createElement("div");
+          ghost.className="dd-drag-ghost";
+          ghost.textContent=widgetTitle(chart);
+          ghost.setAttribute("aria-hidden","true");
+          ghost.style.width=bounds.width+"px";
+          root.append(ghost);
+          card.classList.add("is-dragging");
+          showDropSlots(chart);
+          frame=requestAnimationFrame(scrollNearEdge);
+        }
+        update();
+      }
+      function finish(event) {
+        if(event.pointerId!==start.pointerId)return;
+        handle.removeEventListener("pointermove",move);
+        handle.removeEventListener("pointerup",finish);
+        handle.removeEventListener("pointercancel",finish);
+        handle.removeEventListener("lostpointercapture",finish);
+        if(!ghost)return;
+        if(event.type==="pointerup") {
+          pointer=event;
+          update();
+        }
+        cancelAnimationFrame(frame);
+        ghost.remove();
+        card.classList.remove("is-dragging");
+        clearDropSlots();
+        if(event.type!=="pointerup" || !plan || !editMode || busy || deleting || saving)return;
+        const before=new Map([...grid.querySelectorAll(".dd-card")].map(node=>[node.dataset.id,node.getBoundingClientRect()]));
+        if(plan.next)applyPlacement(plan);
+        else swapCards(charts.findIndex(item=>item.id===chart.id),charts.findIndex(item=>item.id===plan.id));
+        markChanged();render();
+        if(!window.matchMedia("(prefers-reduced-motion: reduce)").matches)
+          for(const node of grid.querySelectorAll(".dd-card")) {
+            const from=before.get(node.dataset.id),to=node.getBoundingClientRect();
+            if(from && (from.left!==to.left || from.top!==to.top))
+              node.animate([{transform:"translate("+(from.left-to.left)+"px,"+(from.top-to.top)+"px)"},
+                {transform:"none"}],{duration:180,easing:"ease-out"});
+          }
+      }
+      handle.addEventListener("pointermove",move);
+      handle.addEventListener("pointerup",finish);
+      handle.addEventListener("pointercancel",finish);
+      handle.addEventListener("lostpointercapture",finish);
+    });
   }
 
   function dropPlacement(layout, sourceId, targetId) {
@@ -923,10 +1064,11 @@
     headText.appendChild(sub);
     const actions=document.createElement("div");actions.className="dd-card-actions";
     if(editMode) {
-      headText.draggable=true;
       headText.classList.add("dd-drag-handle");
       const grip=iconButton(T("اسحب لتغيير المكان","Drag to reorder"),"⠿",()=>{});
-      grip.classList.add("dd-drag-handle");grip.draggable=true;
+      grip.classList.add("dd-drag-handle");
+      bindCardDrag(grip,el,chart);
+      bindCardDrag(headText,el,chart);
       grip.addEventListener("keydown",event=>{
         if(!["ArrowUp","ArrowDown"].includes(event.key))return;
         event.preventDefault();moveCard(chart.id,event.key==="ArrowUp"?-1:1);
@@ -1120,42 +1262,6 @@
         instances.push(new Chart(canvas,config));
       }
     }
-    el.addEventListener("dragstart",event=>{
-      if(!editMode || !event.target.closest(".dd-drag-handle")) {event.preventDefault();return;}
-      event.dataTransfer?.setData("text/plain",chart.id);
-      if(event.dataTransfer)event.dataTransfer.effectAllowed="move";
-      draggedCard=chart.id;
-      el.classList.add("is-dragging");
-      showDropSlots(chart);
-    });
-    el.addEventListener("dragend",()=>{
-      draggedCard=null;clearDropSlots();
-      el.classList.remove("is-dragging");
-      $("dd-grid").querySelectorAll(".dd-drop-target").forEach(card=>card.classList.remove("dd-drop-target"));
-    });
-    el.addEventListener("dragover",event=>{
-      if(!editMode || !draggedCard || draggedCard===chart.id || busy || deleting)return;
-      event.preventDefault();
-      event.dataTransfer.dropEffect="move";
-      if(el.classList.contains("dd-drop-target"))return;
-      if(desktopGrid())showPlacement(dropPlacement(desktopLayout,draggedCard,chart.id));
-      else clearDropHighlight();
-      el.classList.add("dd-drop-target");
-    });
-    el.addEventListener("dragleave",event=>{
-      if(!el.contains(event.relatedTarget))clearDropHighlight();
-    });
-    el.addEventListener("drop",event=>{
-      if(!editMode || busy || deleting)return;
-      event.preventDefault();const source=event.dataTransfer?.getData("text/plain");
-      if(!source||source!==draggedCard||source===chart.id)return;
-      const i=charts.findIndex(c=>c.id===source),j=charts.findIndex(c=>c.id===chart.id);
-      if(i<0||j<0)return;
-      if(desktopGrid())applyDesktopDrop(source,chart.id);
-      else swapCards(i,j);
-      draggedCard=null;
-      markChanged();render();
-    });
     return el;
   }
   function swapCards(first,second) {
@@ -1430,12 +1536,34 @@
       const canvas=document.createElement("canvas");
       canvas.setAttribute("role","img");
       canvas.setAttribute("aria-label",labels.map((label,i)=>label+" "+counts[i]).join(", "));
-      stage.append(canvas);host.append(stage);
+      const circular=type==="doughnut" || type==="pie";
+      stage.append(canvas);
+      if(circular) {
+        stage.className="dashboard-round-stage";
+        const layout=document.createElement("div"),legend=document.createElement("div");
+        layout.className="dashboard-round-layout dd-example-round";
+        legend.className="dashboard-round-results";
+        legend.dir=arabic?"rtl":"ltr";
+        labels.forEach((label,index)=>{
+          const row=document.createElement("div"),dot=document.createElement("span"),
+            name=document.createElement("span"),count=document.createElement("strong");
+          row.className="dashboard-round-row";
+          dot.className="dashboard-round-dot";
+          dot.style.backgroundColor=palette[index];
+          name.className="dashboard-round-label";
+          name.textContent=label;
+          count.textContent=counts[index].toLocaleString(locale);
+          row.append(dot,name,count);
+          legend.append(row);
+        });
+        layout.append(stage,legend);
+        host.append(layout);
+      } else host.append(stage);
       exampleGraph=new Chart(canvas,{
         type:type==="horizontal"?"bar":type,
-        data:{labels,datasets:[{data:counts,backgroundColor:palette.slice(0,3),borderColor:palette[0]}]},
+        data:{labels,datasets:[{data:counts,backgroundColor:palette.slice(0,3),borderColor:palette[0],borderWidth:circular?0:1}]},
         options:{indexAxis:type==="horizontal"?"y":"x",maintainAspectRatio:false,animation:false,
-          events:[],plugins:{legend:{display:type==="pie" || type==="doughnut"}}}
+          events:[],plugins:{legend:{display:false}}}
       });
     } else if(type==="kpi") {
       const total=document.createElement("strong");
@@ -1936,6 +2064,7 @@
     wireBoards();
     wireLeaveGuard();
     $("dd-save-layout").addEventListener("click",saveLayout);
+    $("dd-revert-layout").addEventListener("click",revertLayout);
     window.addEventListener("pageshow",event=>{if(event.persisted)window.location.reload();});
     $("dd-refresh").addEventListener("click",refresh);
     $("dd-customize").addEventListener("click",()=>{
@@ -1985,6 +2114,6 @@
       valueChoices();
     });
   }
-  loadConfig(null);wire();
+  loadConfig(null);savedBoardState=boardState();wire();
   document.addEventListener("DOMContentLoaded",()=>restoreServerLayout().finally(refresh),{once:true});
 })();

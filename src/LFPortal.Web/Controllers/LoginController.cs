@@ -10,6 +10,7 @@ using LFPortal.Web.Middleware;
 using LFPortal.Web.Authentication;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Options;
 
 namespace LFPortal.Web.Controllers;
@@ -306,7 +307,12 @@ public sealed class LoginController : Controller
                 _options.CurrentValue.Sso.IsConfigured)
             {
                 var returnUrl = Url.Action("Index", "DynamicDashboard");
-                return Ok(new { url = Url.Action(nameof(StartSso), new { repository = targetId, returnUrl }) });
+                // switchedFrom: when the new repository refuses this account, the callback signs
+                // back in to this one and the board says why (ReturnAfterRefusedSwitch).
+                return Ok(new { url = Url.Action(nameof(StartSso), new
+                {
+                    repository = targetId, returnUrl, switchedFrom = active.RepositoryId,
+                }) });
             }
 
             var username = User.Identity?.Name;
@@ -358,7 +364,8 @@ public sealed class LoginController : Controller
         string? returnUrl        = null,
         CancellationToken cancellationToken = default,
         string? repository       = null,
-        bool forceLogin          = false)
+        bool forceLogin          = false,
+        string? switchedFrom     = null)
     {
         var opts = _options.CurrentValue;
 
@@ -439,6 +446,11 @@ public sealed class LoginController : Controller
         // Resolve active repository (populated by RepositorySessionMiddleware).
         var repo = await _repositoryContext.GetActiveRepositoryAsync(cancellationToken);
 
+        // A repository switch names the repository it leaves, to come back to if the new one refuses.
+        var cameFrom = CleanRepositoryId(switchedFrom);
+        if (string.Equals(cameFrom, repo.RepositoryId, StringComparison.OrdinalIgnoreCase))
+            cameFrom = null;
+
         // ── PKCE ─────────────────────────────────────────────────────────────
         var codeVerifier  = GenerateCryptoRandomBase64Url(byteCount: 64);  // 64 bytes → 86-char verifier
         var codeChallenge = ComputeS256Challenge(codeVerifier);
@@ -457,6 +469,7 @@ public sealed class LoginController : Controller
             CodeVerifier = codeVerifier,
             RedirectUri  = redirectUri,
             ExpiresAt    = DateTimeOffset.UtcNow.AddMinutes(10),
+            SwitchedFrom = cameFrom,
         };
         _oAuthStateStore.Store(state, entry);
 
@@ -464,7 +477,7 @@ public sealed class LoginController : Controller
             RepositorySessionMiddleware.SessionKeySource);
         var cookieWrite = _oAuthTransactionCookie.Write(HttpContext, new OAuthTransaction(
             state, codeVerifier, repo.RepositoryId, returnUrl ?? "/",
-            DateTimeOffset.UtcNow, launchSource, redirectUri));
+            DateTimeOffset.UtcNow, launchSource, redirectUri, cameFrom));
 
         // Bind state to this session so the callback can validate CSRF.
         HttpContext.Session.SetString(SessionKeyOAuthPendingState, state);
@@ -574,6 +587,7 @@ public sealed class LoginController : Controller
                 CodeVerifier = transaction.CodeVerifier,
                 RedirectUri = transaction.RedirectUri,
                 ExpiresAt = transaction.CreatedAtUtc.AddMinutes(10),
+                SwitchedFrom = transaction.SwitchedFrom,
             };
         }
         else if (!string.IsNullOrWhiteSpace(sessionState) &&
@@ -669,6 +683,8 @@ public sealed class LoginController : Controller
                     callbackUrl = entry.RedirectUri,
                 });
             }
+            if (IsNotARepositoryUser(ex) && !string.IsNullOrWhiteSpace(entry.SwitchedFrom))
+                return ReturnAfterRefusedSwitch(entry.SwitchedFrom, repo.RepositoryId);
             return RedirectToSsoDiagnostic(
                 "token_exchange_failed",
                 cookieResult.Transaction,
@@ -895,6 +911,42 @@ public sealed class LoginController : Controller
         (laserfiche.ResponseBody?.Contains("invalid or untrusted SAML token",
              StringComparison.OrdinalIgnoreCase) == true ||
          string.Equals(laserfiche.LFErrorCode, "9530", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// The query key that tells the board a repository switch was refused, and by which repository.
+    /// </summary>
+    public const string NotInRepositoryQuery = "notInRepository";
+
+    /// <summary>
+    /// Laserfiche answers the code exchange with "Access denied. [9013]" when the account is not
+    /// one of that repository's users.
+    /// </summary>
+    private static bool IsNotARepositoryUser(Exception exception) =>
+        exception is LaserficheException { StatusCode: 403, LFErrorCode: "9013" };
+
+    /// <summary>
+    /// A repository switch went to a repository that refused this account. The old repository's
+    /// sign-in ended when the switch started, so sign in there again (LFDS still knows the user, so
+    /// nothing is asked) and land on the board, which shows «المستخدم … غير موجود في مستودع …»
+    /// instead of the diagnostic page. The way back carries no switchedFrom, so it cannot loop.
+    /// </summary>
+    private RedirectToActionResult ReturnAfterRefusedSwitch(string previousRepository, string refusedRepository)
+    {
+        _logger.LogWarning(
+            "[SSO] Repository {Refused} refused this account (not one of its users); signing in to {Previous} again.",
+            refusedRepository, previousRepository);
+        _oAuthTransactionCookie.Delete(HttpContext);
+        var board = Url.Action("Index", "DynamicDashboard") ?? "/";
+        var returnUrl = QueryHelpers.AddQueryString(board, NotInRepositoryQuery, refusedRepository);
+        return RedirectToAction(nameof(StartSso), new { repository = previousRepository, returnUrl });
+    }
+
+    /// <summary>A repository id from the address, or null when it is empty or malformed.</summary>
+    private static string? CleanRepositoryId(string? value)
+    {
+        var id = value?.Trim();
+        return string.IsNullOrEmpty(id) || id.Length > 200 || id.Any(char.IsControl) ? null : id;
+    }
 
     private RedirectToActionResult RedirectToSsoDiagnostic(
         string reason,

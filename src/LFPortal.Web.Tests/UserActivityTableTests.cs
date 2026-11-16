@@ -73,12 +73,13 @@ public sealed class UserActivityTableTests
     }
 
     [Fact]
-    public void OnlyTheMainAdmin_GetsCreatorsWhoAreNotUsers_AtTheEnd()
+    public void CreatorsWhoAreNotUsers_AreNotShown_NotEvenToTheMainAdmin()
     {
+        // "workflow*" (a deleted repository user), "Admin" (a deleted account), "yazan" and "eyad"
+        // created documents but are not in the portal's list of users.
         var people = new PortalPeople(true, [Person("admin"), Person("ADMIN"), Person("ali"), Person("amir")]);
         var table = UserActivityTable.Build(Creators, people, "admin");
-        Assert.Equal(["admin", "ADMIN", "amir", "ali", "workflow*", "Admin", "yazan", "eyad"], table.Rows.Select(r => r.Name));
-        Assert.Equal([false, false, false, false, true, true, true, true], table.Rows.Select(r => r.NotCurrentUser));
+        Assert.Equal(["admin", "ADMIN", "amir", "ali"], table.Rows.Select(r => r.Name));
         Assert.All(table.Rows, row => Assert.True(row.Opens));
 
         var member = UserActivityTable.Build(Creators, new PortalPeople(false, [Person("amir")]), "amir");

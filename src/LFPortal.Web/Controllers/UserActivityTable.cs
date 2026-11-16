@@ -9,11 +9,9 @@ namespace LFPortal.Web.Controllers;
 /// <param name="LastActivity">When the last of them was changed or created, if any.</param>
 /// <param name="Groups">The portal groups that link the person to the viewer.</param>
 /// <param name="Opens">True when the viewer may open the documents this person created.</param>
-/// <param name="NotCurrentUser">A creator who is not one of the repository's users any more
-/// (a deleted or disabled account); only the main admin sees them.</param>
 public sealed record UserActivityRow(
     string Name, int Created, DateTimeOffset? LastActivity,
-    IReadOnlyList<PortalPersonGroup> Groups, bool Opens, bool NotCurrentUser);
+    IReadOnlyList<PortalPersonGroup> Groups, bool Opens);
 
 /// <summary>
 /// The rows of «المستندات حسب نشاط المستخدم» for one viewer.
@@ -22,8 +20,9 @@ public sealed record UserActivityRow(
 /// Without the Admin Portal the rows are the document creators, as before. With it, the rows are
 /// the people the portal lists for the viewer (the repository's users, narrowed by the portal's
 /// groups), each with the documents they created, 0 when none. The viewer comes first, then the
-/// most documents, then by name. The main admin also gets every creator who is not a user any
-/// more, at the end. Names match exactly: "admin" and "ADMIN" are different accounts.
+/// most documents, then by name. A creator who is not a user any more (a deleted or disabled
+/// account) is not shown, not even to the main admin. Names match exactly: "admin" and "ADMIN"
+/// are different accounts.
 /// </remarks>
 /// <param name="Rows">The rows, in order.</param>
 /// <param name="ByGroups">True when the rows come from the portal (the «المجموعة» column shows).</param>
@@ -35,7 +34,7 @@ public sealed record UserActivityTable(IReadOnlyList<UserActivityRow> Rows, bool
     {
         ArgumentNullException.ThrowIfNull(creators);
         if (people is null)
-            return new(creators.Select(c => new UserActivityRow(c.Name, c.Created, c.LastActivity, [], true, false))
+            return new(creators.Select(c => new UserActivityRow(c.Name, c.Created, c.LastActivity, [], true))
                 .ToList(), false);
 
         var counts = new Dictionary<string, UserDocumentActivityDto>(StringComparer.Ordinal);
@@ -44,24 +43,13 @@ public sealed record UserActivityTable(IReadOnlyList<UserActivityRow> Rows, bool
         var rows = people.People
             .DistinctBy(person => person.Name, StringComparer.Ordinal)
             .Select(person => counts.TryGetValue(person.Name, out var count)
-                ? new UserActivityRow(person.Name, count.Created, count.LastActivity, person.Groups, person.Opens, false)
-                : new UserActivityRow(person.Name, 0, null, person.Groups, person.Opens, false))
+                ? new UserActivityRow(person.Name, count.Created, count.LastActivity, person.Groups, person.Opens)
+                : new UserActivityRow(person.Name, 0, null, person.Groups, person.Opens))
             .OrderByDescending(row => string.Equals(row.Name, viewer, StringComparison.Ordinal))
             .ThenByDescending(row => row.Created)
             .ThenBy(row => row.Name, StringComparer.OrdinalIgnoreCase)
             .ThenBy(row => row.Name, StringComparer.Ordinal)
             .ToList();
-
-        if (people.All)
-        {
-            var listed = rows.Select(row => row.Name).ToHashSet(StringComparer.Ordinal);
-            rows.AddRange(creators
-                .Where(creator => !listed.Contains(creator.Name))
-                .OrderByDescending(creator => creator.Created)
-                .ThenBy(creator => creator.Name, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(creator => creator.Name, StringComparer.Ordinal)
-                .Select(creator => new UserActivityRow(creator.Name, creator.Created, creator.LastActivity, [], true, true)));
-        }
         return new(rows, true);
     }
 }

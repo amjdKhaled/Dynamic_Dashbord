@@ -11,8 +11,11 @@ public interface IOAuthTransactionCookie
     void Delete(HttpContext context);
 }
 
+/// <param name="SwitchedFrom">The repository a repository switch left, to sign in to again if the
+/// new one refuses the account; null for any other sign-in.</param>
 public sealed record OAuthTransaction(string State, string CodeVerifier, string RepositoryId,
-    string ReturnUrl, DateTimeOffset CreatedAtUtc, string? LaunchSource, string RedirectUri);
+    string ReturnUrl, DateTimeOffset CreatedAtUtc, string? LaunchSource, string RedirectUri,
+    string? SwitchedFrom = null);
 
 public sealed record OAuthTransactionCookieResult(OAuthTransaction? Transaction, bool CookiePresent, bool IsValid);
 

@@ -63,7 +63,6 @@
   <data name="LastActivity"            xml:space="preserve"><value>Last Activity</value></data>
   <data name="UserGroup"               xml:space="preserve"><value>Group</value></data>
   <data name="GroupManager"            xml:space="preserve"><value>Manager</value></data>
-  <data name="NotCurrentUser"          xml:space="preserve"><value>Not a current user</value></data>
   <data name="Number"                  xml:space="preserve"><value>#</value></data>
   <data name="TemplateName"            xml:space="preserve"><value>Template Name</value></data>
   <data name="PercentOfTotal"          xml:space="preserve"><value>% of Total</value></data>

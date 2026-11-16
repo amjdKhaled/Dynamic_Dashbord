@@ -2291,7 +2291,18 @@
       dialog.close();
     });
   }
+  // After a repository switch the other repository refused: say so once, and drop the note from
+  // the address so a reload does not say it again.
+  function showRefusedSwitch() {
+    const dialog=$("dd-repository-refused-dialog");
+    if(!dialog)return;
+    const address=new URL(window.location.href);
+    address.searchParams.delete("notInRepository");
+    history.replaceState(history.state,"",address.pathname+address.search+address.hash);
+    if(!dialog.open)dialog.showModal();
+  }
   function wire() {
+    showRefusedSwitch();
     wireRepositorySwitch();
     wireBoards();
     wireLeaveGuard();

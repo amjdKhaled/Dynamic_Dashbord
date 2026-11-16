@@ -33,6 +33,12 @@ public sealed class OAuthStateEntry
     public DateTimeOffset ExpiresAt { get; init; }
 
     /// <summary>
+    /// The repository a repository switch left, to sign in to again if this one refuses the
+    /// account; null for any other sign-in.
+    /// </summary>
+    public string? SwitchedFrom { get; init; }
+
+    /// <summary>
     /// Anti-replay guard. Set to <c>true</c> on first consumption.
     /// A second consumption attempt is treated as a replay attack and denied.
     /// </summary>

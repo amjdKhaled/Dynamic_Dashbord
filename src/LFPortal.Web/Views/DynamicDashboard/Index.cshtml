@@ -10,6 +10,10 @@
     var canCustomize = ViewBag.CanCustomize as bool? ?? true;
     var canCreate = ViewBag.CanCreate as bool? ?? true;
     var canArchive = ViewBag.CanArchive as bool? ?? true;
+    // A repository switch the other repository refused (LoginController.ReturnAfterRefusedSwitch).
+    var notInRepository = Context.Request.Query[LFPortal.Web.Controllers.LoginController.NotInRepositoryQuery].ToString().Trim();
+    if (notInRepository.Length > 200 || notInRepository.Any(char.IsControl)) notInRepository = "";
+    var viewerName = User.Identity?.Name;
 }
 @section DashboardNavigation {
     <div class="dd-nav-actions" role="group" aria-label="@T("إجراءات اللوحة", "Dashboard actions")">
@@ -100,6 +104,32 @@
             </form>
         </div>
     </dialog>
+    @if (notInRepository.Length > 0)
+    {
+        @* After a refused repository switch: the board is the old repository again. *@
+        <dialog id="dd-repository-refused-dialog" class="dd-leave-dialog" aria-labelledby="dd-repository-refused-title" aria-describedby="dd-repository-refused-text">
+            <div class="dd-leave-header">
+                <h2 id="dd-repository-refused-title">@T("تعذّر تبديل المستودع", "Could not switch repository")</h2>
+            </div>
+            <div class="dd-leave-content">
+                <p id="dd-repository-refused-text">
+                    @if (arabic)
+                    {
+                        if (string.IsNullOrEmpty(viewerName)) { <text>حسابك</text> } else { <text>المستخدم <bdi>@viewerName</bdi></text> }
+                        <text> غير موجود في مستودع <bdi>@notInRepository</bdi>.</text>
+                    }
+                    else
+                    {
+                        if (string.IsNullOrEmpty(viewerName)) { <text>Your account</text> } else { <text>The user <bdi>@viewerName</bdi></text> }
+                        <text> is not in the <bdi>@notInRepository</bdi> repository.</text>
+                    }
+                </p>
+                <form method="dialog" class="dd-leave-actions">
+                    <button value="ok" class="dd-btn dd-btn-primary" autofocus>@T("حسنًا", "OK")</button>
+                </form>
+            </div>
+        </dialog>
+    }
     @* Shown instead of opening documents this account may not open (the overview uses it too). *@
     <dialog id="dd-denied-dialog" class="dd-leave-dialog" aria-labelledby="dd-denied-title" aria-describedby="dd-denied-text">
         <div class="dd-leave-header">

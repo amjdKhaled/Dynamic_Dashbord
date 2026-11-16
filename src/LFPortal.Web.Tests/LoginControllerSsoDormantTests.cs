@@ -779,6 +779,92 @@ public sealed class LoginControllerSsoDormantTests
         Assert.NotEqual("Index", redirect.ActionName);
     }
 
+    // A repository switch to a repository the account is not a user of: Laserfiche refuses the
+    // code exchange with "Access denied. [9013]". Instead of the diagnostic page, sign back in to
+    // the repository the switch left, and land on the board with the reason.
+
+    private static async Task<IActionResult> CallbackAfterStart(
+        LoginController ctrl, string? switchedFrom, bool keepCookie = true)
+    {
+        await ctrl.StartSso("/", default, "TestRepo", switchedFrom: switchedFrom);
+        var state = ctrl.HttpContext.Session.GetString("OAuth_PendingState");
+        if (keepCookie)
+            ctrl.HttpContext.Request.Headers.Cookie =
+                ctrl.Response.Headers.SetCookie.ToString().Split(';', 2)[0];
+        return await ctrl.Callback("code", state, cancellationToken: default);
+    }
+
+    [Fact]
+    public async Task Sso_Callback_SwitchRefusedByTheRepository_SignsBackInWhereTheSwitchStarted()
+    {
+        var (ctrl, auth, _) = Build(SsoOptions(), directBrowser: false);
+        auth.ExchangeException = new LaserficheException("Access denied", 403, "9013");
+
+        var result = await CallbackAfterStart(ctrl, "Demo");
+
+        var redirect = Assert.IsType<RedirectToActionResult>(result);
+        Assert.Equal("StartSso", redirect.ActionName);
+        Assert.Equal("Demo", redirect.RouteValues?["repository"]);
+        Assert.Equal("/DynamicDashboard/Index?notInRepository=TestRepo", redirect.RouteValues?["returnUrl"]);
+        // The way back is a plain sign-in: if Demo refused too, it would end on the diagnostic page.
+        Assert.False(redirect.RouteValues!.ContainsKey("switchedFrom"));
+    }
+
+    [Fact]
+    public async Task Sso_Callback_SwitchRefused_WorksFromTheSessionWhenTheCookieIsLost()
+    {
+        var (ctrl, auth, store) = Build(SsoOptions(), directBrowser: false);
+        auth.ExchangeException = new LaserficheException("Access denied", 403, "9013");
+
+        var result = await CallbackAfterStart(ctrl, "Demo", keepCookie: false);
+
+        Assert.Equal("Demo", store.LastStoredEntry?.SwitchedFrom);
+        var redirect = Assert.IsType<RedirectToActionResult>(result);
+        Assert.Equal("StartSso", redirect.ActionName);
+        Assert.Equal("Demo", redirect.RouteValues?["repository"]);
+    }
+
+    [Theory]
+    [InlineData(null, 403, "9013")]       // not a switch: nowhere to go back to
+    [InlineData("testrepo", 403, "9013")] // "switching" to the same repository
+    [InlineData(" ", 403, "9013")]
+    [InlineData("Demo", 401, null)]       // any other failure keeps the diagnostic page
+    [InlineData("Demo", 403, "9001")]
+    public async Task Sso_Callback_OtherFailures_StillShowTheDiagnostic(string? switchedFrom, int status, string? code)
+    {
+        var (ctrl, auth, _) = Build(SsoOptions(), directBrowser: false);
+        auth.ExchangeException = new LaserficheException("Rejected", status, code);
+
+        var result = await CallbackAfterStart(ctrl, switchedFrom);
+
+        var redirect = Assert.IsType<RedirectToActionResult>(result);
+        Assert.Equal("Diagnostic", redirect.ActionName);
+        Assert.Equal("token_exchange_failed", redirect.RouteValues?["reason"]);
+    }
+
+    [Fact]
+    public async Task SwitchRepository_Lfds_NamesTheRepositoryItLeaves()
+    {
+        var (ctrl, _, _) = Build(SsoOptions(), directBrowser: false);
+        ctrl.HttpContext.User = new ClaimsPrincipal(new ClaimsIdentity(
+        [
+            new Claim(ClaimTypes.Name, "eyad"),
+            new Claim(ClaimTypes.AuthenticationMethod, DashboardAuthenticationDefaults.LfdsAuthenticationMethod),
+            new Claim(DashboardAuthenticationDefaults.RepositoryClaimType, "TestRepo"),
+        ], "test"));
+        ctrl.HttpContext.Request.Headers["X-Dashboard-Repository"] = "TestRepo";
+        var urls = new RecordingUrlHelper(ctrl.HttpContext);
+        ctrl.Url = urls;
+
+        var result = await ctrl.SwitchRepository("isb", null, new TwoRepositories(), default);
+
+        Assert.IsType<OkObjectResult>(result);
+        var start = Assert.Single(urls.Actions, action => action.Action == "StartSso");
+        var values = new Microsoft.AspNetCore.Routing.RouteValueDictionary(start.Values);
+        Assert.Equal("isb", values["repository"]);
+        Assert.Equal("TestRepo", values["switchedFrom"]);
+    }
+
     [Fact]
     public async Task Login_Get_SsoFailure_DisplaysSanitizedSpecificReason()
     {
@@ -1073,6 +1159,43 @@ public sealed class LoginControllerSsoDormantTests
     }
 
     /// <summary>Minimal IUrlHelper for unit tests.</summary>
+    /// <summary>Records every Url.Action with its values.</summary>
+    private sealed class RecordingUrlHelper(HttpContext ctx) : IUrlHelper
+    {
+        private readonly StubUrlHelper _inner = new(ctx);
+        public List<UrlActionContext> Actions { get; } = [];
+        public ActionContext ActionContext => _inner.ActionContext;
+        public bool IsLocalUrl(string? url) => _inner.IsLocalUrl(url);
+        public string? Action(UrlActionContext context)
+        {
+            Actions.Add(context);
+            return _inner.Action(context);
+        }
+        public string? Content(string? contentPath) => contentPath;
+        public string? Link(string? routeName, object? values) => null;
+        public string? RouteUrl(UrlRouteContext context) => null;
+    }
+
+    /// <summary>The server's catalog: TestRepo and isb.</summary>
+    private sealed class TwoRepositories : ILaserficheRepositoryService
+    {
+        private static readonly IReadOnlyList<RepositoryInfo> Both =
+            [new() { RepositoryId = "TestRepo" }, new() { RepositoryId = "isb" }];
+        public Task<IReadOnlyList<RepositoryInfo>> DiscoverRepositoriesAsync(
+            string serverUrl, string repositoryId, string username, string password,
+            CancellationToken cancellationToken = default) => Task.FromResult(Both);
+        public Task<IReadOnlyList<RepositoryInfo>> ListRepositoriesAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(Both);
+        public Task<RepositoryInfo> GetRepositoryInfoAsync(CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+        public Task<ConnectionStatus> TestConnectionAsync(CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+        public Task<ConnectionStatus> TestConnectionWithCredentialsAsync(
+            string serverUrl, string repositoryId, string username, string password,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+    }
+
     private sealed class StubUrlHelper : IUrlHelper
     {
         public StubUrlHelper(HttpContext ctx) => ActionContext =

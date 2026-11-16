@@ -98,7 +98,6 @@
         .Select(item => new {
             item.Name,
             item.Groups,
-            item.NotCurrentUser,
             // The message shown instead of opening documents this account may not open.
             Denied       = item.Opens ? null : L["AccessDeniedDocuments", item.Name].Value,
             Created      = item.Created.ToString("N0"),
@@ -281,15 +280,11 @@
                             <tr class="dashboard-drilldown-row" tabindex="0" role="link"
                                 data-archive-url="@Url.Action("Index", "Archive", new { scope = "creator", creator = u.Name })"
                                 data-archive-denied="@u.Denied">
-                                <td style="font-weight:500" class="@(u.NotCurrentUser ? "dd-activity-gone-name" : null)"><bdi>@u.Name</bdi></td>
+                                <td style="font-weight:500"><bdi>@u.Name</bdi></td>
                                 @if (activityTable.ByGroups)
                                 {
                                     <td>
-                                        @if (u.NotCurrentUser)
-                                        {
-                                            <span class="dd-activity-gone">@L["NotCurrentUser"]</span>
-                                        }
-                                        else if (u.Groups.Count > 0)
+                                        @if (u.Groups.Count > 0)
                                         {
                                             <span class="dd-activity-groups">
                                                 @foreach (var g in u.Groups)

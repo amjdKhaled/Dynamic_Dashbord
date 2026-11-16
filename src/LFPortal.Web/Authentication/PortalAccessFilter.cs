@@ -71,7 +71,23 @@ public sealed class PortalAccessFilter(
         }
         if (account is null) { context.Result = SignIn(http); return; }
         if (access is null) { context.Result = Refuse(context, AccessDeniedReason.PortalUnavailable, section, null); return; }
-        if (access.Has(section)) { await next(); return; }
+        if (access.Has(section))
+        {
+            // One creator's documents (from «المستندات حسب نشاط المستخدم»): their own, their
+            // managers' up the chain of portal groups, and the main admin's. Not a peer's.
+            if (section == DashboardSections.Archive && CreatorAsked(http) is { } creator)
+            {
+                var opens = await OpensDocumentsOfAsync(http, account.Value, creator);
+                if (opens != true)
+                {
+                    context.Result = Refuse(context,
+                        opens is null ? AccessDeniedReason.PortalUnavailable : AccessDeniedReason.Documents,
+                        section, access, creator);
+                    return;
+                }
+            }
+            await next(); return;
+        }
 
         if (access.FirstSection is { } first && section == DashboardSections.Overview && IsHomePage(http))
         {
@@ -105,6 +121,36 @@ public sealed class PortalAccessFilter(
         return name is null ? null : (repositoryId, name);
     }
 
+    /// <summary>The creator whose documents the archive is asked for (<c>/Archive?scope=creator</c>), or null.</summary>
+    internal static string? CreatorAsked(HttpContext http)
+    {
+        var path = (http.Request.Path.Value ?? "").TrimEnd('/');
+        if (!path.Equals("/Archive", StringComparison.OrdinalIgnoreCase) &&
+            !path.Equals("/Archive/Index", StringComparison.OrdinalIgnoreCase))
+            return null;
+        if (!string.Equals(http.Request.Query["scope"].ToString().Trim(), "creator", StringComparison.OrdinalIgnoreCase))
+            return null;
+        return http.Request.Query["creator"].ToString().Trim();
+    }
+
+    /// <summary>True when the account may open what <paramref name="creator"/> created; null when the portal cannot say.</summary>
+    private async Task<bool?> OpensDocumentsOfAsync(HttpContext http, (string RepositoryId, string Name) account, string creator)
+    {
+        var people = portal as IPortalPeopleClient ?? http.RequestServices.GetService<IPortalPeopleClient>();
+        if (people is null) return null;
+        try
+        {
+            return (await people.GetPeopleAsync(account.RepositoryId, account.Name, http.RequestAborted)).Opens(creator);
+        }
+        catch (OperationCanceledException) when (http.RequestAborted.IsCancellationRequested) { throw; }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Admin Portal did not list the people {Account} sees in {Repository}.",
+                account.Name, account.RepositoryId);
+            return null;
+        }
+    }
+
     private static bool IsServerItself(HttpContext http)
     {
         var ip = http.Connection.RemoteIpAddress;
@@ -135,12 +181,12 @@ public sealed class PortalAccessFilter(
     }
 
     private static IActionResult Refuse(ActionExecutingContext context, AccessDeniedReason reason,
-        string section, DashboardAccess? access)
+        string section, DashboardAccess? access, string? subject = null)
     {
         var http = context.HttpContext;
         var status = reason == AccessDeniedReason.PortalUnavailable ? 503 : 403;
         if (IsPartial(http))
-            return new JsonResult(new { message = AccessDeniedViewModel.Message(reason) }) { StatusCode = status };
+            return new JsonResult(new { message = AccessDeniedViewModel.Message(reason, section, subject) }) { StatusCode = status };
 
         var metadata = http.RequestServices.GetService<IModelMetadataProvider>() ?? new EmptyModelMetadataProvider();
         return new ViewResult
@@ -153,6 +199,7 @@ public sealed class PortalAccessFilter(
                 {
                     Reason = reason,
                     Section = section,
+                    Subject = subject,
                     Allowed = access is null ? [] : DashboardSections.All.Where(access.Has).ToArray(),
                 },
             },
@@ -167,6 +214,8 @@ public enum AccessDeniedReason
     Dashboard,
     /// <summary>The account holds the Dynamic Dashboard but not this page.</summary>
     Section,
+    /// <summary>The account holds the archive, but not the documents of this creator.</summary>
+    Documents,
     /// <summary>The Admin Portal could not be asked.</summary>
     PortalUnavailable,
 }
@@ -178,6 +227,8 @@ public sealed class AccessDeniedViewModel
     public AccessDeniedReason Reason { get; init; }
     /// <summary>The page that was asked for.</summary>
     public string Section { get; init; } = "";
+    /// <summary>Whose documents were asked for (<see cref="AccessDeniedReason.Documents"/>).</summary>
+    public string? Subject { get; init; }
     /// <summary>The pages the account may open instead.</summary>
     public IReadOnlyList<string> Allowed { get; init; } = [];
 
@@ -185,15 +236,20 @@ public sealed class AccessDeniedViewModel
     public string MessageKey => Reason switch
     {
         AccessDeniedReason.Dashboard => "AccessDeniedDashboard",
+        AccessDeniedReason.Section when Section == DashboardSections.Archive => "AccessDeniedArchive",
         AccessDeniedReason.Section   => "AccessDeniedSection",
+        AccessDeniedReason.Documents => "AccessDeniedDocuments",
         _                            => "AccessCheckUnavailable",
     };
 
     /// <summary>The explanation in Arabic, for script callers that show a message.</summary>
-    public static string Message(AccessDeniedReason reason) => reason switch
+    public static string Message(AccessDeniedReason reason, string section = "", string? subject = null) => reason switch
     {
         AccessDeniedReason.Dashboard => "ليست لديك صلاحية على Dynamic Dashboard في هذا المستودع. اطلبها من مسؤول بوابة الإدارة.",
+        AccessDeniedReason.Section when section == DashboardSections.Archive =>
+            "ليست لديك صلاحية على الأرشيف. اطلبها من مسؤول بوابة الإدارة.",
         AccessDeniedReason.Section   => "ليست لديك صلاحية على هذا القسم. اطلبها من مسؤول بوابة الإدارة.",
+        AccessDeniedReason.Documents => $"ليست لديك صلاحية على وثائق {subject}.",
         _                            => "تعذّر التحقق من صلاحياتك من بوابة الإدارة. حاول مرة أخرى بعد قليل.",
     };
 }

@@ -173,11 +173,12 @@ public static class ArchiveDrillDown
                 ? $"Template #{entry.TemplateId}"
                 : string.Empty;
 
+    // Exact, like the user-activity table: "admin" and "ADMIN" are different accounts.
     private static bool CreatorMatches(LFEntry entry, string creator) =>
         string.Equals(
             string.IsNullOrWhiteSpace(entry.Creator) ? "Unknown" : entry.Creator.Trim(),
             string.IsNullOrWhiteSpace(creator) ? "Unknown" : creator,
-            StringComparison.OrdinalIgnoreCase);
+            StringComparison.Ordinal);
 
     private static DateOnly? ParseDate(string? value) =>
         DateOnly.TryParseExact(

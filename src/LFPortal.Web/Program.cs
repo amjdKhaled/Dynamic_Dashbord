@@ -154,7 +154,9 @@ try
                 sp.GetRequiredService<IOptions<PortalAccessOptions>>().Value.TimeoutSeconds, 1, 60)))
         // No redirects and no cookies: the key goes to the configured portal only.
         .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false });
-    builder.Services.AddSingleton<IPortalAccessClient, PortalAccessClient>();
+    builder.Services.AddSingleton<PortalAccessClient>();
+    builder.Services.AddSingleton<IPortalAccessClient>(sp => sp.GetRequiredService<PortalAccessClient>());
+    builder.Services.AddSingleton<IPortalPeopleClient>(sp => sp.GetRequiredService<PortalAccessClient>());
 
     // ── Authentication ────────────────────────────────────────────────────────
     // Dashboard.Cookie is the normal LFDS / repository-login browser identity.

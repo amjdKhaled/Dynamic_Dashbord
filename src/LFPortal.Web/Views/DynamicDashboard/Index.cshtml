@@ -69,10 +69,6 @@
     </header>
     <div id="dd-notice" class="dd-notice" hidden>
         <p id="dd-notice-text" role="status"></p>
-        <div id="dd-notice-actions">
-            <button type="button" class="dd-btn" id="dd-notice-cancel">@T("إلغاء", "Cancel")</button>
-            <button type="button" class="dd-btn dd-btn-primary" id="dd-notice-accept"></button>
-        </div>
     </div>
     <div class="dd-save-dock">
         <span id="dd-layout-status" role="status"></span>
@@ -101,6 +97,31 @@
                 <button type="button" id="dd-leave-save" class="dd-btn dd-btn-primary">@T("حفظ ومتابعة", "Save and continue")</button>
                 <button value="discard" id="dd-leave-discard" class="dd-btn">@T("متابعة دون حفظ", "Continue without saving")</button>
                 <button value="cancel" id="dd-leave-cancel" class="dd-btn" autofocus>@T("البقاء", "Stay")</button>
+            </form>
+        </div>
+    </dialog>
+    @* Shown instead of opening documents this account may not open (the overview uses it too). *@
+    <dialog id="dd-denied-dialog" class="dd-leave-dialog" aria-labelledby="dd-denied-title" aria-describedby="dd-denied-text">
+        <div class="dd-leave-header">
+            <h2 id="dd-denied-title">@T("لا توجد صلاحية", "Access not granted")</h2>
+        </div>
+        <div class="dd-leave-content">
+            <p id="dd-denied-text"></p>
+            <form method="dialog" class="dd-leave-actions">
+                <button value="ok" class="dd-btn dd-btn-primary" autofocus>@T("حسنًا", "OK")</button>
+            </form>
+        </div>
+    </dialog>
+    @* Confirms deleting a table or a board. *@
+    <dialog id="dd-confirm-dialog" class="dd-leave-dialog" aria-labelledby="dd-confirm-title" aria-describedby="dd-confirm-text">
+        <div class="dd-leave-header">
+            <h2 id="dd-confirm-title"></h2>
+        </div>
+        <div class="dd-leave-content">
+            <p id="dd-confirm-text"></p>
+            <form method="dialog" class="dd-leave-actions">
+                <button value="confirm" id="dd-confirm-accept" class="dd-btn dd-btn-primary"></button>
+                <button value="cancel" class="dd-btn" autofocus>@T("إلغاء", "Cancel")</button>
             </form>
         </div>
     </dialog>

@@ -240,7 +240,8 @@ internal sealed class LaserficheDashboardService : ILaserficheDashboardService
 
             var userDocumentActivity = allDocs
                 .Where(entry => !string.IsNullOrWhiteSpace(entry.Creator))
-                .GroupBy(entry => entry.Creator!.Trim(), StringComparer.OrdinalIgnoreCase)
+                // Exact names: "admin" and "ADMIN" are different accounts (as in the Admin Portal).
+                .GroupBy(entry => entry.Creator!.Trim(), StringComparer.Ordinal)
                 .Select(group => new UserDocumentActivityDto
                 {
                     Name = group.Key,

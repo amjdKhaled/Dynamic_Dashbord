@@ -91,20 +91,28 @@
     // The table already has pagination, so do not silently drop modified documents.
     var recentActivity = s.ModifiedDocs.ToList();
 
-    // User activity is current-document ownership/activity derived from every scanned doc.
-    var userActivity = s.UserDocumentActivity
+    // User activity is current-document ownership/activity derived from every scanned doc. With the
+    // Admin Portal, the rows are the people its groups let this account see (UserActivityTable).
+    var activityTable = Model.UserActivity ?? UserActivityTable.Build(s.UserDocumentActivity, null, null);
+    var userActivity = activityTable.Rows
         .Select(item => new {
             item.Name,
+            item.Groups,
+            item.NotCurrentUser,
+            // The message shown instead of opening documents this account may not open.
+            Denied       = item.Opens ? null : L["AccessDeniedDocuments", item.Name].Value,
             Created      = item.Created.ToString("N0"),
             LastActivity = FmtAgo(item.LastActivity)
         })
         .ToList();
+    // Without «الأرشيف» no click on the overview opens documents: a popup says so instead.
+    var canArchive = ViewBag.CanArchive as bool? ?? true;
 
     var jsonOpts = new JsonSerializerOptions { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
 }
 
 @* Shared repository overview for the main board and the read-only share page. *@
-<div id="dashboard-overview" class="dashboard-overview" style="color:var(--d-text)">
+<div id="dashboard-overview" class="dashboard-overview" style="color:var(--d-text)" data-can-archive="@(canArchive ? "true" : "false")">
 
 @if (!embedded)
 {
@@ -266,13 +274,36 @@
         {
             <div class="d-tbl-wrap">
                 <table class="d-tbl" id="table1">
-                    <thead><tr><th>@L["User"]</th><th>@L["DocumentsCreated"]</th><th>@L["LastActivity"]</th></tr></thead>
+                    <thead><tr><th>@L["User"]</th>@if (activityTable.ByGroups) {<th>@L["UserGroup"]</th>}<th>@L["DocumentsCreated"]</th><th>@L["LastActivity"]</th></tr></thead>
                     <tbody>
                         @foreach (var u in userActivity)
                         {
                             <tr class="dashboard-drilldown-row" tabindex="0" role="link"
-                                data-archive-url="@Url.Action("Index", "Archive", new { scope = "creator", creator = u.Name })">
-                                <td style="font-weight:500">@u.Name</td>
+                                data-archive-url="@Url.Action("Index", "Archive", new { scope = "creator", creator = u.Name })"
+                                data-archive-denied="@u.Denied">
+                                <td style="font-weight:500" class="@(u.NotCurrentUser ? "dd-activity-gone-name" : null)"><bdi>@u.Name</bdi></td>
+                                @if (activityTable.ByGroups)
+                                {
+                                    <td>
+                                        @if (u.NotCurrentUser)
+                                        {
+                                            <span class="dd-activity-gone">@L["NotCurrentUser"]</span>
+                                        }
+                                        else if (u.Groups.Count > 0)
+                                        {
+                                            <span class="dd-activity-groups">
+                                                @foreach (var g in u.Groups)
+                                                {
+                                                    <span class="dd-activity-group"><bdi>@g.Name</bdi>@if (g.Leads) {<small>@L["GroupManager"]</small>}</span>
+                                                }
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="dd-activity-none">—</span>
+                                        }
+                                    </td>
+                                }
                                 <td style="color:var(--d-text);font-weight:600">@u.Created</td>
                                 <td style="color:var(--d-muted);white-space:nowrap">@u.LastActivity</td>
                             </tr>
@@ -483,6 +514,33 @@
 
 <script>
 document.addEventListener("DOMContentLoaded", function () {
+// Without «الأرشيف» (Admin Portal), nothing here opens documents: a popup says so instead of the
+// archive's «لا توجد صلاحية» page. The same goes for a creator whose documents this account may not open.
+const archiveAllowed = document.getElementById("dashboard-overview")?.dataset.canArchive !== "false";
+const ARCHIVE_DENIED = @Json.Serialize(isArabic ? "ليست لديك صلاحية على الأرشيف." : "You do not have access to the Archive.");
+// False when the page has no popup (the read-only share page): the link then opens as before.
+const showDenied = message => {
+    const dialog = document.getElementById("dd-denied-dialog");
+    const text = document.getElementById("dd-denied-text");
+    if (!dialog || !text || typeof dialog.showModal !== "function") return false;
+    text.textContent = message;
+    if (!dialog.open) dialog.showModal();
+    return true;
+};
+const archiveRefused = () => !archiveAllowed && showDenied(ARCHIVE_DENIED);
+if (!archiveAllowed) {
+    // Anywhere on the page: the board moves these cards out of #dashboard-overview into its grid.
+    // On window, so it runs before the board's unsaved-changes guard, which also catches link clicks.
+    window.addEventListener("click", event => {
+        const link = event.target.closest?.("a[href]");
+        if (!link) return;
+        const url = new URL(link.href, location.href);
+        if (url.origin !== location.origin || !/^\/(archive|document)(\/|$)/i.test(url.pathname)) return;
+        if (!archiveRefused()) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+    }, true);
+}
 (function(){
 // If Chart.js fails to load, skip the canvases but keep building the legend and the rest of the page.
 if (!window.Chart) console.error("Chart.js failed to load from /lib/chartjs/chart.umd.min.js; dashboard charts are disabled.");
@@ -491,7 +549,7 @@ if (window.Chart) Chart.defaults.font.family = "Readex Pro, Segoe UI, Tahoma, sa
 const PALETTE = ["#0B3954","#5FA3C9","#C29A2E","#14618A","#2E7D5B","#9FB1C4","#E0B95A","#4A5C69"];
 const GRID    = "#E3EAF0";
 const TICK    = "#4A5C69";
-const goToArchive = url => { if (url) window.location.assign(url); };
+const goToArchive = url => { if (url && !archiveRefused()) window.location.assign(url); };
 const TOOLTIP = {
     backgroundColor:"#FFFFFF",
     borderColor:"#D4DEE6",
@@ -816,6 +874,8 @@ if(docActEl){
     overview.querySelectorAll("[data-archive-url]").forEach(element => {
         const open = () => {
             const url = element.dataset.archiveUrl;
+            if (archiveRefused()) return;
+            if (element.dataset.archiveDenied && showDenied(element.dataset.archiveDenied)) return;
             if (url) window.location.assign(url);
         };
         element.addEventListener("click", event => {

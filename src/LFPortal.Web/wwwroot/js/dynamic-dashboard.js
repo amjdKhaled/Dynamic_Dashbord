@@ -619,47 +619,58 @@
     return {groups:isChart?list.slice(0,30):list,extra:isChart?Math.max(0,list.length-30):0,
       totalGroups:list.length,items:source};
   }
-  let pendingNotice=null;
-  function showNotice(message, action) {
-    if(pendingNotice)return Promise.resolve(false);
+  function showNotice(message) {
     const notice=$("dd-notice");
     const host=document.querySelector("dialog[open]");
-    const home=notice.parentElement;
-    const next=notice.nextSibling;
     if(host)host.append(notice);
     $("dd-notice-text").textContent=message;
-    $("dd-notice-actions").hidden=!action;
     notice.hidden=false;
     notice.scrollIntoView({block:"nearest"});
-    if(!action)return;
-    const accept=$("dd-notice-accept"), cancel=$("dd-notice-cancel");
-    const previous=document.activeElement;
+  }
+
+  // «لا توجد صلاحية»: instead of opening documents this account may not open.
+  function showDenied(message) {
+    const dialog=$("dd-denied-dialog");
+    $("dd-denied-text").textContent=message;
+    if(!dialog.open)dialog.showModal();
+  }
+
+  // Asks before deleting; resolves true when the user confirms. The confirm button answers at once;
+  // closing any other way (إلغاء, Esc) answers no. One question at a time, so a late close event
+  // can never answer the next question.
+  let confirmPending=false;
+  function confirmDialog(title, message, action) {
+    const dialog=$("dd-confirm-dialog"), accept=$("dd-confirm-accept");
+    if(dialog.open || confirmPending)return Promise.resolve(false);
+    confirmPending=true;
+    $("dd-confirm-title").textContent=title;
+    $("dd-confirm-text").textContent=message;
     accept.textContent=action;
-    cancel.focus();
+    dialog.returnValue="cancel";
+    dialog.showModal();
     return new Promise(resolve=>{
-      const finish=confirmed=>{
-        pendingNotice=null;
-        notice.hidden=true;
-        accept.onclick=null;
-        cancel.onclick=null;
-        host?.removeEventListener("close", dismiss);
-        if(host)home.insertBefore(notice,next);
-        if(previous?.isConnected)previous.focus({preventScroll:true});
-        resolve(confirmed);
+      const finish=answer=>{
+        accept.removeEventListener("click",yes);
+        dialog.removeEventListener("close",no);
+        confirmPending=false;
+        resolve(answer);
       };
-      const dismiss=()=>finish(false);
-      pendingNotice=dismiss;
-      accept.onclick=()=>finish(true);
-      cancel.onclick=dismiss;
-      host?.addEventListener("close", dismiss,{once:true});
+      const yes=()=>finish(true);
+      const no=()=>finish(false);
+      accept.addEventListener("click",yes);
+      dialog.addEventListener("close",no);
     });
   }
 
   async function openArchive(title, docs) {
-    // The Archive opens only for accounts the Admin Portal gives it to.
-    if (!canArchive) return;
+    if (editMode) return;
+    // The Archive opens only for accounts the Admin Portal gives it to; the others are told so.
+    if (!canArchive) {
+      showDenied(T("ليست لديك صلاحية على الأرشيف.","You do not have access to the Archive."));
+      return;
+    }
     const ids = [...new Set(docs.map(doc => doc.id))];
-    if (editMode || !ids.length) return;
+    if (!ids.length) return;
     const entryIds=ids.join(",");
     if(entryIds.length>300000) {
       showNotice(T("عدد النتائج أكبر من سعة فتح الأرشيف دفعة واحدة. ضيّق التصفية.","Too many results to open at once. Narrow the filters."));
@@ -1238,7 +1249,7 @@
         iconButton(T("نقل لأسفل","Move down"),"↓",()=>moveCard(chart.id,1)),
         visibilityButton(ghost,
           ()=>{chart.hidden=!chart.hidden;markChanged();render();}),
-        ...(activeBoard.id==="default" && overview.has(chart.id)?[]:[iconButton(T("حذف الجدول","Delete widget"),"×",async()=>{if(await showNotice(T("حذف هذا الجدول من لوحتك؟","Delete this widget from your dashboard?"),T("حذف الجدول","Delete widget"))){
+        ...(activeBoard.id==="default" && overview.has(chart.id)?[]:[iconButton(T("حذف الجدول","Delete widget"),"×",async()=>{if(await confirmDialog(T("حذف الجدول","Delete widget"),T("حذف هذا الجدول من لوحتك؟","Delete this widget from your dashboard?"),T("حذف الجدول","Delete widget"))){
           const position=desktopLayout.get(chart.id);
           if(position && desktopGrid()) {
             freezeSlots();
@@ -2222,7 +2233,7 @@
     $("dd-delete-board").addEventListener("click",async()=>{
       const {id,name:boardName}=activeBoard;
       if(id==="default" || !editable() || !layoutReady || saving || deleting || busy)return;
-      if(!await showNotice(T("حذف لوحة «","Delete dashboard “")+boardName+T("»؟","”?"),T("حذف اللوحة","Delete dashboard")))return;
+      if(!await confirmDialog(T("حذف اللوحة","Delete dashboard"),T("حذف لوحة «","Delete dashboard “")+boardName+T("»؟","”?"),T("حذف اللوحة","Delete dashboard")))return;
       deleting=true;
       closeEditor();
       updateSaveBar(T("جارٍ حذف اللوحة…","Deleting dashboard…"));

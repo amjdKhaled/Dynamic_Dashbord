@@ -37,7 +37,8 @@ public sealed class DynamicDashboardController : Controller
     }
 
     [HttpGet]
-    public async Task<IActionResult> Index([FromServices] ILaserficheDashboardService dashboard, CancellationToken cancellationToken)
+    public async Task<IActionResult> Index([FromServices] ILaserficheDashboardService dashboard,
+        [FromServices] IPortalPeopleClient people, CancellationToken cancellationToken)
     {
         var repo = await _repository.GetActiveRepositoryAsync(cancellationToken);
         ViewBag.RepositoryId = repo.RepositoryId;
@@ -63,7 +64,36 @@ public sealed class DynamicDashboardController : Controller
             stats = new() { ErrorMessage = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "ar"
                 ? "تعذر تحميل إحصائيات اللوحة الرئيسية." : "Could not load the main dashboard statistics." };
         }
-        return View(new DashboardViewModel { Stats = stats });
+        return View(new DashboardViewModel
+        {
+            Stats = stats,
+            UserActivity = await UserActivityAsync(people, repo.RepositoryId, stats, cancellationToken),
+        });
+    }
+
+    /// <summary>
+    /// «المستندات حسب نشاط المستخدم»: with the Admin Portal, the people its groups let this account
+    /// see; when the portal cannot say, the account sees only itself.
+    /// </summary>
+    private async Task<UserActivityTable> UserActivityAsync(
+        IPortalPeopleClient people, string repositoryId, DashboardStatsDto stats, CancellationToken cancellationToken)
+    {
+        if (!PortalAccessView.IsEnabled(HttpContext))
+            return UserActivityTable.Build(stats.UserDocumentActivity, null, null);
+        var viewer = PortalAccessView.AccountName(HttpContext);
+        if (viewer is null)
+            return UserActivityTable.Build(stats.UserDocumentActivity, new PortalPeople(false, []), null);
+        PortalPeople seen;
+        try
+        {
+            seen = await people.GetPeopleAsync(repositoryId, viewer, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Admin Portal did not list the people {Account} sees in {Repository}.", viewer, repositoryId);
+            seen = new PortalPeople(false, [new PortalPerson(viewer, [], true)]);
+        }
+        return UserActivityTable.Build(stats.UserDocumentActivity, seen, viewer);
     }
 
     [HttpGet]

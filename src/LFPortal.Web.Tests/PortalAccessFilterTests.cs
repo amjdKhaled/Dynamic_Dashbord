@@ -299,10 +299,126 @@ public sealed class PortalAccessFilterTests
         Assert.Empty(handler.Requests);
     }
 
+    // ---------- one creator's documents (المستندات حسب نشاط المستخدم) ----------
+
+    [Theory]
+    [InlineData("amir")]      // their own
+    [InlineData("khaled")]    // someone below them
+    public async Task CreatorDocuments_OpenForThoseThePortalLets(string creator)
+    {
+        var portal = new RecordingPortal(Access(true, "overview", "archive"), Team());
+        var (_, ran) = await Run($"/Archive?scope=creator&creator={creator}", portal);
+        Assert.True(ran);
+        Assert.Equal([("Demo", "amir")], portal.PeopleAsked);
+    }
+
+    [Theory]
+    [InlineData("karem")]     // a peer
+    [InlineData("KHALED")]    // names are exact
+    [InlineData("admin")]     // not in the list
+    [InlineData("")]
+    public async Task CreatorDocuments_RefusedForAPeer(string creator)
+    {
+        var (context, ran) = await Run($"/Archive/Index?Scope=Creator&creator={creator}",
+            new RecordingPortal(Access(true, "overview", "archive"), Team()));
+        Assert.False(ran);
+        var view = Assert.IsType<ViewResult>(context.Result);
+        Assert.Equal(403, view.StatusCode);
+        var model = Assert.IsType<AccessDeniedViewModel>(view.ViewData.Model);
+        Assert.Equal(AccessDeniedReason.Documents, model.Reason);
+        Assert.Equal(creator, model.Subject);
+        Assert.Equal("AccessDeniedDocuments", model.MessageKey);
+    }
+
+    [Fact]
+    public async Task CreatorDocuments_TheMainAdminOpensEveryone()
+    {
+        var (_, ran) = await Run("/Archive?scope=creator&creator=workflow*",
+            new RecordingPortal(Access(true, "overview", "archive"), new PortalPeople(true, [])));
+        Assert.True(ran);
+    }
+
+    [Fact]
+    public async Task CreatorDocuments_ScriptCallsGetTheMessage()
+    {
+        var (context, _) = await Run("/Archive?scope=creator&creator=karem",
+            new RecordingPortal(Access(true, "overview", "archive"), Team()), ajax: true);
+        var json = Assert.IsType<JsonResult>(context.Result);
+        Assert.Equal(403, json.StatusCode);
+        Assert.Contains("ليست لديك صلاحية على وثائق karem.", System.Text.Json.JsonSerializer.Serialize(json.Value,
+            new System.Text.Json.JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
+    }
+
+    [Fact]
+    public async Task CreatorDocuments_ClosedWhenThePortalCannotList()
+    {
+        var (context, ran) = await Run("/Archive?scope=creator&creator=khaled",
+            new RecordingPortal(Access(true, "overview", "archive"), people: null));
+        Assert.False(ran);
+        var view = Assert.IsType<ViewResult>(context.Result);
+        Assert.Equal(503, view.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("/Archive?scope=documents")]
+    [InlineData("/Archive?creator=karem")]
+    [InlineData("/Archive/Detail?scope=creator&creator=karem")]
+    public async Task OtherArchivePages_DoNotAskForPeople(string path)
+    {
+        var portal = new RecordingPortal(Access(true, "overview", "archive"), Team());
+        var (_, ran) = await Run(path, portal);
+        Assert.True(ran);
+        Assert.Empty(portal.PeopleAsked);
+    }
+
+    [Fact]
+    public async Task WithoutTheArchive_ThePageNamesTheArchive()
+    {
+        var (context, ran) = await Run("/Archive?scope=creator&creator=amir", Answers(true, "overview"));
+        Assert.False(ran);
+        var model = Assert.IsType<AccessDeniedViewModel>(Assert.IsType<ViewResult>(context.Result).ViewData.Model);
+        Assert.Equal(AccessDeniedReason.Section, model.Reason);
+        Assert.Equal("AccessDeniedArchive", model.MessageKey);
+        Assert.Equal("ليست لديك صلاحية على الأرشيف. اطلبها من مسؤول بوابة الإدارة.",
+            AccessDeniedViewModel.Message(AccessDeniedReason.Section, DashboardSections.Archive));
+    }
+
+    [Fact]
+    public async Task Client_ReadsWhomTheAccountSees()
+    {
+        var handler = new StubHandler(_ => Json("""
+            {"all":false,"people":[
+              {"name":"eyad","groups":[{"name":"test","leads":true}],"opens":true},
+              {"name":"amir","groups":[{"name":"test","leads":false}],"opens":true},
+              {"name":"","groups":[],"opens":true}]}
+            """));
+        var client = Client(handler, cacheSeconds: 30);
+        var people = await client.GetPeopleAsync("Demo", "eyad", default);
+        Assert.False(people.All);
+        Assert.Equal(["eyad", "amir"], people.People.Select(p => p.Name));
+        Assert.Equal([new PortalPersonGroup("test", true)], people.People[0].Groups);
+        Assert.True(people.Opens("amir"));
+        Assert.False(people.Opens("AMIR"));
+        Assert.Equal($"{Portal}/api/systems/dynamic/people?repo=Demo&user=eyad", handler.Requests.Single().RequestUri!.AbsoluteUri);
+        Assert.Equal("dynamic-key", handler.Requests.Single().Headers.GetValues(PortalAccessClient.KeyHeader).Single());
+
+        // Cached apart from the access answer.
+        await client.GetPeopleAsync("Demo", "eyad", default);
+        Assert.Single(handler.Requests);
+    }
+
     // ---------- helpers ----------
 
     private static DashboardAccess Access(bool allowed, params string[] sections) =>
         new(allowed, new HashSet<string>(sections));
+
+    /// <summary>amir manages khaled's group; karem is his peer in another one.</summary>
+    private static PortalPeople Team() => new(false,
+    [
+        new PortalPerson("amir", [new PortalPersonGroup("finance", true)], true),
+        new PortalPerson("khaled", [new PortalPersonGroup("finance", false)], true),
+        new PortalPerson("karem", [new PortalPersonGroup("test", false)], false),
+    ]);
 
     private static async Task<(ActionExecutingContext Context, bool Ran)> Run(
         string path, IPortalAccessClient portal, string baseUrl = Portal, bool signedIn = true, bool ajax = false,
@@ -312,6 +428,8 @@ public sealed class PortalAccessFilterTests
         var services = new ServiceCollection();
         services.AddSingleton<IOptionsMonitor<PortalAccessOptions>>(options);
         var http = new DefaultHttpContext { RequestServices = services.BuildServiceProvider() };
+        var query = path.IndexOf('?');
+        if (query >= 0) { http.Request.QueryString = new QueryString(path[query..]); path = path[..query]; }
         http.Request.Method = "GET"; http.Request.Path = path;
         http.Connection.RemoteIpAddress = remote ?? IPAddress.Parse("192.168.1.20");
         if (ajax) http.Request.Headers["X-Requested-With"] = "XMLHttpRequest";
@@ -338,13 +456,19 @@ public sealed class PortalAccessFilterTests
 
     private static IPortalAccessClient Throws() => new RecordingPortal(null);
 
-    private sealed class RecordingPortal(DashboardAccess? answer) : IPortalAccessClient
+    private sealed class RecordingPortal(DashboardAccess? answer, PortalPeople? people = null) : IPortalAccessClient, IPortalPeopleClient
     {
         public List<(string, string)> Asked { get; } = [];
+        public List<(string, string)> PeopleAsked { get; } = [];
         public Task<DashboardAccess> GetAsync(string repositoryId, string accountName, CancellationToken cancellationToken)
         {
             Asked.Add((repositoryId, accountName));
             return answer is null ? Task.FromException<DashboardAccess>(new PortalAccessException("down")) : Task.FromResult(answer);
+        }
+        public Task<PortalPeople> GetPeopleAsync(string repositoryId, string accountName, CancellationToken cancellationToken)
+        {
+            PeopleAsked.Add((repositoryId, accountName));
+            return people is null ? Task.FromException<PortalPeople>(new PortalAccessException("down")) : Task.FromResult(people);
         }
     }
 

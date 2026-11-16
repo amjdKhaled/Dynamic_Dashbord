@@ -123,6 +123,29 @@ public sealed record DashboardAccess(bool Allowed, IReadOnlySet<string> Sections
 /// <summary>The Admin Portal could not give an answer.</summary>
 public sealed class PortalAccessException(string message, Exception? inner = null) : Exception(message, inner);
 
+/// <summary>A portal group that links a person to the account asking, and whether they manage it.</summary>
+public sealed record PortalPersonGroup(string Name, bool Leads);
+
+/// <summary>One person the account may see in «المستندات حسب نشاط المستخدم».</summary>
+/// <param name="Name">The account name, exactly as Laserfiche spells it.</param>
+/// <param name="Groups">The groups linking them to the account asking (for the main admin: all of theirs).</param>
+/// <param name="Opens">True when the account asking may open the documents this person created.</param>
+public sealed record PortalPerson(string Name, IReadOnlyList<PortalPersonGroup> Groups, bool Opens);
+
+/// <summary>
+/// Whom «المستندات حسب نشاط المستخدم» shows an account, by the Admin Portal's groups: the
+/// repository's users the account may see, the account itself first.
+/// </summary>
+/// <param name="All">The account is the portal's main admin: it sees everyone and opens every
+/// creator's documents, including creators who are no longer users.</param>
+/// <param name="People">The people, the account itself first.</param>
+public sealed record PortalPeople(bool All, IReadOnlyList<PortalPerson> People)
+{
+    /// <summary>True when the account may open the documents <paramref name="creator"/> created.</summary>
+    public bool Opens(string creator) =>
+        All || People.Any(person => person.Opens && string.Equals(person.Name, creator, StringComparison.Ordinal));
+}
+
 /// <summary>Asks the Admin Portal what an account may open in the Dynamic Dashboard.</summary>
 public interface IPortalAccessClient
 {
@@ -133,13 +156,23 @@ public interface IPortalAccessClient
     Task<DashboardAccess> GetAsync(string repositoryId, string accountName, CancellationToken cancellationToken);
 }
 
+/// <summary>Asks the Admin Portal whom an account sees in the user-activity table.</summary>
+public interface IPortalPeopleClient
+{
+    /// <summary>
+    /// The people the account may see in a repository. Throws <see cref="PortalAccessException"/>
+    /// when the portal cannot answer; callers then show the account only itself.
+    /// </summary>
+    Task<PortalPeople> GetPeopleAsync(string repositoryId, string accountName, CancellationToken cancellationToken);
+}
+
 /// <summary>
-/// Calls <c>GET {BaseUrl}/api/systems/dynamic/access?repo=&amp;user=</c> with the
+/// Calls <c>GET {BaseUrl}/api/systems/dynamic/access?repo=&amp;user=</c> (and <c>/people</c>) with the
 /// Dynamic Dashboard's key, and keeps each answer for <see cref="PortalAccessOptions.CacheSeconds"/>.
 /// </summary>
 public sealed class PortalAccessClient(
     IHttpClientFactory httpClients, IMemoryCache cache,
-    IOptionsMonitor<PortalAccessOptions> options) : IPortalAccessClient
+    IOptionsMonitor<PortalAccessOptions> options) : IPortalAccessClient, IPortalPeopleClient
 {
     /// <summary>Named HttpClient: no redirects, so the key is never sent anywhere else.</summary>
     public const string HttpClientName = "AdminPortal";
@@ -148,7 +181,26 @@ public sealed class PortalAccessClient(
     public const string KeyHeader = "X-Portal-Key";
 
     /// <inheritdoc />
-    public async Task<DashboardAccess> GetAsync(string repositoryId, string accountName, CancellationToken cancellationToken)
+    public Task<DashboardAccess> GetAsync(string repositoryId, string accountName, CancellationToken cancellationToken) =>
+        AskAsync<Answer, DashboardAccess>("access", repositoryId, accountName,
+            answer => new DashboardAccess(answer.Allowed, new HashSet<string>(answer.Sections ?? [], StringComparer.Ordinal)),
+            cancellationToken);
+
+    /// <inheritdoc />
+    public Task<PortalPeople> GetPeopleAsync(string repositoryId, string accountName, CancellationToken cancellationToken) =>
+        AskAsync<PeopleAnswer, PortalPeople>("people", repositoryId, accountName,
+            answer => new PortalPeople(answer.All, (answer.People ?? [])
+                .OfType<PersonAnswer>()
+                .Where(person => !string.IsNullOrEmpty(person.Name))
+                .Select(person => new PortalPerson(person.Name!,
+                    (person.Groups ?? []).OfType<GroupAnswer>().Where(group => !string.IsNullOrEmpty(group.Name))
+                        .Select(group => new PortalPersonGroup(group.Name!, group.Leads)).ToArray(),
+                    person.Opens))
+                .ToArray()),
+            cancellationToken);
+
+    private async Task<TResult> AskAsync<TAnswer, TResult>(string what, string repositoryId, string accountName,
+        Func<TAnswer, TResult> read, CancellationToken cancellationToken) where TAnswer : class where TResult : class
     {
         var opts = options.CurrentValue;
         if (!Uri.TryCreate(opts.BaseUrl.TrimEnd('/'), UriKind.Absolute, out var baseUri) || baseUri.Scheme != Uri.UriSchemeHttps)
@@ -157,36 +209,38 @@ public sealed class PortalAccessClient(
             throw new PortalAccessException("PortalAccess:Key is empty.");
 
         // Account names are exact in the portal ("admin" and "ADMIN" are different accounts).
-        var cacheKey = $"PortalAccess|{repositoryId.ToLowerInvariant()}|{accountName}";
-        if (opts.CacheSeconds > 0 && cache.TryGetValue(cacheKey, out DashboardAccess? cached) && cached is not null)
+        var cacheKey = $"PortalAccess|{what}|{repositoryId.ToLowerInvariant()}|{accountName}";
+        if (opts.CacheSeconds > 0 && cache.TryGetValue(cacheKey, out TResult? cached) && cached is not null)
             return cached;
 
-        var url = $"{baseUri.AbsoluteUri.TrimEnd('/')}/api/systems/dynamic/access" +
+        var url = $"{baseUri.AbsoluteUri.TrimEnd('/')}/api/systems/dynamic/{what}" +
                   $"?repo={Uri.EscapeDataString(repositoryId)}&user={Uri.EscapeDataString(accountName)}";
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
         request.Headers.TryAddWithoutValidation(KeyHeader, opts.Key.Trim());
 
-        Answer? answer;
+        TAnswer? answer;
         try
         {
             using var response = await httpClients.CreateClient(HttpClientName).SendAsync(request, cancellationToken);
             if (!response.IsSuccessStatusCode)
                 throw new PortalAccessException($"Admin Portal answered HTTP {(int)response.StatusCode}.");
-            answer = await response.Content.ReadFromJsonAsync<Answer>(cancellationToken);
+            answer = await response.Content.ReadFromJsonAsync<TAnswer>(cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
         catch (PortalAccessException) { throw; }
         catch (Exception ex) { throw new PortalAccessException("Admin Portal could not be reached.", ex); }
         if (answer is null) throw new PortalAccessException("Admin Portal sent an empty answer.");
 
-        var access = new DashboardAccess(answer.Allowed,
-            new HashSet<string>(answer.Sections ?? [], StringComparer.Ordinal));
+        var result = read(answer);
         if (opts.CacheSeconds > 0)
-            cache.Set(cacheKey, access, TimeSpan.FromSeconds(opts.CacheSeconds));
-        return access;
+            cache.Set(cacheKey, result, TimeSpan.FromSeconds(opts.CacheSeconds));
+        return result;
     }
 
     private sealed record Answer(bool Allowed, string[]? Sections);
+    private sealed record PeopleAnswer(bool All, PersonAnswer?[]? People);
+    private sealed record PersonAnswer(string? Name, GroupAnswer?[]? Groups, bool Opens);
+    private sealed record GroupAnswer(string? Name, bool Leads);
 }
 
 /// <summary>The account name the Admin Portal knows an account by.</summary>

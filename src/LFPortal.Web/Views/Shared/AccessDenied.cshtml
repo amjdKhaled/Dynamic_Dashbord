@@ -11,7 +11,7 @@
 <div class="card">
     <div class="alert @(Model.Reason == AccessDeniedReason.PortalUnavailable ? "alert--amber" : "alert--error")">
         <span>&#9888;</span>
-        <div>@L[Model.MessageKey]</div>
+        <div>@(Model.Subject is null ? L[Model.MessageKey] : L[Model.MessageKey, Model.Subject])</div>
     </div>
 
     @if (Model.Allowed.Count > 0)

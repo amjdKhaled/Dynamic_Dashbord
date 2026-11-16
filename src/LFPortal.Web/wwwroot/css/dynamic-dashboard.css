@@ -945,3 +945,12 @@ html:has(.dd-edit-mode) { overflow-anchor: none; }
 /* A private board in the board menu. */
 .dd-board-private { display: inline-flex; align-items: center; gap: 4px; flex: none; padding: 2px 7px; border-radius: 6px; background: rgb(11 57 84 / 8%); color: var(--isb-deep-sea, #0B3954); font-size: .72em; font-weight: 600; }
 .dd-board-private svg { inline-size: 12px; block-size: 12px; }
+
+/* The «المجموعة» column of «المستندات حسب نشاط المستخدم» (Admin Portal groups). */
+.dd-activity-groups { display: flex; flex-wrap: wrap; gap: 4px; }
+.dd-activity-group { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 6px; background: rgb(11 57 84 / 8%); color: var(--isb-deep-sea, #0B3954); font-size: .72rem; font-weight: 600; white-space: nowrap; }
+.dd-activity-group small { font-size: .66rem; font-weight: 600; color: #7a5a00; background: #fff3cf; padding: 0 5px; border-radius: 4px; }
+.dd-activity-none { color: var(--d-muted, #8a97a5); }
+/* A creator who is not one of the repository's users any more (only the main admin sees them). */
+.dd-activity-gone { display: inline-flex; padding: 2px 8px; border-radius: 6px; background: #eef0f3; color: #5b6b7a; font-size: .72rem; font-weight: 600; white-space: nowrap; }
+.dd-activity-gone-name { color: var(--d-muted, #8a97a5); }

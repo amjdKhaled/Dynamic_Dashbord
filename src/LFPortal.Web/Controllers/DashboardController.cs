@@ -132,6 +132,12 @@ public sealed class DashboardController : Controller
 public sealed class DashboardViewModel
 {
     public DashboardStatsDto Stats { get; init; } = new();
+
+    /// <summary>
+    /// «المستندات حسب نشاط المستخدم» for the signed-in account; <c>null</c> builds it from
+    /// <see cref="Stats"/> alone (every creator, as without the Admin Portal).
+    /// </summary>
+    public UserActivityTable? UserActivity { get; init; }
 }
 
 public sealed class ProbeViewModel

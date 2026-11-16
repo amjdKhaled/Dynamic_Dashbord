@@ -111,6 +111,9 @@
     dateStamp(value)?.toISOString().slice(0,10)===value;
   const tablePages = new Map();
   let rows = [], fields = [], charts = [], instances = [], editing = null;
+  // With the Admin Portal: the people its groups let this account see (as in «المستندات حسب نشاط
+  // المستخدم»). Grouping by «المستخدم / المنشئ» counts only their documents. null: everyone.
+  let people = null;
   const boards = new Map();
   const mainBoard = {id:"default",name:T("اللوحة الرئيسية","Main dashboard"),layout:null};
   // What the Admin Portal gives this account (everything without the portal). A board given
@@ -510,6 +513,7 @@
     return /^(?:\d+$|field:)/.test(dimension);
   }
   function fieldRows(dimension) {
+    if(dimension==="__creator" && people)return rows.filter(row=>people.has(row.creator));
     return isFieldDimension(dimension)
       ? rows.filter(row=>row.fields!=null && Object.hasOwn(row.fields,dimension)) : rows;
   }
@@ -2088,6 +2092,7 @@
       const result=await records.json();
       if(!Array.isArray(result.fields)||!Array.isArray(result.rows))throw new Error(T("استجابة غير متوقعة من Laserfiche.","Unexpected response from Laserfiche."));
       fields=result.fields;rows=result.rows;partial=Boolean(result.fieldDataIncomplete);rowsVersion++;
+      people=Array.isArray(result.people)?new Set(result.people):null;
       // The overview's «المستندات حسب نشاط المستخدم» counts these live documents (_Overview.cshtml).
       document.dispatchEvent(new CustomEvent("dd:rows",{detail:rows}));
       if(partial){
@@ -2220,6 +2225,11 @@
         navigateApproved(()=>location.assign(url.href));
       }
     },true);
+    // The main board's own widgets (_Overview.cshtml) open the archive through this, so unsaved
+    // changes get this page's question instead of the browser's «Leave site?».
+    window.dashboardLeave=async url=>{
+      if(await confirmLeaving())navigateApproved(()=>location.assign(url));
+    };
     window.addEventListener("beforeunload",event=>{
       if(approvedNavigation || revision===savedRevision)return;
       event.preventDefault();

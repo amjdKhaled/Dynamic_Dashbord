@@ -75,24 +75,29 @@ public sealed class DynamicDashboardController : Controller
     /// see; when the portal cannot say, the account sees only itself.
     /// </summary>
     private async Task<UserActivityTable> UserActivityAsync(
-        IPortalPeopleClient people, string repositoryId, DashboardStatsDto stats, CancellationToken cancellationToken)
+        IPortalPeopleClient people, string repositoryId, DashboardStatsDto stats, CancellationToken cancellationToken) =>
+        UserActivityTable.Build(stats.UserDocumentActivity, await PeopleSeenAsync(people, repositoryId, cancellationToken),
+            PortalAccessView.AccountName(HttpContext));
+
+    /// <summary>
+    /// The people the Admin Portal's groups let this account see (null without the portal: everyone).
+    /// When the portal cannot say, the account sees only itself; without a known account, nobody.
+    /// </summary>
+    private async Task<PortalPeople?> PeopleSeenAsync(
+        IPortalPeopleClient people, string repositoryId, CancellationToken cancellationToken)
     {
-        if (!PortalAccessView.IsEnabled(HttpContext))
-            return UserActivityTable.Build(stats.UserDocumentActivity, null, null);
+        if (!PortalAccessView.IsEnabled(HttpContext)) return null;
         var viewer = PortalAccessView.AccountName(HttpContext);
-        if (viewer is null)
-            return UserActivityTable.Build(stats.UserDocumentActivity, new PortalPeople(false, []), null);
-        PortalPeople seen;
+        if (viewer is null) return new PortalPeople(false, []);
         try
         {
-            seen = await people.GetPeopleAsync(repositoryId, viewer, cancellationToken);
+            return await people.GetPeopleAsync(repositoryId, viewer, cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(ex, "Admin Portal did not list the people {Account} sees in {Repository}.", viewer, repositoryId);
-            seen = new PortalPeople(false, [new PortalPerson(viewer, [], true)]);
+            return new PortalPeople(false, [new PortalPerson(viewer, [], true)]);
         }
-        return UserActivityTable.Build(stats.UserDocumentActivity, seen, viewer);
     }
 
     [HttpGet]
@@ -352,9 +357,11 @@ public sealed class DynamicDashboardController : Controller
 
     /// <summary>
     /// Scans all readable documents. Reports fields the repository could not return.
+    /// With the Admin Portal it also lists the people the account may see (as in
+    /// «المستندات حسب نشاط المستخدم»): grouping by «المستخدم / المنشئ» shows only them.
     /// </summary>
     [HttpGet]
-    public async Task<IActionResult> Rows(CancellationToken cancellationToken)
+    public async Task<IActionResult> Rows([FromServices] IPortalPeopleClient people, CancellationToken cancellationToken)
     {
         try
         {
@@ -493,9 +500,11 @@ public sealed class DynamicDashboardController : Controller
                 });
             }
 
+            var seen = await PeopleSeenAsync(people, repo.RepositoryId, cancellationToken);
             return Json(new
             {
                 rows = results,
+                people = seen?.People.Select(person => person.Name).Distinct(StringComparer.Ordinal).ToArray(),
                 fields = catalog.Values.OrderBy(field => field.Name).ThenBy(field => field.Id),
                 fieldDataIncomplete,
                 examined = documents.Count,

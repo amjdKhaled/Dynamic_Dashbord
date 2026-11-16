@@ -27,7 +27,7 @@ const make=new Function("seedRows","definitions = {}",[
   'const dateStamp=value=>{const time=Date.parse(value);return Number.isFinite(time)?new Date(time):null;};',
   'const T=(ar,en)=>ar, locale="ar", fieldMeta=id=>definitions[id];',
   'const kind=id=>definitions[id]?.type ?? "text";',
-  'let rows=seedRows;',
+  'let rows=seedRows, people=null;',
   implementation,
   'return {observedValues,selectedRows,summary,pageCount,displayType,documentRows,cardSpan};'
 ].join("\n"));

@@ -38,6 +38,9 @@ public sealed class PortalAccessFilterTests
     [InlineData("/Archive", "archive")]
     [InlineData("/Archive/Detail", "archive")]
     [InlineData("/Document/PageImage/4/1", "archive")]
+    [InlineData("/Document/View", "archive")]
+    [InlineData("/Document/Download", "download")]
+    [InlineData("/Document/Download/5", "download")]
     [InlineData("/settings", "settings")]
     [InlineData("/Settings/Save", "settings")]
     [InlineData("/api/laserfiche/status", "settings")]
@@ -91,6 +94,7 @@ public sealed class PortalAccessFilterTests
         Assert.Null(context.Result);
         Assert.Null(PortalAccessView.Current(context.HttpContext));
         Assert.True(PortalAccessView.CanShow(context.HttpContext, "settings"));
+        Assert.True(PortalAccessView.CanDownload(context.HttpContext));
     }
 
     [Fact]
@@ -102,7 +106,9 @@ public sealed class PortalAccessFilterTests
         Assert.Same(access, PortalAccessView.Current(context.HttpContext));
         Assert.Equal("amir", PortalAccessView.AccountName(context.HttpContext));
         Assert.True(PortalAccessView.CanShow(context.HttpContext, "overview"));
-        Assert.False(PortalAccessView.CanShow(context.HttpContext, "archive"));
+        // The archive comes with the Dynamic Dashboard; downloading does not.
+        Assert.True(PortalAccessView.CanShow(context.HttpContext, "archive"));
+        Assert.False(PortalAccessView.CanDownload(context.HttpContext));
         Assert.False(access.Has("settings"));
     }
 
@@ -117,7 +123,6 @@ public sealed class PortalAccessFilterTests
     }
 
     [Theory]
-    [InlineData("/Archive")]
     [InlineData("/Settings")]
     [InlineData("/Document/Download")]
     public async Task OtherSections_AreRefusedWithLinksToWhatTheAccountHolds(string path)
@@ -128,11 +133,11 @@ public sealed class PortalAccessFilterTests
         Assert.Equal(403, view.StatusCode);
         var model = Assert.IsType<AccessDeniedViewModel>(view.ViewData.Model);
         Assert.Equal(AccessDeniedReason.Section, model.Reason);
-        Assert.Equal(["overview"], model.Allowed);
+        Assert.Equal(["overview", "archive"], model.Allowed);
     }
 
     [Theory]
-    [InlineData("/Archive/Detail", "overview")]
+    [InlineData("/Settings/Save", "overview")]
     [InlineData("/DynamicDashboard/Layout", "archive")]
     public async Task ScriptCalls_GetJsonInsteadOfAPage(string path, string held)
     {
@@ -158,7 +163,8 @@ public sealed class PortalAccessFilterTests
     [InlineData("/Dashboard")]
     public async Task HomePage_OpensTheFirstSectionTheAccountHolds(string path)
     {
-        var (context, _) = await Run(path, portal: Answers(true, "archive", "settings"));
+        // The archive comes with the Dynamic Dashboard, so it is the first page without the boards.
+        var (context, _) = await Run(path, portal: Answers(true, "settings"));
         Assert.Equal("/Archive", Assert.IsType<LocalRedirectResult>(context.Result).Url);
     }
 
@@ -371,16 +377,63 @@ public sealed class PortalAccessFilterTests
         Assert.Empty(portal.PeopleAsked);
     }
 
-    [Fact]
-    public async Task WithoutTheArchive_ThePageNamesTheArchive()
+    // ---------- the archive is no permission; downloading is ----------
+
+    [Theory]
+    [InlineData("/Archive")]
+    [InlineData("/Archive/Detail?entryId=5")]
+    [InlineData("/Document/View?entryId=5")]
+    [InlineData("/Document/Preview?entryId=5")]
+    [InlineData("/Document/Content?entryId=5")]
+    public async Task TheArchive_OpensWithTheDynamicDashboardAlone(string path)
     {
-        var (context, ran) = await Run("/Archive?scope=creator&creator=amir", Answers(true, "overview"));
+        var (_, ran) = await Run(path, portal: Answers(true, "overview"));
+        Assert.True(ran);
+    }
+
+    [Fact]
+    public async Task TheArchive_StillKeepsAPeersDocumentsClosed()
+    {
+        var (_, own) = await Run("/Archive?scope=creator&creator=amir",
+            new RecordingPortal(Access(true, "overview"), Team()));
+        Assert.True(own);
+        var (context, peer) = await Run("/Archive?scope=creator&creator=karem",
+            new RecordingPortal(Access(true, "overview"), Team()));
+        Assert.False(peer);
+        Assert.Equal(AccessDeniedReason.Documents,
+            Assert.IsType<AccessDeniedViewModel>(Assert.IsType<ViewResult>(context.Result).ViewData.Model).Reason);
+    }
+
+    [Fact]
+    public async Task WithoutDownloading_TheDownloadIsRefusedAndNamed()
+    {
+        var (context, ran) = await Run("/Document/Download?entryId=5", Answers(true, "overview", "archive"));
         Assert.False(ran);
         var model = Assert.IsType<AccessDeniedViewModel>(Assert.IsType<ViewResult>(context.Result).ViewData.Model);
         Assert.Equal(AccessDeniedReason.Section, model.Reason);
-        Assert.Equal("AccessDeniedArchive", model.MessageKey);
-        Assert.Equal("ليست لديك صلاحية على الأرشيف. اطلبها من مسؤول بوابة الإدارة.",
-            AccessDeniedViewModel.Message(AccessDeniedReason.Section, DashboardSections.Archive));
+        Assert.Equal("AccessDeniedDownload", model.MessageKey);
+        Assert.Equal("ليست لديك صلاحية تنزيل الملفات. اطلبها من مسؤول بوابة الإدارة.",
+            AccessDeniedViewModel.Message(AccessDeniedReason.Section, DashboardSections.Download));
+        Assert.False(PortalAccessView.CanDownload(context.HttpContext));
+    }
+
+    [Fact]
+    public async Task WithDownloading_TheDownloadOpens()
+    {
+        var (context, ran) = await Run("/Document/Download/5", Answers(true, "download"));
+        Assert.True(ran);
+        Assert.True(PortalAccessView.CanDownload(context.HttpContext));
+    }
+
+    [Fact]
+    public async Task WithoutTheDynamicDashboard_NeitherTheArchiveNorDownloading()
+    {
+        var (context, ran) = await Run("/Archive", Answers(false, "download"));
+        Assert.False(ran);
+        Assert.Equal(AccessDeniedReason.Dashboard,
+            Assert.IsType<AccessDeniedViewModel>(Assert.IsType<ViewResult>(context.Result).ViewData.Model).Reason);
+        Assert.False(PortalAccessView.CanShow(context.HttpContext, "archive"));
+        Assert.False(PortalAccessView.CanDownload(context.HttpContext));
     }
 
     [Fact]

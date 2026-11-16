@@ -9,7 +9,6 @@
     var mainBoard = ViewBag.MainBoard as bool? ?? true;
     var canCustomize = ViewBag.CanCustomize as bool? ?? true;
     var canCreate = ViewBag.CanCreate as bool? ?? true;
-    var canArchive = ViewBag.CanArchive as bool? ?? true;
     // A repository switch the other repository refused (LoginController.ReturnAfterRefusedSwitch).
     var notInRepository = Context.Request.Query[LFPortal.Web.Controllers.LoginController.NotInRepositoryQuery].ToString().Trim();
     if (notInRepository.Length > 200 || notInRepository.Any(char.IsControl)) notInRepository = "";
@@ -61,7 +60,7 @@
     <partial name="~/Views/Dashboard/_OverviewStyles.cshtml" />
     <link rel="stylesheet" href="~/css/dynamic-dashboard.css" asp-append-version="true" />
 }
-<div class="dd-page dd-is-loading" id="dynamicDashboard" dir="@(arabic ? "rtl" : "ltr")" data-password-switch="@ViewBag.PasswordSwitch" data-language="@(arabic ? "ar" : "en")" data-scope="@scope" data-repository="@ViewBag.RepositoryId" data-archive-url="@Url.Action("OpenDashboardSelection", "Archive")" data-main-board="@(mainBoard ? "true" : "false")" data-can-customize="@(canCustomize ? "true" : "false")" data-can-create="@(canCreate ? "true" : "false")" data-can-archive="@(canArchive ? "true" : "false")">
+<div class="dd-page dd-is-loading" id="dynamicDashboard" dir="@(arabic ? "rtl" : "ltr")" data-password-switch="@ViewBag.PasswordSwitch" data-language="@(arabic ? "ar" : "en")" data-scope="@scope" data-repository="@ViewBag.RepositoryId" data-archive-url="@Url.Action("OpenDashboardSelection", "Archive")" data-main-board="@(mainBoard ? "true" : "false")" data-can-customize="@(canCustomize ? "true" : "false")" data-can-create="@(canCreate ? "true" : "false")">
     @Html.AntiForgeryToken()
     <div id="dd-loading" class="dd-loading" role="status" aria-label="@T("تحميل بيانات Laserfiche", "Loading Laserfiche data")"><span></span></div>
     <div class="dd-content" inert>

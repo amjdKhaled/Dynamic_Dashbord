@@ -214,7 +214,7 @@ public enum AccessDeniedReason
     Dashboard,
     /// <summary>The account holds the Dynamic Dashboard but not this page.</summary>
     Section,
-    /// <summary>The account holds the archive, but not the documents of this creator.</summary>
+    /// <summary>The account opens the archive, but not the documents of this creator.</summary>
     Documents,
     /// <summary>The Admin Portal could not be asked.</summary>
     PortalUnavailable,
@@ -236,7 +236,7 @@ public sealed class AccessDeniedViewModel
     public string MessageKey => Reason switch
     {
         AccessDeniedReason.Dashboard => "AccessDeniedDashboard",
-        AccessDeniedReason.Section when Section == DashboardSections.Archive => "AccessDeniedArchive",
+        AccessDeniedReason.Section when Section == DashboardSections.Download => "AccessDeniedDownload",
         AccessDeniedReason.Section   => "AccessDeniedSection",
         AccessDeniedReason.Documents => "AccessDeniedDocuments",
         _                            => "AccessCheckUnavailable",
@@ -246,8 +246,8 @@ public sealed class AccessDeniedViewModel
     public static string Message(AccessDeniedReason reason, string section = "", string? subject = null) => reason switch
     {
         AccessDeniedReason.Dashboard => "ليست لديك صلاحية على Dynamic Dashboard في هذا المستودع. اطلبها من مسؤول بوابة الإدارة.",
-        AccessDeniedReason.Section when section == DashboardSections.Archive =>
-            "ليست لديك صلاحية على الأرشيف. اطلبها من مسؤول بوابة الإدارة.",
+        AccessDeniedReason.Section when section == DashboardSections.Download =>
+            "ليست لديك صلاحية تنزيل الملفات. اطلبها من مسؤول بوابة الإدارة.",
         AccessDeniedReason.Section   => "ليست لديك صلاحية على هذا القسم. اطلبها من مسؤول بوابة الإدارة.",
         AccessDeniedReason.Documents => $"ليست لديك صلاحية على وثائق {subject}.",
         _                            => "تعذّر التحقق من صلاحياتك من بوابة الإدارة. حاول مرة أخرى بعد قليل.",

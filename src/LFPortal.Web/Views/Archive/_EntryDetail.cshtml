@@ -142,6 +142,22 @@ else if (Model.Entry is {} entry)
 
     }
 
+    @if (Model.ShortcutDownload is { } shortcut)
+    {
+        @* «تنزيل الملفات» (Admin Portal) and Laserfiche decide; otherwise the reason is written. *@
+        if (shortcut.Allowed)
+        {
+            <div class="det-actions" aria-label="Shortcut actions">
+                <a class="det-action det-action-primary" asp-controller="Document" asp-action="Download"
+                   asp-route-entryId="@shortcut.TargetId">@L["DownloadOriginal"]</a>
+            </div>
+        }
+        else
+        {
+            <div class="det-warn" role="status">لا يمكن تنزيل هذا الاختصار: @shortcut.Refusal</div>
+        }
+    }
+
     @if (isDoc)
     {
         <div class="det-section" data-preview-url="@Url.Action("Preview", "Document", new { entryId = entry.Id })"

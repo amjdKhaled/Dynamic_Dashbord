@@ -53,8 +53,17 @@ public static class DashboardSections
     /// Without it the account only views. Creating a board needs it too.
     /// </summary>
     public const string Customize = "customize";
-    /// <summary>The archive browser and document viewer (الأرشيف).</summary>
+    /// <summary>
+    /// The archive browser and document viewer (الأرشيف). Since 2026-11-16 it is no permission:
+    /// every account that holds the Dynamic Dashboard opens it, and Laserfiche decides which
+    /// documents it sees.
+    /// </summary>
     public const string Archive = "archive";
+    /// <summary>
+    /// «تنزيل الملفات»: the «تنزيل الأصل» button on every file that can be downloaded, and
+    /// <c>/Document/Download</c> itself. Without it a file shows without the viewer's save and print bar.
+    /// </summary>
+    public const string Download = "download";
     /// <summary>The connection settings (الإعدادات).</summary>
     public const string Settings = "settings";
 
@@ -74,6 +83,7 @@ public static class DashboardSections
         // Only sends the browser to Web Access, which applies Laserfiche's own rights;
         // it is deliberately reachable without a Dashboard token (see the auth guard).
         if (Starts(path, "/Archive/OpenInLaserfiche")) return null;
+        if (Starts(path, "/Document/Download")) return Download;
         if (path == "/" || Starts(path, "/DynamicDashboard") || Starts(path, "/Dashboard")) return Overview;
         if (Starts(path, "/Archive") || Starts(path, "/Document")) return Archive;
         if (Starts(path, "/Settings") || Starts(path, "/api/laserfiche")) return Settings;
@@ -103,8 +113,12 @@ public static class DashboardSections
 /// <summary>What one account may open in the Dynamic Dashboard, as the Admin Portal answered.</summary>
 public sealed record DashboardAccess(bool Allowed, IReadOnlySet<string> Sections)
 {
-    /// <summary>True when the account holds the Dynamic Dashboard and this section.</summary>
-    public bool Has(string section) => Allowed && Sections.Contains(section);
+    /// <summary>
+    /// True when the account holds the Dynamic Dashboard and this section. The archive comes
+    /// with the Dynamic Dashboard (see <see cref="DashboardSections.Archive"/>).
+    /// </summary>
+    public bool Has(string section) =>
+        Allowed && (section == DashboardSections.Archive || Sections.Contains(section));
 
     /// <summary>The first page the account may open, in navigation order.</summary>
     public string? FirstSection => DashboardSections.All.FirstOrDefault(Has);
@@ -310,6 +324,12 @@ public static class PortalAccessView
     /// shows, as before; with it, only the sections the signed-in account holds.
     /// </summary>
     public static bool CanShow(HttpContext context, string section) => Current(context)?.Has(section) ?? true;
+
+    /// <summary>
+    /// True when the signed-in account may download files («تنزيل الملفات»). Without the portal
+    /// everyone may, as before.
+    /// </summary>
+    public static bool CanDownload(HttpContext context) => CanShow(context, DashboardSections.Download);
 
     private static readonly DashboardAccess Closed = new(false, new HashSet<string>());
 }

@@ -14,7 +14,10 @@ window.loadDocumentPdfPreviews = function (root, signal) {
             if (!blob.size || !prefix.includes('%PDF-')) throw new Error('invalid');
             if (signal?.aborted) return;
             objectUrl = URL.createObjectURL(new Blob([blob], { type:'application/pdf' }));
-            frame.src = objectUrl + '#toolbar=1&view=FitH';
+            // Without «تنزيل الملفات» the viewer shows without its save and print bar. This only makes
+            // saving harder; it cannot stop it.
+            const toolbar = frame.dataset.previewToolbar === '0' ? '0' : '1';
+            frame.src = objectUrl + '#toolbar=' + toolbar + '&view=FitH';
             frame.hidden = false;
             if (message) message.hidden = true;
         } catch (error) {

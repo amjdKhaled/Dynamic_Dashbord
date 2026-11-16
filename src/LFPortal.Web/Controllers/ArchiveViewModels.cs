@@ -83,6 +83,9 @@ public sealed class ArchiveDetailViewModel
     /// <summary>Non-null when the entry itself could not be loaded.</summary>
     public string? EntryError { get; init; }
 
+    /// <summary>For a shortcut: its target's «تنزيل الأصل», or why it cannot be downloaded.</summary>
+    public ShortcutDownload? ShortcutDownload { get; init; }
+
     public bool HasElectronicDocument { get; init; }
     public string? ElectronicDocumentContentType { get; init; }
     public string? ElectronicDocumentExtension { get; init; }

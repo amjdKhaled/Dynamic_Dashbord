@@ -51,4 +51,13 @@ public sealed record LFEntry
 
     /// <summary>Extension point: raw row number from paginated API response, used for stable sorting.</summary>
     public int? RowNumber { get; init; }
+
+    /// <summary>
+    /// For a shortcut: the entry it points to. Laserfiche sends it when one entry is loaded,
+    /// not in folder listings.
+    /// </summary>
+    public int? TargetId { get; init; }
+
+    /// <summary>For a shortcut: what it points to, when Laserfiche says.</summary>
+    public LFEntryType? TargetType { get; init; }
 }

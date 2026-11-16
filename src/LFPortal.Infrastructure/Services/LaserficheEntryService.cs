@@ -492,7 +492,9 @@ internal sealed class LaserficheEntryService : ILaserficheEntryService
         TemplateId         = r.TemplateId,
         FileSizeBytes      = r.FileSizeBytes,
         PageCount          = r.PageCount,
-        RowNumber          = r.RowNumber
+        RowNumber          = r.RowNumber,
+        TargetId           = r.TargetId,
+        TargetType         = r.TargetType is null ? null : ParseEntryType(r.TargetType)
     };
 
     /// <summary>
@@ -880,6 +882,13 @@ internal sealed class LaserficheEntryService : ILaserficheEntryService
 
         [JsonPropertyName("rowNumber")]
         public int? RowNumber { get; init; }
+
+        /// <summary>A shortcut's target, e.g. <c>"targetId":1620,"targetType":"Document"</c>.</summary>
+        [JsonPropertyName("targetId")]
+        public int? TargetId { get; init; }
+
+        [JsonPropertyName("targetType")]
+        public string? TargetType { get; init; }
     }
 
     private sealed record FieldResource

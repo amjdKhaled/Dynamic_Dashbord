@@ -142,7 +142,7 @@
   <data name="AccessDeniedTitle"       xml:space="preserve"><value>Access not granted</value></data>
   <data name="AccessDeniedDashboard"   xml:space="preserve"><value>Your account has no access to the Dynamic Dashboard in this repository. Ask the Admin Portal administrator for it.</value></data>
   <data name="AccessDeniedSection"     xml:space="preserve"><value>Your account has no access to this section. Ask the Admin Portal administrator for it.</value></data>
-  <data name="AccessDeniedArchive"     xml:space="preserve"><value>Your account has no access to the Archive. Ask the Admin Portal administrator for it.</value></data>
+  <data name="AccessDeniedDownload"    xml:space="preserve"><value>Your account may not download files. Ask the Admin Portal administrator for it.</value></data>
   <data name="AccessDeniedDocuments"   xml:space="preserve"><value>Your account has no access to the documents of {0}.</value></data>
   <data name="AccessCheckUnavailable"  xml:space="preserve"><value>Your access could not be checked with the Admin Portal. Try again in a moment.</value></data>
   <data name="AccessDeniedOpenInstead" xml:space="preserve"><value>Sections you can open:</value></data>

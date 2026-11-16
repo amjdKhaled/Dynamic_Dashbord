@@ -498,11 +498,27 @@ public sealed class ArchiveController : Controller
                 $"Field names may be incomplete — field definitions could not be loaded: {fieldDefsError}";
         }
 
+        // ── 5. A shortcut: the original file of the document it points to, or why not ─
+        ShortcutDownload? shortcutDownload = null;
+        if (entry.EntryType == LFEntryType.Shortcut)
+        {
+            shortcutDownload = await ShortcutDownload.ResolveAsync(entry,
+                LFPortal.Web.Authentication.PortalAccessView.CanDownload(HttpContext),
+                (id, ct) => _entryService.GetEntryAsync(id, ct),
+                async (id, ct) =>
+                {
+                    using var edoc = await _documentService.StreamEdocAsync(id, ct);
+                    return edoc.ContentLength != 0;
+                },
+                _logger, cancellationToken);
+        }
+
         return PartialView("_EntryDetail", new ArchiveDetailViewModel
         {
             Entry = entry,
             Fields = resolvedFields,
-            FieldsError = combinedFieldsError
+            FieldsError = combinedFieldsError,
+            ShortcutDownload = shortcutDownload
         });
     }
 

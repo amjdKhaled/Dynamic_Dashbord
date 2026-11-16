@@ -132,6 +132,29 @@ public sealed class LaserficheDashboardTraversalTests
         Assert.Equal(3, handler.RequestCount);
     }
 
+    [Fact]
+    public async Task OneEntry_ReadsWhatAShortcutPointsTo()
+    {
+        var handler = new QueueHandler(
+            Json("""{"id":1700,"name":"S","entryType":"Shortcut","targetId":1620,"extension":null,"targetType":"Document"}"""),
+            Json("""{"id":1620,"name":"D","entryType":"Document"}"""));
+        var options = new LaserficheOptions { ServerUrl = "https://lf.test", ApiBasePath = "/LFRepositoryAPI", ApiVersion = "v2" };
+        var service = new LaserficheEntryService(
+            new ClientFactory(handler),
+            new RepositoryContext(),
+            new LaserficheApiAdapter(new OptionsMonitor(options)),
+            NullLogger<LaserficheEntryService>.Instance);
+
+        var shortcut = await service.GetEntryAsync(1700);
+        var document = await service.GetEntryAsync(1620);
+
+        Assert.Equal(LFEntryType.Shortcut, shortcut.EntryType);
+        Assert.Equal(1620, shortcut.TargetId);
+        Assert.Equal(LFEntryType.Document, shortcut.TargetType);
+        Assert.Null(document.TargetId);
+        Assert.Null(document.TargetType);
+    }
+
     private static LFEntry Folder(int id, string name) =>
         new() { Id = id, Name = name, EntryType = LFEntryType.Folder };
 

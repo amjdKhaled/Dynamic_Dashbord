@@ -142,7 +142,7 @@
   <data name="AccessDeniedTitle"       xml:space="preserve"><value>لا توجد صلاحية</value></data>
   <data name="AccessDeniedDashboard"   xml:space="preserve"><value>ليست لديك صلاحية على Dynamic Dashboard في هذا المستودع. اطلبها من مسؤول بوابة الإدارة.</value></data>
   <data name="AccessDeniedSection"     xml:space="preserve"><value>ليست لديك صلاحية على هذا القسم. اطلبها من مسؤول بوابة الإدارة.</value></data>
-  <data name="AccessDeniedArchive"     xml:space="preserve"><value>ليست لديك صلاحية على الأرشيف. اطلبها من مسؤول بوابة الإدارة.</value></data>
+  <data name="AccessDeniedDownload"    xml:space="preserve"><value>ليست لديك صلاحية تنزيل الملفات. اطلبها من مسؤول بوابة الإدارة.</value></data>
   <data name="AccessDeniedDocuments"   xml:space="preserve"><value>ليست لديك صلاحية على وثائق {0}.</value></data>
   <data name="AccessCheckUnavailable"  xml:space="preserve"><value>تعذّر التحقق من صلاحياتك من بوابة الإدارة. حاول مرة أخرى بعد قليل.</value></data>
   <data name="AccessDeniedOpenInstead" xml:space="preserve"><value>الأقسام التي يمكنك فتحها:</value></data>

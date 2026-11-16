@@ -120,7 +120,6 @@
   // settings and delete buttons of one's own boards). A new board starts empty, so creating needs it.
   const canCustomize = root.dataset.canCustomize !== "false";
   const canCreate = canCustomize && root.dataset.canCreate !== "false";
-  const canArchive = root.dataset.canArchive !== "false";
   const noBoard = {id:"",name:T("لا توجد لوحات","No dashboards"),layout:{version:3,charts:[]},none:true};
   const locked = () => Boolean(activeBoard.readOnly || activeBoard.none);
   const editable = () => canCustomize && !locked();
@@ -628,13 +627,6 @@
     notice.scrollIntoView({block:"nearest"});
   }
 
-  // «لا توجد صلاحية»: instead of opening documents this account may not open.
-  function showDenied(message) {
-    const dialog=$("dd-denied-dialog");
-    $("dd-denied-text").textContent=message;
-    if(!dialog.open)dialog.showModal();
-  }
-
   // Asks before deleting; resolves true when the user confirms. The confirm button answers at once;
   // closing any other way (إلغاء, Esc) answers no. One question at a time, so a late close event
   // can never answer the next question.
@@ -664,11 +656,6 @@
 
   async function openArchive(title, docs) {
     if (editMode) return;
-    // The Archive opens only for accounts the Admin Portal gives it to; the others are told so.
-    if (!canArchive) {
-      showDenied(T("ليست لديك صلاحية على الأرشيف.","You do not have access to the Archive."));
-      return;
-    }
     const ids = [...new Set(docs.map(doc => doc.id))];
     if (!ids.length) return;
     const entryIds=ids.join(",");

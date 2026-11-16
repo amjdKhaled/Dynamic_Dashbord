@@ -8,6 +8,8 @@
     var ar = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "ar";
     string T(string arabic, string english) => ar ? arabic : english;
     string FmtDate(DateTimeOffset? value) => value?.LocalDateTime.ToString("MMM d, yyyy HH:mm") ?? "—";
+    // «تنزيل الملفات» (Admin Portal): the download buttons, «فتح المحتوى», and the PDF viewer's save and print bar.
+    var canDownload = LFPortal.Web.Authentication.PortalAccessView.CanDownload(Context);
 }
 @section Styles {
 <style>
@@ -65,7 +67,7 @@ else if (Model.Entry is {} entry)
     <header class="dv-header">
         <div><h1 class="dv-title">@entry.Name</h1><div class="dv-subtitle">@L["EntryId"]: @entry.Id</div></div>
         <div class="dv-actions">
-            @if (Model.HasElectronicDocument)
+            @if (canDownload && Model.HasElectronicDocument)
             {
                 <a class="dv-btn dv-btn-primary" asp-action="Download" asp-route-entryId="@entry.Id">@L["DownloadOriginal"]</a>
             }
@@ -106,7 +108,8 @@ else if (Model.Entry is {} entry)
                 {
                     if (Model.UsesPdfPreview)
                     {
-                        <iframe hidden class="dv-frame" data-preview-source="@Url.Action("Content", "Document", new { entryId = entry.Id })" title="@entry.Name"></iframe>
+                        <iframe hidden class="dv-frame" data-preview-source="@Url.Action("Content", "Document", new { entryId = entry.Id })" title="@entry.Name"
+                                data-preview-toolbar="@(canDownload ? "1" : "0")"></iframe>
                     }
                     else
                     {
@@ -121,12 +124,12 @@ else if (Model.Entry is {} entry)
                 {
                     <div class="dv-empty">
                         <strong>@(Model.HasElectronicDocument ? T("هذا النوع من الملفات لا يدعم المعاينة داخل المتصفح.", "This file type cannot be previewed in the browser.") : T("لا توجد صورة لهذه الوثيقة.", "This document has no image."))</strong>
-                        @if (Model.HasElectronicDocument) { <a class="dv-btn dv-btn-primary" asp-action="Download" asp-route-entryId="@entry.Id">@L["DownloadOriginal"]</a> }
+                        @if (canDownload && Model.HasElectronicDocument) { <a class="dv-btn dv-btn-primary" asp-action="Download" asp-route-entryId="@entry.Id">@L["DownloadOriginal"]</a> }
                     </div>
                 }
             </div>
             <div class="dv-status" id="dvStatus" data-preview-error role="status" hidden></div>
-            @if (Model.HasElectronicDocument && Model.IsInlineElectronicDocument)
+            @if (canDownload && Model.HasElectronicDocument && Model.IsInlineElectronicDocument)
             {
                 <div class="dv-status"><a asp-action="Content" asp-route-entryId="@entry.Id">@T("فتح المحتوى", "Open content")</a></div>
             }

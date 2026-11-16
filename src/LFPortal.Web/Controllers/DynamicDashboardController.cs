@@ -51,7 +51,6 @@ public sealed class DynamicDashboardController : Controller
         // «تخصيص اللوحة» shows the customize button; a new board starts empty, so creating needs it too.
         ViewBag.CanCustomize = access?.Has(DashboardSections.Customize) ?? true;
         ViewBag.CanCreate = (access?.Has(DashboardSections.Create) ?? true) && (bool)ViewBag.CanCustomize;
-        ViewBag.CanArchive = access?.Has(DashboardSections.Archive) ?? true;
         // The main board uses the same permission-scoped statistics as the existing overview.
         DashboardStatsDto stats;
         try

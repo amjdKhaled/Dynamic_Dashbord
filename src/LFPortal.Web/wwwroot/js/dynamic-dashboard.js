@@ -270,16 +270,22 @@
       button.type="button";
       button.className="dd-board-option";
       button.dataset.boardId=board.id;
+      const icon=document.createElement("span");
+      icon.className="dd-board-option-icon";
+      const glyph=trigger.querySelector(".dd-board-icon").cloneNode(true);
+      glyph.removeAttribute("class");
+      icon.append(glyph);
       const text=document.createElement("span");
+      text.className="dd-board-option-name";
       text.textContent=name(board);
-      button.append(text);
+      button.append(icon,text);
       if(board.id===activeBoard.id) {
         button.setAttribute("aria-current","true");
-        const check=document.createElement("span");
-        check.className="dd-board-check";
-        check.setAttribute("aria-hidden","true");
-        check.textContent="✓";
-        button.append(check);
+        const badge=document.createElement("span");
+        badge.className="dd-board-current-badge";
+        badge.setAttribute("aria-hidden","true");
+        badge.textContent=T("الحالية","Current");
+        button.append(badge);
       }
       row.append(button);
       return row;

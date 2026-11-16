@@ -824,7 +824,7 @@
 
   function showDropSlots(chart) {
     if(!desktopGrid())return;
-    const width=desktopWidth(chart),grid=$("dd-grid");
+    const minimum=minimumWidth(chart),grid=$("dd-grid");
     const rowCount=Math.max(0,...[...desktopLayout.values()].map(slot=>slot.row+1),...[...vacantRows.keys()].map(row=>row+1));
     const preview=document.createElement("div");
     preview.className="dd-drop-preview";preview.hidden=true;grid.appendChild(preview);
@@ -838,31 +838,39 @@
         while(end<desktopColumns && !occupied[row][end])end++;
         const column=start;
         start=end;
-        if(end-column<width)continue;
+        if(end-column<minimum)continue;
         const zone=document.createElement("div");
         zone.className="dd-empty-slot"+(row===rowCount?" dd-drop-end":"");
         zone.setAttribute("aria-hidden","true");
         gridPosition(zone,{row,column,width:end-column});
         zone.dataset.row=row;
         zone.dataset.column=column;
+        zone.dataset.width=end-column;
         grid.appendChild(zone);
       }
     }
   }
 
   function emptyPlacement(layout,sourceId,placed) {
-    const next=new Map(layout),source=next.get(sourceId);
+    const next=new Map(layout);
     next.set(sourceId,placed);
-    if(source.row!==placed.row) {
-      const peers=[...next].filter(([,slot])=>slot.row===source.row)
-        .sort(([,a],[,b])=>a.column-b.column);
-      let column=0;
-      for(const [id,slot] of peers) {
-        next.set(id,{...slot,column});
-        column+=slot.width;
-      }
-    }
-    return {next,placed,insertedRow:null};
+    return {next,placed,insertedRow:null,resize:true};
+  }
+
+  function insertDropRow(layout,sourceId,placed) {
+    const next=new Map([...layout].map(([id,slot])=>
+      [id,slot.row>=placed.row?{...slot,row:slot.row+1}:slot]));
+    return {...emptyPlacement(next,sourceId,placed),insertedRow:placed.row,addedRows:1};
+  }
+
+  function gapPlacement(gap,x,width) {
+    const rect=gap.getBoundingClientRect();
+    const capacity=Number(gap.dataset.width);
+    const fitted=Math.min(capacity,width);
+    const fromStart=getComputedStyle(gap).direction==="rtl"?rect.right-x:x-rect.left;
+    const offset=Math.round(fromStart/rect.width*capacity-fitted/2);
+    return {row:Number(gap.dataset.row),column:Number(gap.dataset.column)+
+      Math.max(0,Math.min(capacity-fitted,offset)),width:fitted};
   }
 
   function bindCardDrag(handle,card,chart) {
@@ -890,6 +898,12 @@
           bottom=rect.bottom;
         }
       }
+      function showDropRow(top,left,width) {
+        const line=document.createElement("div");
+        line.className="dd-drop-row-line";
+        line.style.cssText="top:"+top+"px;left:"+left+"px;width:"+width+"px";
+        grid.append(line);
+      }
       function update() {
         const {clientX:x,clientY:y}=pointer;
         ghost.style.transform="translate3d("+(x-offsetX)+"px,"+(y-offsetY)+"px,0)";
@@ -898,7 +912,9 @@
         const gap=hit?.closest("#dd-grid .dd-empty-slot");
         const id=target?.dataset.id;
         const boundary=desktopGrid() && !target && !gap?rowBoundary(x,y):null;
-        const key=boundary?"row:"+boundary.row:id===chart.id?null:id ?? gap;
+        const openSlot=gap?gapPlacement(gap,x,desktopWidth(chart)):null;
+        const key=boundary?"row:"+boundary.row:id===chart.id?null:id ??
+          (openSlot?"gap:"+openSlot.row+":"+openSlot.column:null);
         if(key===targetKey) {
           const line=grid.querySelector(".dd-drop-row-line");
           if(line && boundary)line.style.top=boundary.top+"px";
@@ -910,20 +926,19 @@
         clearDropHighlight();
         if(!key)return;
         if(boundary) {
-          const next=new Map([...desktopLayout].map(([id,slot])=>[id,slot.row>=boundary.row?{...slot,row:slot.row+1}:slot]));
-          plan=emptyPlacement(next,chart.id,{row:boundary.row,column:0,width:desktopWidth(chart)});
-          plan.insertedRow=boundary.row;
-          plan.addedRows=1;
-          const line=document.createElement("div");
-          line.className="dd-drop-row-line";
-          line.style.cssText="top:"+boundary.top+"px;left:"+boundary.left+"px;width:"+boundary.width+"px";
-          grid.append(line);
+          plan=insertDropRow(desktopLayout,chart.id,{row:boundary.row,column:0,width:desktopWidth(chart)});
+          showDropRow(boundary.top,boundary.left,boundary.width);
         } else if(desktopGrid()) {
-          plan=id?planCardSwap(chart.id,id):emptyPlacement(desktopLayout,chart.id,{
-            row:Number(gap.dataset.row),column:Number(gap.dataset.column),width:desktopWidth(chart)
-          });
-          if(plan)showPlacement(plan);
-          else ghost.classList.add("dd-drop-unavailable");
+          plan=id?planCardSwap(chart.id,id):emptyPlacement(desktopLayout,chart.id,openSlot);
+          if(plan?.insertedRow!=null) {
+            const rect=grid.getBoundingClientRect();
+            const targetRect=target.getBoundingClientRect();
+            const after=plan.insertedRow>desktopLayout.get(id).row;
+            const rowCards=[...grid.querySelectorAll(".dd-card")]
+              .filter(node=>desktopLayout.get(node.dataset.id).row===desktopLayout.get(id).row);
+            const edge=after?Math.max(...rowCards.map(node=>node.getBoundingClientRect().bottom)):targetRect.top;
+            showDropRow(edge+(after?4:-4),rect.left,rect.width);
+          } else if(plan)showPlacement(plan);
         } else if(id)plan={id};
         if(plan)target?.classList.add("dd-drop-target");
       }
@@ -1016,9 +1031,26 @@
       start--;
     }
 
-    if(width<minWidth(sourceId))return null;
     const required=block.reduce((total,[id])=>total+minWidth(id),0);
-    if(required>source.width)return null;
+    if(width<minWidth(sourceId) || required>source.width) {
+      // Fit the two cards around the target without disturbing its neighbors.
+      const left=track[index-1]?.[1];
+      const start=left?left.column+left.width:0;
+      const end=track[index+1]?.[1].column??desktopColumns;
+      const sourceWidth=Math.min(source.width,end-start-minWidth(targetId));
+      if(sourceWidth>=minWidth(sourceId)) {
+        const targetWidth=Math.min(target.width,end-start-sourceWidth);
+        const column=Math.max(start,Math.min(target.column,end-sourceWidth-targetWidth));
+        const placed={row:target.row,column,width:sourceWidth};
+        next.set(sourceId,placed);
+        next.set(targetId,{row:target.row,column:column+sourceWidth,width:targetWidth});
+        return {next,placed,insertedRow:null,displaced:[targetId],resize:true};
+      }
+      const row=target.row+Number(source.row<target.row);
+      return insertDropRow(layout,sourceId,{
+        row,column:Math.min(target.column,desktopColumns-source.width),width:source.width
+      });
+    }
     const placed={row:target.row,column:block[0][1].column,width:Math.min(source.width,width)};
     next.set(sourceId,placed);
     let column=source.column;

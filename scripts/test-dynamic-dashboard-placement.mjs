@@ -3,9 +3,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const script=readFileSync(new URL("../src/LFPortal.Web/wwwroot/js/dynamic-dashboard.js",import.meta.url),"utf8");
-const dropPlacement=new Function("desktopColumns",
+const {dropPlacement,emptyPlacement}=new Function("desktopColumns",
+  script.slice(script.indexOf("  function emptyPlacement("),script.indexOf("  function bindCardDrag("))+
   script.slice(script.indexOf("  function dropPlacement("),script.indexOf("  function planCardSwap("))+
-  "\nreturn dropPlacement;")(10);
+  "\nreturn {dropPlacement,emptyPlacement};")(10);
 const slot=(row,column,width)=>({row,column,width});
 const cardWidth=()=>2;
 
@@ -51,8 +52,35 @@ test("different-width cards fit into one another's slots without moving interven
   assert.deepEqual(next.get("a"),slot(0,5,3));
 });
 
-test("an undersized swap keeps the existing layout instead of pushing widgets to a new row",()=>{
-  const positions=new Map([["a",slot(0,0,2)],["c",slot(1,0,5)]]);
-  assert.equal(dropPlacement(positions,"a","c",id=>id==="a"?2:3),null);
-  assert.equal(dropPlacement(positions,"c","a",id=>id==="a"?2:3),null);
+test("a KPI dropped onto a wider chart fits next to it in the lower row",()=>{
+  const positions=new Map([
+    ["a",slot(0,0,2)],["peer",slot(0,2,2)],["chart",slot(1,0,5)],["doughnut",slot(1,5,5)]
+  ]);
+  const {next,placed,insertedRow}=dropPlacement(positions,"a","chart",id=>id==="chart"?3:2);
+  assert.deepEqual(placed,slot(1,0,2));
+  assert.deepEqual(next.get("chart"),slot(1,2,3));
+  for(const id of ["peer","doughnut"])assert.deepEqual(next.get(id),positions.get(id));
+  assert.equal(insertedRow,null);
+});
+
+test("a KPI can move below a full-width table at its minimum size",()=>{
+  const positions=new Map([
+    ["a",slot(0,0,2)],["table-left",slot(1,0,5)],["table-right",slot(1,5,5)],["following",slot(2,0,5)]
+  ]);
+  const {next,placed,insertedRow,addedRows}=dropPlacement(positions,"a","table-left",id=>id==="a"?2:5);
+  assert.deepEqual(placed,slot(2,0,2));
+  assert.deepEqual(next.get("table-left"),positions.get("table-left"));
+  assert.deepEqual(next.get("table-right"),positions.get("table-right"));
+  assert.deepEqual(next.get("following"),slot(3,0,5));
+  assert.equal(insertedRow,2);
+  assert.equal(addedRows,1);
+});
+
+test("dropping into an empty slot preserves the coordinates of every other card",()=>{
+  const positions=new Map([["a",slot(0,0,5)],["peer",slot(0,5,5)],["table",slot(1,0,5)]]);
+  const {next,resize}=emptyPlacement(positions,"a",slot(1,7,3));
+  assert.deepEqual(next.get("a"),slot(1,7,3));
+  assert.deepEqual(next.get("peer"),positions.get("peer"));
+  assert.deepEqual(next.get("table"),positions.get("table"));
+  assert.equal(resize,true);
 });

@@ -47,6 +47,12 @@ public static class DashboardSections
     public const string Overview = "overview";
     /// <summary>The «إنشاء لوحة جديدة» button.</summary>
     public const string Create = "create";
+    /// <summary>
+    /// The «تخصيص اللوحة» button and what only customize mode shows: adding, editing, moving,
+    /// resizing, hiding and removing tables, and renaming or deleting one's own boards.
+    /// Without it the account only views. Creating a board needs it too.
+    /// </summary>
+    public const string Customize = "customize";
     /// <summary>The archive browser and document viewer (الأرشيف).</summary>
     public const string Archive = "archive";
     /// <summary>The connection settings (الإعدادات).</summary>

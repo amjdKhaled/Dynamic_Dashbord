@@ -192,8 +192,8 @@ public sealed class AccessDeniedViewModel
     /// <summary>The explanation in Arabic, for script callers that show a message.</summary>
     public static string Message(AccessDeniedReason reason) => reason switch
     {
-        AccessDeniedReason.Dashboard => "ليست لديك صلاحية على Dynamic Dashboard في هذا المستودع. اطلبها من مسؤول Admin Portal.",
-        AccessDeniedReason.Section   => "ليست لديك صلاحية على هذا القسم. اطلبها من مسؤول Admin Portal.",
-        _                            => "تعذّر التحقق من صلاحياتك من Admin Portal. حاول مرة أخرى بعد قليل.",
+        AccessDeniedReason.Dashboard => "ليست لديك صلاحية على Dynamic Dashboard في هذا المستودع. اطلبها من مسؤول بوابة الإدارة.",
+        AccessDeniedReason.Section   => "ليست لديك صلاحية على هذا القسم. اطلبها من مسؤول بوابة الإدارة.",
+        _                            => "تعذّر التحقق من صلاحياتك من بوابة الإدارة. حاول مرة أخرى بعد قليل.",
     };
 }

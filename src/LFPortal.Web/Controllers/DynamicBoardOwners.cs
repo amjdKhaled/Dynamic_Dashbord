@@ -28,7 +28,18 @@ internal static class DynamicBoardOwners
 
     internal sealed record Owner(string Repository, string User);
 
-    internal sealed record Board(string Id, string Name, string Owner, DateTime Created, string Scope)
+    /// <summary>A board's "visibility" in its saved layout. Missing means public (boards made before it).</summary>
+    internal const string PublicBoard = "public";
+    internal const string PrivateBoard = "private";
+
+    /// <summary>True for a value a saved layout may carry as its "visibility".</summary>
+    internal static bool IsVisibility(string? value) => value is PublicBoard or PrivateBoard;
+
+    /// <param name="Private">
+    /// The owner keeps it to themself: the Admin Portal does not list it and nobody is given it,
+    /// not even the portal's main admin.
+    /// </param>
+    internal sealed record Board(string Id, string Name, string Owner, DateTime Created, string Scope, bool Private = false)
     {
         /// <summary>Where the board's layout is saved.</summary>
         internal string PathIn(string root) => Path.Combine(root, Scope, Id + ".json");
@@ -102,8 +113,9 @@ internal static class DynamicBoardOwners
             {
                 var id = Path.GetFileNameWithoutExtension(layout);
                 if (!Guid.TryParseExact(id, "N", out var parsed) || id != parsed.ToString("N")) continue;
-                boards.Add(new Board(id, ReadName(layout, logger) ?? id, owner.User,
-                    File.GetCreationTimeUtc(layout), scope));
+                var (name, isPrivate) = ReadSummary(layout, logger);
+                boards.Add(new Board(id, name ?? id, owner.User,
+                    File.GetCreationTimeUtc(layout), scope, isPrivate));
             }
         }
 
@@ -129,44 +141,62 @@ internal static class DynamicBoardOwners
 
     /// <summary>
     /// The boards given to the account through the Admin Portal, which it sees read-only:
-    /// every recorded board in the repository that is not its own and that the portal lists
-    /// for it ("overview/&lt;id&gt;", or "overview/*" for the main admin). None without the portal.
+    /// every recorded public board in the repository that is not its own and that the portal
+    /// lists for it ("overview/&lt;id&gt;", or "overview/*" for the main admin). A private board
+    /// is never given, not even to the main admin. None without the portal.
     /// </summary>
     internal static IEnumerable<Board> Granted(
         LFPortal.Web.Authentication.DashboardAccess? access, IEnumerable<Board> repositoryBoards, string ownScope) =>
-        access is null ? [] : repositoryBoards.Where(board => board.Scope != ownScope && access.SeesBoard(board.Id));
+        access is null ? [] : repositoryBoards.Where(board =>
+            board.Scope != ownScope && !board.Private && access.SeesBoard(board.Id));
 
     /// <summary>
     /// Why the account may not save this board, or <c>null</c> when it may. A board is saved only
     /// in its owner's own folder, so another person's board is never changed: it is view only.
+    /// Changing even one's own boards needs «تخصيص اللوحة», and a new one «إنشاء لوحات جديدة» too.
     /// Without the portal (<paramref name="access"/> null) everything the owner had stays allowed.
     /// </summary>
     internal static string? WhyNotSave(
         LFPortal.Web.Authentication.DashboardAccess? access, string boardId, bool ownsIt, bool someoneElses)
     {
-        if (boardId == LFPortal.Web.Authentication.DashboardSections.MainBoard)
-            return access is null || access.SeesBoard(boardId) ? null : "ليست لديك صلاحية على اللوحة الرئيسية.";
-        if (ownsIt) return null;
-        if (someoneElses) return "هذه اللوحة للعرض فقط. يعدّلها من أنشأها وحده.";
-        return access is null || access.Has(LFPortal.Web.Authentication.DashboardSections.Create)
+        if (access is null) return null;
+        if (boardId == LFPortal.Web.Authentication.DashboardSections.MainBoard && !access.SeesBoard(boardId))
+            return "ليست لديك صلاحية على اللوحة الرئيسية.";
+        if (boardId != LFPortal.Web.Authentication.DashboardSections.MainBoard && !ownsIt && someoneElses)
+            return "هذه اللوحة للعرض فقط. يعدّلها من أنشأها وحده.";
+        if (WhyNotChange(access) is { } refusal) return refusal;
+        if (boardId == LFPortal.Web.Authentication.DashboardSections.MainBoard || ownsIt) return null;
+        return access.Has(LFPortal.Web.Authentication.DashboardSections.Create)
             ? null : "ليست لديك صلاحية إنشاء لوحات جديدة.";
     }
 
-    private static string? ReadName(string path, ILogger? logger)
+    /// <summary>
+    /// Why the account may not change or delete its own boards (no «تخصيص اللوحة»), or <c>null</c>.
+    /// </summary>
+    internal static string? WhyNotChange(LFPortal.Web.Authentication.DashboardAccess? access) =>
+        access is null || access.Has(LFPortal.Web.Authentication.DashboardSections.Customize)
+            ? null : "ليست لديك صلاحية تخصيص اللوحات.";
+
+    /// <summary>The board's saved name (null when missing or unreadable) and whether it is private.</summary>
+    private static (string? Name, bool Private) ReadSummary(string path, ILogger? logger)
     {
         try
         {
             using var document = JsonDocument.Parse(File.ReadAllText(path));
-            return document.RootElement.ValueKind == JsonValueKind.Object &&
-                   document.RootElement.TryGetProperty("name", out var name) &&
-                   name.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(name.GetString())
-                ? name.GetString()!.Trim()
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) return (null, false);
+            var name = root.TryGetProperty("name", out var saved) &&
+                       saved.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(saved.GetString())
+                ? saved.GetString()!.Trim()
                 : null;
+            var isPrivate = root.TryGetProperty("visibility", out var visibility) &&
+                            visibility.ValueKind == JsonValueKind.String && visibility.GetString() == PrivateBoard;
+            return (name, isPrivate);
         }
         catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
         {
             logger?.LogWarning("Could not read a board's name ({ErrorType}).", ex.GetType().Name);
-            return null;
+            return (null, false);
         }
     }
 }

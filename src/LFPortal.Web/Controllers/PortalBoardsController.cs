@@ -11,7 +11,9 @@ namespace LFPortal.Web.Controllers;
 /// <remarks>
 /// <c>GET /api/portal/boards?repo=demo</c> with the header <c>X-Portal-Key</c> answers
 /// <c>{"boards":[{"id","name","owner","created"}]}</c>. The main board ("default") is not
-/// listed: the portal always shows it. The route is off (404) until <c>PortalAccess:Key</c>
+/// listed: the portal always shows it. A private board is not listed either: it is its
+/// owner's alone, so the portal neither shows nor grants it (a board made private there
+/// loses its grants). The route is off (404) until <c>PortalAccess:Key</c>
 /// is set, and a wrong key gets 401. Nothing about a board's content is returned.
 /// </remarks>
 [AllowAnonymous]
@@ -48,7 +50,7 @@ public sealed class PortalBoardsController(
 
         try
         {
-            var boards = DynamicBoardOwners.List(LayoutsRoot, repo, logger);
+            var boards = DynamicBoardOwners.List(LayoutsRoot, repo, logger).Where(board => !board.Private);
             return Json(new
             {
                 boards = boards.Select(board => new

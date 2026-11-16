@@ -278,22 +278,94 @@ public sealed class PortalBoardsTests : IDisposable
     // Without the portal, everything the owner could do stays allowed.
     [InlineData(false, "", "default", false, false, null)]
     [InlineData(false, "", New, false, false, null)]
-    // The main board needs the portal's "overview/default".
-    [InlineData(true, "overview", "default", false, false, "ليست لديك صلاحية على اللوحة الرئيسية.")]
-    [InlineData(true, "overview,overview/default", "default", false, false, null)]
-    [InlineData(true, "overview,overview/*", "default", false, false, null)]
-    // An account's own board is always its own to save.
-    [InlineData(true, "overview", New, true, false, null)]
+    // The main board needs the portal's "overview/default", and «تخصيص اللوحة» to change it.
+    [InlineData(true, "overview,customize", "default", false, false, "ليست لديك صلاحية على اللوحة الرئيسية.")]
+    [InlineData(true, "overview,overview/default,customize", "default", false, false, null)]
+    [InlineData(true, "overview,overview/*,customize", "default", false, false, null)]
+    [InlineData(true, "overview,overview/default", "default", false, false, "ليست لديك صلاحية تخصيص اللوحات.")]
+    // An account's own board is its own to save while it holds «تخصيص اللوحة».
+    [InlineData(true, "overview,customize", New, true, false, null)]
+    [InlineData(true, "overview,create", New, true, false, "ليست لديك صلاحية تخصيص اللوحات.")]
     // Another account's board is view only, even for the main admin.
     [InlineData(true, "overview,overview/" + Test2, Test2, false, true, "هذه اللوحة للعرض فقط. يعدّلها من أنشأها وحده.")]
-    [InlineData(true, "overview,overview/*,create", Test2, false, true, "هذه اللوحة للعرض فقط. يعدّلها من أنشأها وحده.")]
-    // A new board needs «إنشاء لوحة جديدة».
-    [InlineData(true, "overview", Hr, false, false, "ليست لديك صلاحية إنشاء لوحات جديدة.")]
-    [InlineData(true, "overview,create", Hr, false, false, null)]
+    [InlineData(true, "overview,overview/*,create,customize", Test2, false, true, "هذه اللوحة للعرض فقط. يعدّلها من أنشأها وحده.")]
+    // A new board needs «إنشاء لوحة جديدة», which comes with «تخصيص اللوحة».
+    [InlineData(true, "overview,customize", Hr, false, false, "ليست لديك صلاحية إنشاء لوحات جديدة.")]
+    [InlineData(true, "overview,create", Hr, false, false, "ليست لديك صلاحية تخصيص اللوحات.")]
+    [InlineData(true, "overview,create,customize", Hr, false, false, null)]
     public void WhyNotSave_FollowsThePortal(
         bool portal, string sections, string boardId, bool ownsIt, bool someoneElses, string? expected)
     {
         var access = portal ? Access(sections.Split(',', StringSplitOptions.RemoveEmptyEntries)) : null;
         Assert.Equal(expected, DynamicBoardOwners.WhyNotSave(access, boardId, ownsIt, someoneElses));
+    }
+
+    [Fact]
+    public void WhyNotChange_NeedsCustomizeOnlyWithThePortal()
+    {
+        Assert.Null(DynamicBoardOwners.WhyNotChange(null));
+        Assert.Null(DynamicBoardOwners.WhyNotChange(Access("overview", "customize")));
+        Assert.Equal("ليست لديك صلاحية تخصيص اللوحات.", DynamicBoardOwners.WhyNotChange(Access("overview", "create")));
+        Assert.Equal("ليست لديك صلاحية تخصيص اللوحات.",
+            DynamicBoardOwners.WhyNotChange(new DashboardAccess(false, new HashSet<string> { "overview", "customize" })));
+    }
+
+    // ── Private boards ───────────────────────────────────────────────────────
+
+    private async Task SeedPrivateAsync()
+    {
+        await SeedAsync();
+        // amir keeps «لوحة المشتريات» to himself; admin says out loud that «new» is public.
+        SaveBoard(AmirScope, Purchases, """{"name":"لوحة المشتريات","visibility":"private","charts":[]}""",
+            new DateTime(2026, 11, 14, 12, 53, 0, DateTimeKind.Utc));
+        SaveBoard(AdminScope, New, """{"name":"new","visibility":"public","charts":[]}""",
+            new DateTime(2026, 11, 14, 15, 36, 0, DateTimeKind.Utc));
+    }
+
+    [Fact]
+    public async Task List_TellsWhichBoardsArePrivate()
+    {
+        await SeedPrivateAsync();
+
+        var boards = DynamicBoardOwners.List(_root, "demo");
+
+        Assert.Equal(new[] { New, Test2, Purchases }, boards.Select(b => b.Id));
+        Assert.Equal(new[] { false, false, true }, boards.Select(b => b.Private));
+    }
+
+    [Fact]
+    public async Task Get_NeverListsAPrivateBoard()
+    {
+        await SeedPrivateAsync();
+
+        var result = Assert.IsType<JsonResult>(Controller().Get("demo"));
+
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(result.Value));
+        var ids = json.RootElement.GetProperty("boards").EnumerateArray().Select(b => b.GetProperty("id").GetString());
+        Assert.Equal(new[] { New, Test2 }, ids);
+    }
+
+    [Fact]
+    public async Task Granted_NeverGivesAPrivateBoardNotEvenToTheMainAdmin()
+    {
+        await SeedPrivateAsync();
+        var boards = DynamicBoardOwners.List(_root, "demo");
+
+        Assert.Empty(DynamicBoardOwners.Granted(Access("overview", "overview/*"), boards, AdminScope));
+        Assert.Empty(DynamicBoardOwners.Granted(Access("overview", "overview/" + Purchases), boards, AdminScope));
+        Assert.Equal(new[] { New, Test2 },
+            DynamicBoardOwners.Granted(Access("overview", "overview/*"), boards, AmirScope).Select(b => b.Id));
+    }
+
+    [Theory]
+    [InlineData("public", true)]
+    [InlineData("private", true)]
+    [InlineData("Private", false)]
+    [InlineData("shared", false)]
+    [InlineData("", false)]
+    [InlineData(null, false)]
+    public void IsVisibility_AcceptsOnlyPublicOrPrivate(string? value, bool expected)
+    {
+        Assert.Equal(expected, DynamicBoardOwners.IsVisibility(value));
     }
 }

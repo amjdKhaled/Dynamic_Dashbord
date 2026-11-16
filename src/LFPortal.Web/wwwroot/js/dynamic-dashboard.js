@@ -116,10 +116,19 @@
   // What the Admin Portal gives this account (everything without the portal). A board given
   // to it arrives with readOnly and its owner: it is shown, never changed.
   const mainAllowed = root.dataset.mainBoard !== "false";
-  const canCreate = root.dataset.canCreate !== "false";
+  // «تخصيص اللوحة»: customize mode and all it shows (the + button, the table buttons, and the
+  // settings and delete buttons of one's own boards). A new board starts empty, so creating needs it.
+  const canCustomize = root.dataset.canCustomize !== "false";
+  const canCreate = canCustomize && root.dataset.canCreate !== "false";
   const canArchive = root.dataset.canArchive !== "false";
   const noBoard = {id:"",name:T("لا توجد لوحات","No dashboards"),layout:{version:3,charts:[]},none:true};
   const locked = () => Boolean(activeBoard.readOnly || activeBoard.none);
+  const editable = () => canCustomize && !locked();
+  // Who sees a board: "private" (its owner only) or "public" (listed in the Admin Portal, which
+  // may give it to others). Boards saved before this choice are public; the main board has none.
+  const visibilityOf = board => board.id==="default" || board.none ? undefined
+    : (board.visibility ?? board.layout?.visibility)==="private" ? "private" : "public";
+  const lockIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
   const boardOrder = (a,b)=>a.id==="default"?-1:b.id==="default"?1:Boolean(a.readOnly)-Boolean(b.readOnly) ||
     a.name.localeCompare(b.name,locale);
   // The board to open when none is asked for, or when the open one is gone.
@@ -216,12 +225,13 @@
   }
   let savedBoardState;
   function boardState() {
-    return {name:activeBoard.name,charts:structuredClone(charts),vacantRows:[...vacantRows]};
+    return {name:activeBoard.name,visibility:activeBoard.visibility,charts:structuredClone(charts),vacantRows:[...vacantRows]};
   }
   function revertLayout() {
     if(!savedBoardState || saving || deleting || revision===savedRevision)return;
     closeEditor();
     activeBoard.name=savedBoardState.name;
+    activeBoard.visibility=savedBoardState.visibility;
     charts=structuredClone(savedBoardState.charts);
     vacantRows.clear();
     for(const [row,height] of savedBoardState.vacantRows)vacantRows.set(row,height);
@@ -246,18 +256,19 @@
       $(id).disabled=!layoutReady || saving || deleting;
     // A board given through the Admin Portal is view only: only its creator changes it.
     $("dd-new-board").hidden=!canCreate;
-    $("dd-customize").hidden=locked();
-    $("dd-rename-board").hidden=locked();
+    // Without «تخصيص اللوحة» the account only views: no customize, settings or delete button.
+    $("dd-customize").hidden=!editable();
+    $("dd-rename-board").hidden=!editable();
     $("dd-board-list").disabled||=activeBoard.none && boards.size===0;
     const note=$("dd-board-note");
     note.textContent=activeBoard.readOnly
       ? T("للعرض فقط · أنشأها ","View only · created by ")+(activeBoard.owner||"")
       : activeBoard.none&&layoutReady
-        ? T("لا توجد لوحات متاحة لك في هذا المستودع. اطلبها من مسؤول Admin Portal.",
+        ? T("لا توجد لوحات متاحة لك في هذا المستودع. اطلبها من مسؤول بوابة الإدارة.",
             "No dashboards are available to you in this repository. Ask the Admin Portal administrator.")
         : "";
     note.hidden=!note.textContent;
-    const custom=activeBoard.id!=="default" && !locked();
+    const custom=activeBoard.id!=="default" && editable();
     $("dd-delete-board").classList.toggle("dd-toolbar-hidden",!custom);
     $("dd-delete-board").disabled=!layoutReady || !custom || saving || deleting;
     $("dd-customize").disabled=deleting;
@@ -305,6 +316,13 @@
       text.className="dd-board-option-name";
       text.textContent=name(board);
       button.append(icon,text);
+      if(visibilityOf(board)==="private") {
+        const chip=document.createElement("span");
+        chip.className="dd-board-private";
+        chip.innerHTML=lockIcon;
+        chip.append(T("خاصة","Private"));
+        button.append(chip);
+      }
       if(board.id===activeBoard.id) {
         button.setAttribute("aria-current","true");
         const badge=document.createElement("span");
@@ -325,8 +343,8 @@
   }
   function activateBoard(board) {
     closeEditor();
-    activeBoard={...board};
-    if(locked())editMode=false;
+    activeBoard={...board,visibility:visibilityOf(board)};
+    if(!editable())editMode=false;
     vacantRows.clear();
     if(Array.isArray(board.layout?.vacantRows)) {
       for(const entry of board.layout.vacantRows) {
@@ -348,7 +366,7 @@
   }
   async function saveLayout() {
     if(revision===savedRevision)return true;
-    if(!layoutReady || saving || deleting || locked())return false;
+    if(!layoutReady || saving || deleting || !editable())return false;
     saving=true;
     const snapshot=revision;
     const layout={version:3,...boardState(),updatedAt:Date.now()};
@@ -2183,20 +2201,37 @@
         (index+(event.key==="ArrowDown"?1:-1)+buttons.length)%buttons.length;
       buttons[next]?.focus();
     });
+    const visibility=$("dd-board-visibility");
+    const choices=()=>[...visibility.querySelectorAll('input[type="radio"]')];
+    const chosen=()=>choices().find(input=>input.checked)?.value;
+    // Making a public board private takes it away from everyone the portal gave it to.
+    const warnPrivate=()=>{
+      $("dd-board-visibility-warning").hidden=!(visibility.dataset.was==="public" && chosen()==="private");
+    };
+    visibility.addEventListener("change",()=>{
+      warnPrivate();
+      $("dd-board-error").textContent="";
+    });
     const open=async create=>{
-      if(create ? !canCreate : locked())return;
+      if(create ? !canCreate : !editable())return;
       if(create && !await confirmLeaving())return;
       creating=create;
-      $("dd-board-dialog-title").textContent=create?T("لوحة جديدة","New dashboard"):T("تغيير اسم اللوحة","Rename dashboard");
+      $("dd-board-dialog-title").textContent=create?T("لوحة جديدة","New dashboard"):T("إعدادات اللوحة","Dashboard settings");
       $("dd-board-error").textContent="";
       name.value=create?"":activeBoard.name;
+      // A new board has no ready answer: its creator picks. The main board has no such choice.
+      const current=create?undefined:activeBoard.visibility;
+      visibility.hidden=!create && !current;
+      visibility.dataset.was=current??"";
+      for(const input of choices())input.checked=input.value===current;
+      warnPrivate();
       dialog.showModal();
       name.focus();
     };
     $("dd-new-board").addEventListener("click",()=>open(true));
     $("dd-delete-board").addEventListener("click",async()=>{
       const {id,name:boardName}=activeBoard;
-      if(id==="default" || locked() || !layoutReady || saving || deleting || busy)return;
+      if(id==="default" || !editable() || !layoutReady || saving || deleting || busy)return;
       if(!await showNotice(T("حذف لوحة «","Delete dashboard “")+boardName+T("»؟","”?"),T("حذف اللوحة","Delete dashboard")))return;
       deleting=true;
       closeEditor();
@@ -2209,6 +2244,10 @@
             method:"POST",credentials:"same-origin",
             headers:{...requestHeaders,"RequestVerificationToken":token||""}
           });
+          if(response.status===403) {
+            const refusal=(await response.json().catch(()=>null))?.error;
+            throw Object.assign(new Error(refusal||T("لا توجد صلاحية لحذف هذه اللوحة.","You may not delete this dashboard.")),{refused:true});
+          }
           if(!response.ok)throw new Error("HTTP "+response.status);
         }
         boards.delete(id);
@@ -2216,8 +2255,9 @@
         activateBoard(fallbackBoard());
         rememberBoard();
         message=T("تم حذف اللوحة","Dashboard deleted");
-      } catch {
-        message=T("تعذر حذف اللوحة. حاول مرة أخرى.","Could not delete dashboard. Try again.");
+      } catch(error) {
+        message=error?.refused ? error.message
+          : T("تعذر حذف اللوحة. حاول مرة أخرى.","Could not delete dashboard. Try again.");
       } finally {
         deleting=false;
         updateSaveBar(message);
@@ -2233,13 +2273,21 @@
         $("dd-board-error").textContent=T("أدخل اسم اللوحة.","Enter a dashboard name.");
         return;
       }
+      const choice=visibility.hidden?undefined:chosen();
+      if(!visibility.hidden && !choice) {
+        $("dd-board-error").textContent=T("اختر من يرى اللوحة.","Choose who can see the dashboard.");
+        return;
+      }
       if(creating) {
         const id=Array.from(crypto.getRandomValues(new Uint8Array(16)),
           byte=>byte.toString(16).padStart(2,"0")).join("");
         editMode=true;
-        activateBoard({id,name:value,layout:{version:3,charts:[]}});
+        activateBoard({id,name:value,visibility:choice,layout:{version:3,charts:[]}});
         clearSavedFlash();
-      } else activeBoard.name=value;
+      } else {
+        activeBoard.name=value;
+        if(choice)activeBoard.visibility=choice;
+      }
       syncBoardPicker();
       markChanged();
       dialog.close();
@@ -2254,12 +2302,12 @@
     window.addEventListener("pageshow",event=>{if(event.persisted)window.location.reload();});
     $("dd-refresh").addEventListener("click",refresh);
     $("dd-customize").addEventListener("click",()=>{
-      if(locked())return;
+      if(!editable())return;
       editMode=!editMode;
       if(!editMode)closeEditor();
       render();
     });
-    $("dd-add").addEventListener("click",()=>openEditor(null));
+    $("dd-add").addEventListener("click",()=>{ if(editMode && editable())openEditor(null); });
     $("dd-closeeditor").addEventListener("click",closeEditor);
     $("dd-cancel").addEventListener("click",closeEditor);
     $("dd-save").addEventListener("click",saveEditor);

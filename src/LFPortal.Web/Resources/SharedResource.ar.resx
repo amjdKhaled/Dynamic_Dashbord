@@ -138,9 +138,9 @@
 
   <!-- Admin Portal access -->
   <data name="AccessDeniedTitle"       xml:space="preserve"><value>لا توجد صلاحية</value></data>
-  <data name="AccessDeniedDashboard"   xml:space="preserve"><value>ليست لديك صلاحية على Dynamic Dashboard في هذا المستودع. اطلبها من مسؤول Admin Portal.</value></data>
-  <data name="AccessDeniedSection"     xml:space="preserve"><value>ليست لديك صلاحية على هذا القسم. اطلبها من مسؤول Admin Portal.</value></data>
-  <data name="AccessCheckUnavailable"  xml:space="preserve"><value>تعذّر التحقق من صلاحياتك من Admin Portal. حاول مرة أخرى بعد قليل.</value></data>
+  <data name="AccessDeniedDashboard"   xml:space="preserve"><value>ليست لديك صلاحية على Dynamic Dashboard في هذا المستودع. اطلبها من مسؤول بوابة الإدارة.</value></data>
+  <data name="AccessDeniedSection"     xml:space="preserve"><value>ليست لديك صلاحية على هذا القسم. اطلبها من مسؤول بوابة الإدارة.</value></data>
+  <data name="AccessCheckUnavailable"  xml:space="preserve"><value>تعذّر التحقق من صلاحياتك من بوابة الإدارة. حاول مرة أخرى بعد قليل.</value></data>
   <data name="AccessDeniedOpenInstead" xml:space="preserve"><value>الأقسام التي يمكنك فتحها:</value></data>
   <data name="SignInAsAnotherAccount"  xml:space="preserve"><value>تسجيل الدخول بحساب آخر</value></data>
 </root>

@@ -7,13 +7,14 @@
     var scope = (string?)ViewBag.StorageScope ?? string.Empty;
     // What the Admin Portal gives this account (all true without the portal).
     var mainBoard = ViewBag.MainBoard as bool? ?? true;
+    var canCustomize = ViewBag.CanCustomize as bool? ?? true;
     var canCreate = ViewBag.CanCreate as bool? ?? true;
     var canArchive = ViewBag.CanArchive as bool? ?? true;
 }
 @section DashboardNavigation {
     <div class="dd-nav-actions" role="group" aria-label="@T("إجراءات اللوحة", "Dashboard actions")">
         <button type="button" id="dd-new-board" disabled hidden="@(!canCreate)">@T("إنشاء لوحة جديدة", "Create dashboard")</button>
-        <button type="button" id="dd-customize" aria-pressed="false">@T("تخصيص اللوحة", "Customize dashboard")</button>
+        <button type="button" id="dd-customize" aria-pressed="false" hidden="@(!canCustomize)">@T("تخصيص اللوحة", "Customize dashboard")</button>
         <div class="dd-board-controls" role="group" aria-label="@T("أدوات اللوحة", "Dashboard controls")">
             <div class="dd-board-picker">
                 <button type="button" id="dd-board-list" class="dd-board-trigger" aria-expanded="false" aria-controls="dd-board-menu" disabled>
@@ -27,7 +28,7 @@
                 </div>
             </div>
             <div class="dd-board-tools">
-                <button type="button" id="dd-rename-board" class="dd-nav-icon" title="@T("تغيير اسم اللوحة", "Rename dashboard")" aria-label="@T("تغيير اسم اللوحة", "Rename dashboard")" disabled>
+                <button type="button" id="dd-rename-board" class="dd-nav-icon" title="@T("إعدادات اللوحة", "Dashboard settings")" aria-label="@T("إعدادات اللوحة", "Dashboard settings")" disabled hidden="@(!canCustomize)">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 16-1 5 5-1L20 8l-4-4L4 16Zm10-10 4 4"/></svg>
                 </button>
                 <button type="button" id="dd-add" class="dd-nav-icon dd-toolbar-hidden" title="@T("إضافة جدول", "Add table")" aria-label="@T("إضافة جدول", "Add table")">
@@ -56,7 +57,7 @@
     <partial name="~/Views/Dashboard/_OverviewStyles.cshtml" />
     <link rel="stylesheet" href="~/css/dynamic-dashboard.css" asp-append-version="true" />
 }
-<div class="dd-page dd-is-loading" id="dynamicDashboard" dir="@(arabic ? "rtl" : "ltr")" data-password-switch="@ViewBag.PasswordSwitch" data-language="@(arabic ? "ar" : "en")" data-scope="@scope" data-repository="@ViewBag.RepositoryId" data-archive-url="@Url.Action("OpenDashboardSelection", "Archive")" data-main-board="@(mainBoard ? "true" : "false")" data-can-create="@(canCreate ? "true" : "false")" data-can-archive="@(canArchive ? "true" : "false")">
+<div class="dd-page dd-is-loading" id="dynamicDashboard" dir="@(arabic ? "rtl" : "ltr")" data-password-switch="@ViewBag.PasswordSwitch" data-language="@(arabic ? "ar" : "en")" data-scope="@scope" data-repository="@ViewBag.RepositoryId" data-archive-url="@Url.Action("OpenDashboardSelection", "Archive")" data-main-board="@(mainBoard ? "true" : "false")" data-can-customize="@(canCustomize ? "true" : "false")" data-can-create="@(canCreate ? "true" : "false")" data-can-archive="@(canArchive ? "true" : "false")">
     @Html.AntiForgeryToken()
     <div id="dd-loading" class="dd-loading" role="status" aria-label="@T("تحميل بيانات Laserfiche", "Loading Laserfiche data")"><span></span></div>
     <div class="dd-content" inert>
@@ -108,6 +109,31 @@
             <strong id="dd-board-dialog-title"></strong>
             <label class="dd-label" for="dd-board-name">@T("اسم اللوحة", "Dashboard name")</label>
             <input class="dd-control" id="dd-board-name" maxlength="80" required />
+            @* Who sees the board. The main board is everyone's own, so it has no choice. *@
+            <fieldset class="dd-visibility" id="dd-board-visibility">
+                <legend>@T("من يرى هذه اللوحة؟", "Who can see this dashboard?")</legend>
+                <div class="dd-visibility-options">
+                    <label class="dd-visibility-option">
+                        <input type="radio" name="dd-board-visibility" value="public" />
+                        <span class="dd-visibility-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg></span>
+                        <span class="dd-visibility-text">
+                            <strong>@T("عامة", "Public")</strong>
+                            <span>@T("تظهر في بوابة الإدارة، ويمكن للمسؤول أن يمنحها لغيرك للعرض فقط.", "Shown in the Admin Portal; the administrator can share it with others, view only.")</span>
+                        </span>
+                        <span class="dd-visibility-check" aria-hidden="true"></span>
+                    </label>
+                    <label class="dd-visibility-option">
+                        <input type="radio" name="dd-board-visibility" value="private" />
+                        <span class="dd-visibility-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></span>
+                        <span class="dd-visibility-text">
+                            <strong>@T("خاصة", "Private")</strong>
+                            <span>@T("لك وحدك. لا تظهر في بوابة الإدارة ولا يراها أحد غيرك.", "Only you. Not shown in the Admin Portal, and no one else sees it.")</span>
+                        </span>
+                        <span class="dd-visibility-check" aria-hidden="true"></span>
+                    </label>
+                </div>
+                <p class="dd-notice dd-visibility-warning" id="dd-board-visibility-warning" hidden>@T("عند جعلها خاصة تختفي من بوابة الإدارة، ولا يعود يراها أحد ممن مُنحت لهم.", "Once private, it leaves the Admin Portal, and no one it was shared with sees it any more.")</p>
+            </fieldset>
             <p id="dd-board-error" role="alert"></p>
             <div class="dd-editor-actions">
                 <button type="button" class="dd-btn" id="dd-board-cancel">@T("إلغاء", "Cancel")</button>

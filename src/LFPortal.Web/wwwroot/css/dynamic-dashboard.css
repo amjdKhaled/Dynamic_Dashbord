@@ -921,3 +921,28 @@ html:has(.dd-edit-mode) { overflow-anchor: none; }
 
 /* Admin Portal: a button the account may not use is hidden, even an icon button (display:grid). */
 .dd-nav-actions [hidden] { display: none !important; }
+/* Who sees a board (new board and board settings dialogs): public, listed in the Admin Portal, or private. */
+.dd-visibility { border: 0; margin: 14px 0 0; padding: 0; min-inline-size: 0; }
+.dd-visibility[hidden] { display: none; }
+.dd-visibility legend { color: #4f6257; font-size: 15px; font-weight: 600; padding: 0; margin: 0 0 7px; }
+.dd-visibility-options { display: grid; gap: 8px; }
+.dd-visibility-option { position: relative; display: flex; align-items: flex-start; gap: 10px; padding: 11px 12px; border: 1px solid var(--dd-border); border-radius: 10px; background: #fff; cursor: pointer; }
+.dd-visibility-option:hover { background: #f7f9fc; }
+.dd-visibility-option input { position: absolute; opacity: 0; pointer-events: none; }
+.dd-visibility-option:has(input:checked) { border-color: var(--dd-blue); background: #eef4fc; box-shadow: inset 0 0 0 1px var(--dd-blue); }
+.dd-visibility-option:has(input:focus-visible) { outline: 2px solid var(--dd-blue); outline-offset: 2px; }
+.dd-visibility-icon { display: grid; place-items: center; flex: none; inline-size: 34px; block-size: 34px; border-radius: 8px; background: rgb(21 96 131 / 8%); color: var(--dd-blue); }
+.dd-visibility-option:has(input:checked) .dd-visibility-icon { background: var(--dd-blue); color: #fff; }
+.dd-visibility-icon svg { inline-size: 18px; block-size: 18px; }
+.dd-visibility-text { display: grid; gap: 2px; min-inline-size: 0; }
+.dd-visibility-text strong { color: var(--dd-navy); font-size: 15px; }
+.dd-visibility-text span { color: var(--dd-muted); font-size: 13px; line-height: 1.6; }
+.dd-visibility-check { margin-inline-start: auto; flex: none; inline-size: 20px; block-size: 20px; border-radius: 50%; border: 2px solid #c5cfda; background: #fff; }
+.dd-visibility-option:has(input:checked) .dd-visibility-check { border-color: var(--dd-blue); background: var(--dd-blue) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='m5.5 10.5 3 3 6-7' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 14px no-repeat; }
+.dd-visibility-warning { margin: 12px 0 0; font-size: 13px; line-height: 1.7; }
+#dd-board-error { color: #b42318; font-size: 13px; margin: 8px 0 0; }
+#dd-board-error:empty { display: none; }
+
+/* A private board in the board menu. */
+.dd-board-private { display: inline-flex; align-items: center; gap: 4px; flex: none; padding: 2px 7px; border-radius: 6px; background: rgb(11 57 84 / 8%); color: var(--isb-deep-sea, #0B3954); font-size: .72em; font-weight: 600; }
+.dd-board-private svg { inline-size: 12px; block-size: 12px; }

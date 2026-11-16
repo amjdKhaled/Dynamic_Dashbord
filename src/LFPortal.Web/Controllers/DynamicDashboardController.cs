@@ -47,7 +47,9 @@ public sealed class DynamicDashboardController : Controller
         // What the Admin Portal gives this account here (everything without the portal).
         var access = PortalAccessView.Current(HttpContext);
         ViewBag.MainBoard = access?.SeesBoard(DashboardSections.MainBoard) ?? true;
-        ViewBag.CanCreate = access?.Has(DashboardSections.Create) ?? true;
+        // «تخصيص اللوحة» shows the customize button; a new board starts empty, so creating needs it too.
+        ViewBag.CanCustomize = access?.Has(DashboardSections.Customize) ?? true;
+        ViewBag.CanCreate = (access?.Has(DashboardSections.Create) ?? true) && (bool)ViewBag.CanCustomize;
         ViewBag.CanArchive = access?.Has(DashboardSections.Archive) ?? true;
         // The main board uses the same permission-scoped statistics as the existing overview.
         DashboardStatsDto stats;
@@ -206,7 +208,10 @@ public sealed class DynamicDashboardController : Controller
             !layout.TryGetProperty("name", out var name) || name.ValueKind != JsonValueKind.String ||
             string.IsNullOrWhiteSpace(name.GetString()) || name.GetString()!.Length > 80 ||
             !layout.TryGetProperty("charts", out var cards) ||
-            cards.ValueKind != JsonValueKind.Array || cards.GetArrayLength() > 80)
+            cards.ValueKind != JsonValueKind.Array || cards.GetArrayLength() > 80 ||
+            // Who sees the board: "public" (listed in the Admin Portal) or "private" (its owner only).
+            (layout.TryGetProperty("visibility", out var visibility) &&
+             (visibility.ValueKind != JsonValueKind.String || !DynamicBoardOwners.IsVisibility(visibility.GetString()))))
             return BadRequest(new { error = "مخطط اللوحة غير صالح." });
 
         var json = layout.GetRawText();
@@ -264,6 +269,9 @@ public sealed class DynamicDashboardController : Controller
             var scope = GetLayoutScope(repo.ServerUrl, repo.RepositoryId);
             if (scope is null) return Forbid();
             if (!MatchesLayoutScope(scope)) return StatusCode(409);
+            // Deleting one's own board is part of «تخصيص اللوحة».
+            if (DynamicBoardOwners.WhyNotChange(PortalAccessView.Current(HttpContext)) is { } refusal)
+                return StatusCode(403, new { error = refusal });
 
             System.IO.File.Delete(GetLayoutPath(scope, boardId));
             return NoContent();

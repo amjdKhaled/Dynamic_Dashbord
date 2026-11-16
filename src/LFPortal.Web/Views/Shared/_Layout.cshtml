@@ -511,9 +511,19 @@ textarea {
             }
             else
             {
-                <a asp-controller="DynamicDashboard" asp-action="Index" class="@(_ctrl == "DynamicDashboard" ? "active" : "")">@L["Dashboard"]</a>
-                <a asp-controller="Archive"   asp-action="Index" class="@(_ctrl == "Archive"   ? "active" : "")">@L["Archive"]</a>
-                <a asp-controller="Settings"  asp-action="Index" class="@(_ctrl == "Settings"  ? "active" : "")">@L["Settings"]</a>
+                @* Only the pages the Admin Portal gives this account (all of them without the portal). *@
+                @if (LFPortal.Web.Authentication.PortalAccessView.CanShow(Context, "overview"))
+                {
+                    <a asp-controller="DynamicDashboard" asp-action="Index" class="@(_ctrl == "DynamicDashboard" ? "active" : "")">@L["Dashboard"]</a>
+                }
+                @if (LFPortal.Web.Authentication.PortalAccessView.CanShow(Context, "archive"))
+                {
+                    <a asp-controller="Archive"   asp-action="Index" class="@(_ctrl == "Archive"   ? "active" : "")">@L["Archive"]</a>
+                }
+                @if (LFPortal.Web.Authentication.PortalAccessView.CanShow(Context, "settings"))
+                {
+                    <a asp-controller="Settings"  asp-action="Index" class="@(_ctrl == "Settings"  ? "active" : "")">@L["Settings"]</a>
+                }
             }
         </nav>
 

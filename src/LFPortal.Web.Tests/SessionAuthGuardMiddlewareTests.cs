@@ -400,6 +400,44 @@ public sealed class SessionAuthGuardMiddlewareTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public async Task Invoke_PortalBoardList_PassesWithoutABrowserSession(bool ssoConfigured)
+    {
+        // The Admin Portal calls with its key only; PortalBoardsController checks the key.
+        var reached = false;
+        var middleware = MakeMiddleware(
+            configuredRepoId: "",
+            ssoConfigured: ssoConfigured,
+            next: _ => { reached = true; return Task.CompletedTask; });
+        var context = MakeContext(path: "/api/portal/boards");
+
+        await middleware.InvokeAsync(context);
+
+        Assert.True(reached);
+        Assert.Empty(context.Response.Headers.Location.ToString());
+    }
+
+    [Theory]
+    [InlineData("/api/portal/boards/other")]
+    [InlineData("/api/portal")]
+    [InlineData("/api/portal/boardsx")]
+    public async Task Invoke_PortalBoardListLookalike_StillRequiresLogin(string path)
+    {
+        var reached = false;
+        var middleware = MakeMiddleware(
+            configuredRepoId: "",
+            ssoConfigured: true,
+            next: _ => { reached = true; return Task.CompletedTask; });
+        var context = MakeContext(path: path);
+
+        await middleware.InvokeAsync(context);
+
+        Assert.False(reached);
+        Assert.StartsWith("/Login", context.Response.Headers.Location.ToString());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task Invoke_StandaloneReadinessEndpoint_PassesBeforeLoginAndExternalShare(bool externalShare)
     {
         // The standalone launcher makes this request before it can open Login.

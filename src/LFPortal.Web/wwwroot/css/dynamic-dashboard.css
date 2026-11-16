@@ -918,3 +918,6 @@ html:has(.dd-edit-mode) { overflow-anchor: none; }
   .dd-save-dock { max-inline-size: calc(100vw - 24px); flex-wrap: wrap; justify-content: center; }
   .dd-save-dock #dd-layout-status { flex: 0 0 100%; text-align: center; }
 }
+
+/* Admin Portal: a button the account may not use is hidden, even an icon button (display:grid). */
+.dd-nav-actions [hidden] { display: none !important; }

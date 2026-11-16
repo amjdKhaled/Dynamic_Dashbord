@@ -137,8 +137,24 @@ try
     builder.Services.AddLocalization();
 
     // ── MVC ───────────────────────────────────────────────────────────────────
-    builder.Services.AddControllersWithViews(options => options.Filters.Add<LFPortal.Web.Authentication.RepositoryAuthenticationFilter>())
+    // Filters run in this order: the Laserfiche token is recovered first, then the
+    // Admin Portal decides what the signed-in account may open.
+    builder.Services.AddControllersWithViews(options =>
+                    {
+                        options.Filters.Add<LFPortal.Web.Authentication.RepositoryAuthenticationFilter>();
+                        options.Filters.Add<PortalAccessFilter>();
+                    })
                     .AddViewLocalization();
+
+    // ── Admin Portal: what each account may open, and which boards ───────────
+    builder.Services.AddOptions<PortalAccessOptions>()
+        .Bind(builder.Configuration.GetSection(PortalAccessOptions.SectionName));
+    builder.Services.AddHttpClient(PortalAccessClient.HttpClientName, (sp, client) =>
+            client.Timeout = TimeSpan.FromSeconds(Math.Clamp(
+                sp.GetRequiredService<IOptions<PortalAccessOptions>>().Value.TimeoutSeconds, 1, 60)))
+        // No redirects and no cookies: the key goes to the configured portal only.
+        .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false });
+    builder.Services.AddSingleton<IPortalAccessClient, PortalAccessClient>();
 
     // ── Authentication ────────────────────────────────────────────────────────
     // Dashboard.Cookie is the normal LFDS / repository-login browser identity.
@@ -260,6 +276,15 @@ try
         {
             Log.Information("SSO config: LFDS SSO is not configured (Laserfiche:Sso:LfdsBaseUrl is empty).");
         }
+
+        // The key is never logged; only whether one is set.
+        var portal = app.Services.GetRequiredService<IOptions<PortalAccessOptions>>().Value;
+        if (portal.IsEnabled)
+            Log.Information(
+                "Admin Portal access: BaseUrl={PortalBaseUrl} KeySet={PortalKeySet} CacheSeconds={PortalCacheSeconds}",
+                portal.BaseUrl, !string.IsNullOrWhiteSpace(portal.Key), portal.CacheSeconds);
+        else
+            Log.Information("Admin Portal access: not used (PortalAccess:BaseUrl is empty); everything is open.");
     }
 
     // ── Error handling ────────────────────────────────────────────────────────

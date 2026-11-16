@@ -113,7 +113,18 @@
   let rows = [], fields = [], charts = [], instances = [], editing = null;
   const boards = new Map();
   const mainBoard = {id:"default",name:T("اللوحة الرئيسية","Main dashboard"),layout:null};
-  let activeBoard = {...mainBoard};
+  // What the Admin Portal gives this account (everything without the portal). A board given
+  // to it arrives with readOnly and its owner: it is shown, never changed.
+  const mainAllowed = root.dataset.mainBoard !== "false";
+  const canCreate = root.dataset.canCreate !== "false";
+  const canArchive = root.dataset.canArchive !== "false";
+  const noBoard = {id:"",name:T("لا توجد لوحات","No dashboards"),layout:{version:3,charts:[]},none:true};
+  const locked = () => Boolean(activeBoard.readOnly || activeBoard.none);
+  const boardOrder = (a,b)=>a.id==="default"?-1:b.id==="default"?1:Boolean(a.readOnly)-Boolean(b.readOnly) ||
+    a.name.localeCompare(b.name,locale);
+  // The board to open when none is asked for, or when the open one is gone.
+  const fallbackBoard = () => boards.get(mainBoard.id) ?? [...boards.values()].sort(boardOrder)[0] ?? noBoard;
+  let activeBoard = mainAllowed ? {...mainBoard} : {...noBoard};
   let partial = false, busy = false, editMode = false, revision = 0, savedRevision = 0, saving = false, savedFlash = false, layoutReady = false, deleting = false;
 
   const quarterWidth = chart => chart.type==="kpi" || (chart.type==="overview" && overview.get(chart.id)?.span===3);
@@ -233,7 +244,20 @@
     $("dd-save-layout").disabled=!layoutReady || saving || deleting || revision===savedRevision;
     for(const id of ["dd-board-list","dd-new-board","dd-rename-board"])
       $(id).disabled=!layoutReady || saving || deleting;
-    const custom=activeBoard.id!=="default";
+    // A board given through the Admin Portal is view only: only its creator changes it.
+    $("dd-new-board").hidden=!canCreate;
+    $("dd-customize").hidden=locked();
+    $("dd-rename-board").hidden=locked();
+    $("dd-board-list").disabled||=activeBoard.none && boards.size===0;
+    const note=$("dd-board-note");
+    note.textContent=activeBoard.readOnly
+      ? T("للعرض فقط · أنشأها ","View only · created by ")+(activeBoard.owner||"")
+      : activeBoard.none&&layoutReady
+        ? T("لا توجد لوحات متاحة لك في هذا المستودع. اطلبها من مسؤول Admin Portal.",
+            "No dashboards are available to you in this repository. Ask the Admin Portal administrator.")
+        : "";
+    note.hidden=!note.textContent;
+    const custom=activeBoard.id!=="default" && !locked();
     $("dd-delete-board").classList.toggle("dd-toolbar-hidden",!custom);
     $("dd-delete-board").disabled=!layoutReady || !custom || saving || deleting;
     $("dd-customize").disabled=deleting;
@@ -241,7 +265,7 @@
     $("dd-repository").disabled=deleting;
     $("dd-layout-status").textContent=message ?? (saving?T("جارٍ الحفظ…","Saving…")
       :revision!==savedRevision?T("تغييرات غير محفوظة","Unsaved changes")
-      :savedFlash?T("تم الحفظ","Saved"):"");
+      :savedFlash&&!locked()?T("تم الحفظ","Saved"):"");
   }
   let savedFlashTimer;
   function clearSavedFlash() {
@@ -256,10 +280,12 @@
   function syncBoardPicker() {
     const items=[...boards.values()].filter(board=>board.id!==activeBoard.id);
     items.push(activeBoard);
-    items.sort((a,b)=>a.id==="default"?-1:b.id==="default"?1:a.name.localeCompare(b.name,locale));
+    items.sort(boardOrder);
     const trigger=$("dd-board-list");
     const label=$("dd-board-current");
-    const name=board=>board.id==="default"?presetTitle(board.name):board.name;
+    // A given board carries its creator's name: two people may name boards alike.
+    const name=board=>board.id==="default"?presetTitle(board.name)
+      :board.readOnly?board.name+" · "+(board.owner||""):board.name;
     label.textContent=name(activeBoard);
     trigger.title=label.textContent;
     trigger.setAttribute("aria-label",T("اختيار اللوحة: ","Select dashboard: ")+label.textContent);
@@ -293,13 +319,14 @@
   }
   function rememberBoard() {
     const url=new URL(window.location.href);
-    if(activeBoard.id==="default")url.searchParams.delete("board");
+    if(activeBoard.id==="default" || activeBoard.none)url.searchParams.delete("board");
     else url.searchParams.set("board",activeBoard.id);
     window.history.replaceState(window.history.state,"",url);
   }
   function activateBoard(board) {
     closeEditor();
     activeBoard={...board};
+    if(locked())editMode=false;
     vacantRows.clear();
     if(Array.isArray(board.layout?.vacantRows)) {
       for(const entry of board.layout.vacantRows) {
@@ -321,7 +348,7 @@
   }
   async function saveLayout() {
     if(revision===savedRevision)return true;
-    if(!layoutReady || saving || deleting)return false;
+    if(!layoutReady || saving || deleting || locked())return false;
     saving=true;
     const snapshot=revision;
     const layout={version:3,...boardState(),updatedAt:Date.now()};
@@ -334,6 +361,11 @@
         headers:{...requestHeaders,"Content-Type":"application/json","RequestVerificationToken":token||""},
         body:JSON.stringify(layout)
       });
+      // 403: the Admin Portal does not let this account save it; the server says why.
+      if(response.status===403) {
+        message=(await response.json().catch(()=>null))?.error||T("لا توجد صلاحية لحفظ هذه اللوحة.","You may not save this dashboard.");
+        return false;
+      }
       if(!response.ok)throw new Error("HTTP "+response.status);
       savedRevision=snapshot;
       savedBoardState=layout;
@@ -363,11 +395,11 @@
       const response=await dashboardFetch("/DynamicDashboard/Layout",{credentials:"same-origin",cache:"no-store",headers:requestHeaders});
       if(!response.ok)throw new Error("HTTP "+response.status);
       const result=await response.json();
-      boards.set(mainBoard.id,mainBoard);
+      if(mainAllowed)boards.set(mainBoard.id,mainBoard);
       for(const board of result.boards)boards.set(board.id,board);
       const id=new URL(window.location.href).searchParams.get("board");
       layoutReady=true;
-      activateBoard(boards.get(id)??boards.get(mainBoard.id));
+      activateBoard(boards.get(id)??fallbackBoard());
       rememberBoard();
     } catch {
       layoutReady=false;
@@ -606,6 +638,8 @@
   }
 
   async function openArchive(title, docs) {
+    // The Archive opens only for accounts the Admin Portal gives it to.
+    if (!canArchive) return;
     const ids = [...new Set(docs.map(doc => doc.id))];
     if (editMode || !ids.length) return;
     const entryIds=ids.join(",");
@@ -2150,6 +2184,7 @@
       buttons[next]?.focus();
     });
     const open=async create=>{
+      if(create ? !canCreate : locked())return;
       if(create && !await confirmLeaving())return;
       creating=create;
       $("dd-board-dialog-title").textContent=create?T("لوحة جديدة","New dashboard"):T("تغيير اسم اللوحة","Rename dashboard");
@@ -2161,7 +2196,7 @@
     $("dd-new-board").addEventListener("click",()=>open(true));
     $("dd-delete-board").addEventListener("click",async()=>{
       const {id,name:boardName}=activeBoard;
-      if(id==="default" || !layoutReady || saving || deleting || busy)return;
+      if(id==="default" || locked() || !layoutReady || saving || deleting || busy)return;
       if(!await showNotice(T("حذف لوحة «","Delete dashboard “")+boardName+T("»؟","”?"),T("حذف اللوحة","Delete dashboard")))return;
       deleting=true;
       closeEditor();
@@ -2178,7 +2213,7 @@
         }
         boards.delete(id);
         editMode=false;
-        activateBoard(boards.get(mainBoard.id)??mainBoard);
+        activateBoard(fallbackBoard());
         rememberBoard();
         message=T("تم حذف اللوحة","Dashboard deleted");
       } catch {
@@ -2219,6 +2254,7 @@
     window.addEventListener("pageshow",event=>{if(event.persisted)window.location.reload();});
     $("dd-refresh").addEventListener("click",refresh);
     $("dd-customize").addEventListener("click",()=>{
+      if(locked())return;
       editMode=!editMode;
       if(!editMode)closeEditor();
       render();
@@ -2265,6 +2301,6 @@
       valueChoices();
     });
   }
-  loadConfig(null);savedBoardState=boardState();wire();
+  loadConfig(mainAllowed?null:noBoard.layout);savedBoardState=boardState();wire();
   document.addEventListener("DOMContentLoaded",()=>restoreServerLayout().finally(refresh),{once:true});
 })();

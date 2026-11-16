@@ -135,4 +135,12 @@
   <data name="Previous"                xml:space="preserve"><value>Previous</value></data>
   <data name="Next"                    xml:space="preserve"><value>Next</value></data>
   <data name="TemplateStatistics"      xml:space="preserve"><value>Template Statistics</value></data>
+
+  <!-- Admin Portal access -->
+  <data name="AccessDeniedTitle"       xml:space="preserve"><value>Access not granted</value></data>
+  <data name="AccessDeniedDashboard"   xml:space="preserve"><value>Your account has no access to the Dynamic Dashboard in this repository. Ask the Admin Portal administrator for it.</value></data>
+  <data name="AccessDeniedSection"     xml:space="preserve"><value>Your account has no access to this section. Ask the Admin Portal administrator for it.</value></data>
+  <data name="AccessCheckUnavailable"  xml:space="preserve"><value>Your access could not be checked with the Admin Portal. Try again in a moment.</value></data>
+  <data name="AccessDeniedOpenInstead" xml:space="preserve"><value>Sections you can open:</value></data>
+  <data name="SignInAsAnotherAccount"  xml:space="preserve"><value>Sign in with another account</value></data>
 </root>

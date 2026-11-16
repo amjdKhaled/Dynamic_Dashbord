@@ -1,0 +1,34 @@
+@model LFPortal.Web.Authentication.AccessDeniedViewModel
+@using LFPortal.Web.Authentication
+@{
+    ViewData["Title"] = L["AccessDeniedTitle"];
+}
+
+<h1 style="font-size:1.5rem;font-weight:700;margin-bottom:24px;color:var(--lfp-text);">
+    @L["AccessDeniedTitle"]
+</h1>
+
+<div class="card">
+    <div class="alert @(Model.Reason == AccessDeniedReason.PortalUnavailable ? "alert--amber" : "alert--error")">
+        <span>&#9888;</span>
+        <div>@L[Model.MessageKey]</div>
+    </div>
+
+    @if (Model.Allowed.Count > 0)
+    {
+        <p style="margin-top:16px;font-size:.875rem;color:var(--lfp-muted);">@L["AccessDeniedOpenInstead"]</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+            @foreach (var section in Model.Allowed)
+            {
+                <a class="btn btn--primary" href="@DashboardSections.HomeOf(section)">@L[DashboardSections.LabelOf(section)]</a>
+            }
+        </div>
+    }
+
+    @if (Model.Reason != AccessDeniedReason.PortalUnavailable)
+    {
+        <p style="margin-top:16px;font-size:.875rem;">
+            <a href="/Login/SignOut">@L["SignInAsAnotherAccount"]</a>
+        </p>
+    }
+</div>

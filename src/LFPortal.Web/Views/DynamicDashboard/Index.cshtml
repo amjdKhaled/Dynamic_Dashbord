@@ -5,10 +5,14 @@
     string T(string ar, string en) => arabic ? ar : en;
     ViewData["Title"] = T("لوحة المعلومات الديناميكية", "Dynamic Dashboard");
     var scope = (string?)ViewBag.StorageScope ?? string.Empty;
+    // What the Admin Portal gives this account (all true without the portal).
+    var mainBoard = ViewBag.MainBoard as bool? ?? true;
+    var canCreate = ViewBag.CanCreate as bool? ?? true;
+    var canArchive = ViewBag.CanArchive as bool? ?? true;
 }
 @section DashboardNavigation {
     <div class="dd-nav-actions" role="group" aria-label="@T("إجراءات اللوحة", "Dashboard actions")">
-        <button type="button" id="dd-new-board" disabled>@T("إنشاء لوحة جديدة", "Create dashboard")</button>
+        <button type="button" id="dd-new-board" disabled hidden="@(!canCreate)">@T("إنشاء لوحة جديدة", "Create dashboard")</button>
         <button type="button" id="dd-customize" aria-pressed="false">@T("تخصيص اللوحة", "Customize dashboard")</button>
         <div class="dd-board-controls" role="group" aria-label="@T("أدوات اللوحة", "Dashboard controls")">
             <div class="dd-board-picker">
@@ -52,13 +56,14 @@
     <partial name="~/Views/Dashboard/_OverviewStyles.cshtml" />
     <link rel="stylesheet" href="~/css/dynamic-dashboard.css" asp-append-version="true" />
 }
-<div class="dd-page dd-is-loading" id="dynamicDashboard" dir="@(arabic ? "rtl" : "ltr")" data-password-switch="@ViewBag.PasswordSwitch" data-language="@(arabic ? "ar" : "en")" data-scope="@scope" data-repository="@ViewBag.RepositoryId" data-archive-url="@Url.Action("OpenDashboardSelection", "Archive")">
+<div class="dd-page dd-is-loading" id="dynamicDashboard" dir="@(arabic ? "rtl" : "ltr")" data-password-switch="@ViewBag.PasswordSwitch" data-language="@(arabic ? "ar" : "en")" data-scope="@scope" data-repository="@ViewBag.RepositoryId" data-archive-url="@Url.Action("OpenDashboardSelection", "Archive")" data-main-board="@(mainBoard ? "true" : "false")" data-can-create="@(canCreate ? "true" : "false")" data-can-archive="@(canArchive ? "true" : "false")">
     @Html.AntiForgeryToken()
     <div id="dd-loading" class="dd-loading" role="status" aria-label="@T("تحميل بيانات Laserfiche", "Loading Laserfiche data")"><span></span></div>
     <div class="dd-content" inert>
     <header class="dd-header">
         <div class="dd-headline">
             <h1>@T("لوحة المعلومات", "Dynamic") <span>@T("الديناميكية", "Dashboard")</span></h1>
+            <p id="dd-board-note" role="status" hidden></p>
         </div>
     </header>
     <div id="dd-notice" class="dd-notice" hidden>

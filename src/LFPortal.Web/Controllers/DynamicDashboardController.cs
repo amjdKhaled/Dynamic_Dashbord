@@ -44,6 +44,11 @@ public sealed class DynamicDashboardController : Controller
         ViewBag.PasswordSwitch = User.FindFirstValue(ClaimTypes.AuthenticationMethod) ==
             DashboardAuthenticationDefaults.PasswordAuthenticationMethod ? "true" : "false";
         ViewBag.StorageScope = GetLayoutScope(repo.ServerUrl, repo.RepositoryId);
+        // What the Admin Portal gives this account here (everything without the portal).
+        var access = PortalAccessView.Current(HttpContext);
+        ViewBag.MainBoard = access?.SeesBoard(DashboardSections.MainBoard) ?? true;
+        ViewBag.CanCreate = access?.Has(DashboardSections.Create) ?? true;
+        ViewBag.CanArchive = access?.Has(DashboardSections.Archive) ?? true;
         // The main board uses the same permission-scoped statistics as the existing overview.
         DashboardStatsDto stats;
         try
@@ -108,7 +113,32 @@ public sealed class DynamicDashboardController : Controller
         ? Path.Combine(DashboardConfigPaths.ProgramDataDirectory, "DynamicLayouts", scope + ".json")
         : Path.Combine(DashboardConfigPaths.ProgramDataDirectory, "DynamicLayouts", scope, boardId + ".json");
 
-    /// <summary>Loads the current user's layout stored locally on the IIS server.</summary>
+    /// <summary>
+    /// Records whose boards are in <paramref name="scope"/>, so the Admin Portal can list them.
+    /// Never fails the request.
+    /// </summary>
+    private async Task RememberOwnerAsync(string repositoryId, string scope, CancellationToken cancellationToken)
+    {
+        // The name the Admin Portal knows the account by, so the portal can tell whose board it is.
+        var userId = PortalAccessView.AccountName(HttpContext) ??
+                     User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name;
+        if (string.IsNullOrWhiteSpace(userId)) return;
+        try
+        {
+            await DynamicBoardOwners.RememberAsync(DynamicBoardOwners.DefaultRoot, scope,
+                new DynamicBoardOwners.Owner(repositoryId, userId), cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning("Could not record the board owner for the Admin Portal ({ErrorType}).",
+                ex.GetType().Name);
+        }
+    }
+
+    /// <summary>
+    /// Loads the current user's boards stored locally on the IIS server, then the boards the
+    /// Admin Portal gives them, which come with <c>readOnly</c> and their owner.
+    /// </summary>
     [HttpGet]
     public async Task<IActionResult> Layout(CancellationToken cancellationToken)
     {
@@ -119,9 +149,12 @@ public sealed class DynamicDashboardController : Controller
             var scope = GetLayoutScope(repo.ServerUrl, repo.RepositoryId);
             if (scope is null) return Forbid();
             if (!MatchesLayoutScope(scope)) return StatusCode(409);
+            await RememberOwnerAsync(repo.RepositoryId, scope, cancellationToken);
+            var access = PortalAccessView.Current(HttpContext);
             var boards = new List<object>();
             var original = GetLayoutPath(scope, "default");
-            if (System.IO.File.Exists(original)) await ReadBoardAsync(original, "default");
+            if ((access?.SeesBoard(DashboardSections.MainBoard) ?? true) && System.IO.File.Exists(original))
+                await ReadBoardAsync(original, "default", null);
 
             var directory = Path.Combine(Path.GetDirectoryName(original)!, scope);
             if (Directory.Exists(directory))
@@ -129,12 +162,18 @@ public sealed class DynamicDashboardController : Controller
                 foreach (var file in Directory.EnumerateFiles(directory, "*.json").OrderBy(path => path))
                 {
                     var id = Path.GetFileNameWithoutExtension(file);
-                    if (Guid.TryParseExact(id, "N", out _)) await ReadBoardAsync(file, id);
+                    if (Guid.TryParseExact(id, "N", out _)) await ReadBoardAsync(file, id, null);
                 }
             }
+
+            var root = DynamicBoardOwners.DefaultRoot;
+            foreach (var board in DynamicBoardOwners.Granted(access,
+                         DynamicBoardOwners.List(root, repo.RepositoryId, _logger), scope))
+                await ReadBoardAsync(board.PathIn(root), board.Id, board.Owner);
             return Json(new { boards });
 
-            async Task ReadBoardAsync(string path, string id)
+            // owner: null for the account's own boards, the creator's name for a board given to it.
+            async Task ReadBoardAsync(string path, string id, string? owner)
             {
                 string json;
                 try { json = await System.IO.File.ReadAllTextAsync(path, cancellationToken); }
@@ -142,7 +181,8 @@ public sealed class DynamicDashboardController : Controller
                 var layout = JsonSerializer.Deserialize<JsonElement>(json);
                 var name = layout.TryGetProperty("name", out var savedName) && savedName.ValueKind == JsonValueKind.String
                     ? savedName.GetString() : "اللوحة الرئيسية";
-                boards.Add(new { id, name, layout });
+                if (owner is null) boards.Add(new { id, name, layout });
+                else boards.Add(new { id, name, layout, owner, readOnly = true });
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -181,10 +221,19 @@ public sealed class DynamicDashboardController : Controller
             var scope = GetLayoutScope(repo.ServerUrl, repo.RepositoryId);
             if (scope is null) return Forbid();
             if (!MatchesLayoutScope(scope)) return StatusCode(409);
+            await RememberOwnerAsync(repo.RepositoryId, scope, cancellationToken);
             var path = GetLayoutPath(scope, boardId);
+            // Only the owner saves a board; a board given through the Admin Portal is view only,
+            // and a new board needs «إنشاء لوحات جديدة».
+            var refusal = DynamicBoardOwners.WhyNotSave(PortalAccessView.Current(HttpContext), boardId,
+                ownsIt: System.IO.File.Exists(path),
+                someoneElses: boardId != DashboardSections.MainBoard &&
+                              DynamicBoardOwners.BelongsToSomeoneElse(DynamicBoardOwners.DefaultRoot, scope, boardId));
+            if (refusal is not null) return StatusCode(403, new { error = refusal });
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
             await System.IO.File.WriteAllTextAsync(temp, json, cancellationToken);
+            DynamicBoardOwners.KeepCreationTime(path, temp);
             System.IO.File.Move(temp, path, overwrite: true);
             temp = null;
             return Ok(new { saved = true });

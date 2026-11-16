@@ -72,6 +72,15 @@ public sealed class SessionAuthGuardMiddleware
             return;
         }
 
+        // The Admin Portal's board list has no browser session; the controller itself
+        // requires the X-Portal-Key header. Exact path only, like the probes here.
+        if (string.Equals(context.Request.Path.Value, "/api/portal/boards",
+            StringComparison.OrdinalIgnoreCase))
+        {
+            await _next(context);
+            return;
+        }
+
         // The standalone process identity probe contains no repository/user data.
         // It must work before first login, when no repository is configured, and
         // when the external-share cookie is present. The endpoint itself is only

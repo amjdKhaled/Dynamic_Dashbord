@@ -2204,27 +2204,17 @@
     const visibility=$("dd-board-visibility");
     const choices=()=>[...visibility.querySelectorAll('input[type="radio"]')];
     const chosen=()=>choices().find(input=>input.checked)?.value;
-    // Making a public board private takes it away from everyone the portal gave it to.
-    const warnPrivate=()=>{
-      $("dd-board-visibility-warning").hidden=!(visibility.dataset.was==="public" && chosen()==="private");
-    };
-    visibility.addEventListener("change",()=>{
-      warnPrivate();
-      $("dd-board-error").textContent="";
-    });
+    visibility.addEventListener("change",()=>{ $("dd-board-error").textContent=""; });
     const open=async create=>{
       if(create ? !canCreate : !editable())return;
       if(create && !await confirmLeaving())return;
       creating=create;
-      $("dd-board-dialog-title").textContent=create?T("لوحة جديدة","New dashboard"):T("إعدادات اللوحة","Dashboard settings");
+      $("dd-board-dialog-title").textContent=create?T("لوحة جديدة","New dashboard"):T("تغيير اسم اللوحة","Rename dashboard");
       $("dd-board-error").textContent="";
       name.value=create?"":activeBoard.name;
-      // A new board has no ready answer: its creator picks. The main board has no such choice.
-      const current=create?undefined:activeBoard.visibility;
-      visibility.hidden=!create && !current;
-      visibility.dataset.was=current??"";
-      for(const input of choices())input.checked=input.value===current;
-      warnPrivate();
+      // Who sees a board is picked once, by its creator, with no ready answer. Renaming keeps it.
+      visibility.hidden=!create;
+      for(const input of choices())input.checked=false;
       dialog.showModal();
       name.focus();
     };
@@ -2284,10 +2274,7 @@
         editMode=true;
         activateBoard({id,name:value,visibility:choice,layout:{version:3,charts:[]}});
         clearSavedFlash();
-      } else {
-        activeBoard.name=value;
-        if(choice)activeBoard.visibility=choice;
-      }
+      } else activeBoard.name=value;
       syncBoardPicker();
       markChanged();
       dialog.close();

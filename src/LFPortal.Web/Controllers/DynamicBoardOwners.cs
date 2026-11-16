@@ -177,6 +177,14 @@ internal static class DynamicBoardOwners
         access is null || access.Has(LFPortal.Web.Authentication.DashboardSections.Customize)
             ? null : "ليست لديك صلاحية تخصيص اللوحات.";
 
+    /// <summary>
+    /// True when saving <paramref name="wantsPrivate"/> over the board saved at <paramref name="path"/>
+    /// would change who sees it. That is chosen once, when the board is created (a board saved
+    /// before the choice existed counts as public).
+    /// </summary>
+    internal static bool ChangesVisibility(string path, bool wantsPrivate) =>
+        File.Exists(path) && ReadSummary(path, null).Private != wantsPrivate;
+
     /// <summary>The board's saved name (null when missing or unreadable) and whether it is private.</summary>
     private static (string? Name, bool Private) ReadSummary(string path, ILogger? logger)
     {

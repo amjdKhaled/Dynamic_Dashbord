@@ -235,6 +235,11 @@ public sealed class DynamicDashboardController : Controller
                 someoneElses: boardId != DashboardSections.MainBoard &&
                               DynamicBoardOwners.BelongsToSomeoneElse(DynamicBoardOwners.DefaultRoot, scope, boardId));
             if (refusal is not null) return StatusCode(403, new { error = refusal });
+            // Who sees a board is chosen once, when it is created.
+            var wantsPrivate = layout.TryGetProperty("visibility", out var chosen) &&
+                               chosen.GetString() == DynamicBoardOwners.PrivateBoard;
+            if (boardId != DashboardSections.MainBoard && DynamicBoardOwners.ChangesVisibility(path, wantsPrivate))
+                return BadRequest(new { error = "لا يمكن تغيير من يرى اللوحة بعد إنشائها." });
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
             await System.IO.File.WriteAllTextAsync(temp, json, cancellationToken);

@@ -939,7 +939,6 @@ html:has(.dd-edit-mode) { overflow-anchor: none; }
 .dd-visibility-text span { color: var(--dd-muted); font-size: 13px; line-height: 1.6; }
 .dd-visibility-check { margin-inline-start: auto; flex: none; inline-size: 20px; block-size: 20px; border-radius: 50%; border: 2px solid #c5cfda; background: #fff; }
 .dd-visibility-option:has(input:checked) .dd-visibility-check { border-color: var(--dd-blue); background: var(--dd-blue) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='m5.5 10.5 3 3 6-7' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 14px no-repeat; }
-.dd-visibility-warning { margin: 12px 0 0; font-size: 13px; line-height: 1.7; }
 #dd-board-error { color: #b42318; font-size: 13px; margin: 8px 0 0; }
 #dd-board-error:empty { display: none; }
 

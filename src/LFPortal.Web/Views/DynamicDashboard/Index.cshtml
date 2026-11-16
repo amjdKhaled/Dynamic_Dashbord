@@ -28,7 +28,7 @@
                 </div>
             </div>
             <div class="dd-board-tools">
-                <button type="button" id="dd-rename-board" class="dd-nav-icon" title="@T("إعدادات اللوحة", "Dashboard settings")" aria-label="@T("إعدادات اللوحة", "Dashboard settings")" disabled hidden="@(!canCustomize)">
+                <button type="button" id="dd-rename-board" class="dd-nav-icon" title="@T("تغيير اسم اللوحة", "Rename dashboard")" aria-label="@T("تغيير اسم اللوحة", "Rename dashboard")" disabled hidden="@(!canCustomize)">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 16-1 5 5-1L20 8l-4-4L4 16Zm10-10 4 4"/></svg>
                 </button>
                 <button type="button" id="dd-add" class="dd-nav-icon dd-toolbar-hidden" title="@T("إضافة جدول", "Add table")" aria-label="@T("إضافة جدول", "Add table")">
@@ -109,7 +109,7 @@
             <strong id="dd-board-dialog-title"></strong>
             <label class="dd-label" for="dd-board-name">@T("اسم اللوحة", "Dashboard name")</label>
             <input class="dd-control" id="dd-board-name" maxlength="80" required />
-            @* Who sees the board. The main board is everyone's own, so it has no choice. *@
+            @* Who sees the board: chosen once, when it is created. Renaming does not offer it. *@
             <fieldset class="dd-visibility" id="dd-board-visibility">
                 <legend>@T("من يرى هذه اللوحة؟", "Who can see this dashboard?")</legend>
                 <div class="dd-visibility-options">
@@ -132,7 +132,6 @@
                         <span class="dd-visibility-check" aria-hidden="true"></span>
                     </label>
                 </div>
-                <p class="dd-notice dd-visibility-warning" id="dd-board-visibility-warning" hidden>@T("عند جعلها خاصة تختفي من بوابة الإدارة، ولا يعود يراها أحد ممن مُنحت لهم.", "Once private, it leaves the Admin Portal, and no one it was shared with sees it any more.")</p>
             </fieldset>
             <p id="dd-board-error" role="alert"></p>
             <div class="dd-editor-actions">

@@ -357,6 +357,22 @@ public sealed class PortalBoardsTests : IDisposable
             DynamicBoardOwners.Granted(Access("overview", "overview/*"), boards, AmirScope).Select(b => b.Id));
     }
 
+    [Fact]
+    public async Task ChangesVisibility_KeepsWhatTheCreatorChose()
+    {
+        await SeedPrivateAsync();
+        string Saved(string scope, string id) => Path.Combine(_root, scope, id + ".json");
+
+        // «لوحة المشتريات» was made private, «new» public, «Test 2» before the choice (so public).
+        Assert.True(DynamicBoardOwners.ChangesVisibility(Saved(AmirScope, Purchases), wantsPrivate: false));
+        Assert.False(DynamicBoardOwners.ChangesVisibility(Saved(AmirScope, Purchases), wantsPrivate: true));
+        Assert.True(DynamicBoardOwners.ChangesVisibility(Saved(AdminScope, New), wantsPrivate: true));
+        Assert.False(DynamicBoardOwners.ChangesVisibility(Saved(AdminScope, Test2), wantsPrivate: false));
+        Assert.True(DynamicBoardOwners.ChangesVisibility(Saved(AdminScope, Test2), wantsPrivate: true));
+        // A board not saved yet is being created: its creator picks either.
+        Assert.False(DynamicBoardOwners.ChangesVisibility(Saved(AdminScope, Hr), wantsPrivate: true));
+    }
+
     [Theory]
     [InlineData("public", true)]
     [InlineData("private", true)]

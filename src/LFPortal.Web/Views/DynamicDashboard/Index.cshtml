@@ -12,11 +12,15 @@
         <button type="button" id="dd-customize" aria-pressed="false">@T("تخصيص اللوحة", "Customize dashboard")</button>
         <div class="dd-board-controls" role="group" aria-label="@T("أدوات اللوحة", "Dashboard controls")">
             <div class="dd-board-picker">
-                <span id="dd-board-current" aria-hidden="true">@T("اللوحة الرئيسية", "Main dashboard")</span>
-                <span aria-hidden="true">⌄</span>
-                <select class="dd-control" id="dd-board-list" aria-label="@T("اختيار اللوحة", "Select dashboard")" disabled>
-                    <option value="default">@T("اللوحة الرئيسية", "Main dashboard")</option>
-                </select>
+                <button type="button" id="dd-board-list" class="dd-board-trigger" aria-expanded="false" aria-controls="dd-board-menu" disabled>
+                    <svg class="dd-board-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="M4 9h16M10 9v11"/></svg>
+                    <span id="dd-board-current">@T("اللوحة الرئيسية", "Main dashboard")</span>
+                    <svg class="dd-board-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 8 5 5 5-5"/></svg>
+                </button>
+                <div id="dd-board-menu" class="dd-board-menu" hidden>
+                    <strong>@T("لوحات التحكم", "Dashboards")</strong>
+                    <ul id="dd-board-options" aria-label="@T("اختيار اللوحة", "Select dashboard")"></ul>
+                </div>
             </div>
             <div class="dd-board-tools">
                 <button type="button" id="dd-rename-board" class="dd-nav-icon" title="@T("تغيير اسم اللوحة", "Rename dashboard")" aria-label="@T("تغيير اسم اللوحة", "Rename dashboard")" disabled>

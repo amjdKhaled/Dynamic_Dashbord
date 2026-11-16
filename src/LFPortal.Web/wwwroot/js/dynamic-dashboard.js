@@ -257,11 +257,33 @@
     const items=[...boards.values()].filter(board=>board.id!==activeBoard.id);
     items.push(activeBoard);
     items.sort((a,b)=>a.id==="default"?-1:b.id==="default"?1:a.name.localeCompare(b.name,locale));
-    const list=$("dd-board-list");
-    selectOptions(list,items.map(board=>({value:board.id,label:board.id==="default"?presetTitle(board.name):board.name})),activeBoard.id,null);
+    const trigger=$("dd-board-list");
     const label=$("dd-board-current");
-    label.title=label.textContent=list.selectedOptions[0]?.textContent ?? activeBoard.name;
-    list.title=label.title;
+    const name=board=>board.id==="default"?presetTitle(board.name):board.name;
+    label.textContent=name(activeBoard);
+    trigger.title=label.textContent;
+    trigger.setAttribute("aria-label",T("اختيار اللوحة: ","Select dashboard: ")+label.textContent);
+    const options=$("dd-board-options");
+    options.replaceChildren(...items.map(board=>{
+      const row=document.createElement("li");
+      const button=document.createElement("button");
+      button.type="button";
+      button.className="dd-board-option";
+      button.dataset.boardId=board.id;
+      const text=document.createElement("span");
+      text.textContent=name(board);
+      button.append(text);
+      if(board.id===activeBoard.id) {
+        button.setAttribute("aria-current","true");
+        const check=document.createElement("span");
+        check.className="dd-board-check";
+        check.setAttribute("aria-hidden","true");
+        check.textContent="✓";
+        button.append(check);
+      }
+      row.append(button);
+      return row;
+    }));
   }
   function rememberBoard() {
     const url=new URL(window.location.href);
@@ -1997,14 +2019,62 @@
     const name=$("dd-board-name");
     const list=$("dd-board-list");
     let creating=false;
-    list.addEventListener("change",async()=>{
-      const board=boards.get(list.value);
-      list.value=activeBoard.id;
-      if(!await confirmLeaving())return;
-      if(board) {
-        activateBoard(board);
-        rememberBoard();
+    const menu=$("dd-board-menu");
+    const picker=list.closest(".dd-board-picker");
+    const options=()=>[...$("dd-board-options").querySelectorAll("button")];
+    const closeMenu=(restoreFocus=false)=>{
+      menu.hidden=true;
+      list.setAttribute("aria-expanded","false");
+      if(restoreFocus)list.focus();
+    };
+    function fitMenu() {
+      menu.style.removeProperty("--dd-menu-shift");
+      if(menu.hidden)return;
+      const {left,right}=menu.getBoundingClientRect();
+      const shift=Math.max(12-left,0)-Math.max(right-document.documentElement.clientWidth+12,0);
+      menu.style.setProperty("--dd-menu-shift",shift+"px");
+    }
+    window.addEventListener("resize",fitMenu);
+    const openMenu=()=>{
+      if(list.disabled)return;
+      menu.hidden=false;
+      list.setAttribute("aria-expanded","true");
+      fitMenu();
+      (menu.querySelector('[aria-current="true"]') ?? options()[0])?.focus();
+    };
+    list.addEventListener("click",()=>menu.hidden?openMenu():closeMenu(true));
+    menu.addEventListener("click",async event=>{
+      const option=event.target.closest("button[data-board-id]");
+      if(!option)return;
+      const board=boards.get(option.dataset.boardId);
+      closeMenu(true);
+      if(list.disabled || !board || board.id===activeBoard.id || !await confirmLeaving())return;
+      activateBoard(board);
+      rememberBoard();
+    });
+    document.addEventListener("pointerdown",event=>{
+      if(!menu.hidden && !picker.contains(event.target))closeMenu();
+    });
+    picker.addEventListener("focusout",event=>{
+      if(!picker.contains(event.relatedTarget))closeMenu();
+    });
+    picker.addEventListener("keydown",event=>{
+      if(event.key==="Escape" && !menu.hidden) {
+        event.preventDefault();
+        closeMenu(true);
+        return;
       }
+      if(!["ArrowDown","ArrowUp","Home","End"].includes(event.key))return;
+      event.preventDefault();
+      if(menu.hidden) {
+        openMenu();
+        return;
+      }
+      const buttons=options();
+      const index=buttons.indexOf(document.activeElement);
+      const next=event.key==="Home"?0:event.key==="End"?buttons.length-1:
+        (index+(event.key==="ArrowDown"?1:-1)+buttons.length)%buttons.length;
+      buttons[next]?.focus();
     });
     const open=async create=>{
       if(create && !await confirmLeaving())return;

@@ -880,8 +880,6 @@ html:has(.dd-edit-mode) { overflow-anchor: none; }
 .dd-editor .dd-dates input { min-height: 48px; padding: 8px; min-width: 0; }
 .dd-kpi-range { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px 18px; margin-block-start: 12px; font-size: 1rem; font-weight: 600; }
 .dd-editor-preview #dd-editor-preview-card { padding: 14px; background: var(--isb-surface); border: 1px solid var(--dd-border); border-radius: 10px; }
-.dd-example-chart { position: relative; height: 240px; }
-.dd-example-total { font-size: 2rem; color: var(--dd-navy); }
 .dd-card .dd-table-wrap { inline-size: 100%; max-inline-size: 100%; overflow-x: auto; }
 .dd-document-table .dd-table td { overflow-wrap: anywhere; }
 .dd-document-table .dd-table td:nth-child(n+4) { font-variant-numeric: tabular-nums; }
@@ -910,8 +908,24 @@ html:has(.dd-edit-mode) { overflow-anchor: none; }
   font-weight: 700;
 }
 .dd-drag-ghost.dd-drop-unavailable { border-style: dashed; opacity: .65; }
-.dd-example-round { height: 240px; }
-.dd-example-round .dashboard-round-row { cursor: default; }
+/* «مثال على شكل العرض»: the live example in the table settings. */
+#dd-editor-preview-card { display: flex; flex-direction: column; gap: 10px; min-inline-size: 0; }
+.dd-example-head { display: flex; flex-direction: column; gap: 3px; min-inline-size: 0; }
+.dd-example-head strong { font-size: 1rem; font-weight: 600; border-inline-start: 4px solid #bf972c; padding-inline-start: 9px; overflow-wrap: anywhere; }
+.dd-example-head small { font-size: 13px; color: var(--dd-muted); }
+.dd-example-waiting .dd-example-head strong, .dd-example-waiting .dd-example-head small { color: #9fb1c4; }
+.dd-example-visual { padding: 0; overflow: visible; min-inline-size: 0; }
+#dd-editor-preview-card .dd-chart-stage { height: 240px; flex: none; }
+#dd-editor-preview-card .dashboard-round-layout { height: 240px; }
+#dd-editor-preview-card .dashboard-round-row, #dd-editor-preview-card .dd-table tbody tr { cursor: default !important; }
+.dd-example-scroll { overflow-x: auto; overflow-y: hidden; max-inline-size: 100%; }
+.dd-example-scroll-y { overflow-x: hidden; overflow-y: auto; max-block-size: 240px; }
+.dd-example-bone { display: block; block-size: 8px; border-radius: 4px; background: #e3eaf0; }
+.dd-example-ghost .dd-kpi-number { color: #c3d0dc; }
+.dd-example-ghost .dd-table th { color: #9fb1c4; }
+.dd-example-hint { margin: 0; padding-block-start: 8px; border-block-start: 1px dashed var(--dd-border); text-align: center; font-size: 13px; color: var(--dd-muted); }
+.dd-example-live { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #2b795b; }
+.dd-example-live::before { content: ""; inline-size: 7px; block-size: 7px; border-radius: 50%; background: currentColor; }
 
 .dd-drop-row-line { position: fixed; height: 4px; transform: translateY(-50%); background: var(--dd-blue); border-radius: 4px; z-index: 4; pointer-events: none; }
 @media (max-width: 480px) {

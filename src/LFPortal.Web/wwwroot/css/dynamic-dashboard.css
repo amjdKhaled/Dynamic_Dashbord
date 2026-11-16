@@ -824,6 +824,7 @@ html:has(.dd-edit-mode) { overflow-anchor: none; }
   box-shadow: 0 10px 24px #0d385030;
   font-weight: 700;
 }
+.dd-drag-ghost.dd-drop-unavailable { border-style: dashed; opacity: .65; }
 .dd-example-round { height: 240px; }
 .dd-example-round .dashboard-round-row { cursor: default; }
 

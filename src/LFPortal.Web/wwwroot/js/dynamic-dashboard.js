@@ -884,6 +884,7 @@
         }
         targetKey=key;
         plan=null;
+        ghost.classList.remove("dd-drop-unavailable");
         clearDropHighlight();
         if(!key)return;
         if(boundary) {
@@ -896,12 +897,13 @@
           line.style.cssText="top:"+boundary.top+"px;left:"+boundary.left+"px;width:"+boundary.width+"px";
           grid.append(line);
         } else if(desktopGrid()) {
-          plan=id?dropPlacement(desktopLayout,chart.id,id):emptyPlacement(desktopLayout,chart.id,{
+          plan=id?planCardSwap(chart.id,id):emptyPlacement(desktopLayout,chart.id,{
             row:Number(gap.dataset.row),column:Number(gap.dataset.column),width:desktopWidth(chart)
           });
-          showPlacement(plan);
+          if(plan)showPlacement(plan);
+          else ghost.classList.add("dd-drop-unavailable");
         } else if(id)plan={id};
-        target?.classList.add("dd-drop-target");
+        if(plan)target?.classList.add("dd-drop-target");
       }
       function scrollNearEdge() {
         const margin=64,y=pointer.clientY;
@@ -965,62 +967,64 @@
     });
   }
 
-  function dropPlacement(layout, sourceId, targetId) {
+  function dropPlacement(layout,sourceId,targetId,minWidth) {
     const source=layout.get(sourceId),target=layout.get(targetId);
+    if(!source || !target || sourceId===targetId)return null;
+    const track=[...layout].filter(([id,slot])=>id!==sourceId && slot.row===target.row)
+      .sort(([,a],[,b])=>a.column-b.column);
+    const index=track.findIndex(([id])=>id===targetId);
     const next=new Map(layout);
-    const rowItems=row=>[...next].filter(([,slot])=>slot.row===row).sort(([,a],[,b])=>a.column-b.column);
-    const place=(items,row)=>{
-      let column=0;
-      for(const [id,slot] of items) {
-        next.set(id,{row,column,width:slot.width});
-        column+=slot.width;
-      }
-    };
-    next.delete(sourceId);
-    if(source.row===target.row) {
-      const items=[...rowItems(source.row),[sourceId,source]];
-      const column=([id,slot])=>id===sourceId?target.column:id===targetId?source.column:slot.column;
-      items.sort((a,b)=>column(a)-column(b));
-      place(items,source.row);
-      return {next,placed:next.get(sourceId),insertedRow:null,displaced:[targetId]};
+    const block=[track[index]];
+    let start=index,end=index+1;
+    let width=target.width;
+
+    // A narrow target can be combined with adjacent cards, up to the source slot's capacity.
+    while(width<source.width && target.width<source.width) {
+      const after=track[end];
+      if(!after || after[1].column!==target.column+width || width+after[1].width>source.width)break;
+      block.push(after);
+      width+=after[1].width;
+      end++;
+    }
+    while(width<source.width && target.width<source.width) {
+      const before=track[start-1];
+      if(!before || before[1].column+before[1].width!==block[0][1].column || width+before[1].width>source.width)break;
+      block.unshift(before);
+      width+=before[1].width;
+      start--;
     }
 
-    const column=Math.min(target.column,desktopColumns-source.width);
-    const items=rowItems(target.row);
-    const displaced=items.filter(([,slot])=>slot.column<column+source.width && slot.column+slot.width>column);
-    const movedIds=new Set(displaced.map(([id])=>id));
-    const first=items.findIndex(([id])=>movedIds.has(id));
-    const remaining=items.filter(([id])=>!movedIds.has(id));
-    remaining.splice(first,0,[sourceId,source]);
-    for(const [id] of displaced)next.delete(id);
-    place(remaining,target.row);
-
-    const origin=rowItems(source.row);
-    const position=origin.findIndex(([,slot])=>slot.column>=source.column);
-    origin.splice(position<0?origin.length:position,0,...displaced);
-    const rows=[[]];
-    let width=0;
-    for(const item of origin) {
-      if(width+item[1].width>desktopColumns) {
-        rows.push([]);
-        width=0;
-      }
-      rows.at(-1).push(item);
-      width+=item[1].width;
+    if(width<minWidth(sourceId))return null;
+    const required=block.reduce((total,[id])=>total+minWidth(id),0);
+    if(required>source.width)return null;
+    const placed={row:target.row,column:block[0][1].column,width:Math.min(source.width,width)};
+    next.set(sourceId,placed);
+    let column=source.column;
+    let remaining=source.width;
+    let remainingMinimum=required;
+    for(const [id,slot] of block) {
+      remainingMinimum-=minWidth(id);
+      const fitted=Math.min(slot.width,remaining-remainingMinimum);
+      next.set(id,{row:source.row,column,width:fitted});
+      column+=fitted;
+      remaining-=fitted;
     }
-    const addedRows=rows.length-1;
-    const insertedRow=addedRows?source.row+1:null;
-    if(insertedRow!==null)
-      for(const [id,slot] of next)if(slot.row>=insertedRow)next.set(id,{...slot,row:slot.row+addedRows});
-    rows.forEach((items,index)=>place(items,source.row+index));
-    return {next,placed:next.get(sourceId),insertedRow,addedRows,displaced:[...movedIds]};
+    return {next,placed,insertedRow:null,displaced:block.map(([id])=>id),resize:true};
+  }
+
+  function planCardSwap(sourceId,targetId) {
+    const byId=new Map(charts.map(chart=>[chart.id,chart]));
+    return dropPlacement(desktopLayout,sourceId,targetId,id=>minimumWidth(byId.get(id)));
   }
 
   function applyDesktopDrop(sourceId,targetId) {
-    applyPlacement(dropPlacement(desktopLayout,sourceId,targetId));
+    const plan=planCardSwap(sourceId,targetId);
+    if(!plan)return false;
+    applyPlacement(plan);
+    return true;
   }
 
-  function applyPlacement({next,insertedRow,addedRows}) {
+  function applyPlacement({next,insertedRow,addedRows,resize=false}) {
     if(insertedRow!==null) {
       for(const [row,height] of [...vacantRows].sort(([a],[b])=>b-a)) {
         if(row<insertedRow)continue;
@@ -1033,6 +1037,10 @@
     for(const chart of charts) {
       const slot=next.get(chart.id);
       if(slot) {
+        if(resize && slot.width!==desktopLayout.get(chart.id)?.width) {
+          chart.width=slot.width;
+          chart.span=slot.width===desktopColumns?12:6;
+        }
         chart.slot={row:positions.get(slot.row),column:slot.column};
         vacantRows.delete(slot.row);
       }
@@ -1277,7 +1285,7 @@
       const order=[...desktopLayout].sort(([,a],[,b])=>a.row-b.row || a.column-b.column);
       const target=order[order.findIndex(([key])=>key===id)+offset];
       if(!target)return;
-      applyDesktopDrop(id,target[0]);
+      if(!applyDesktopDrop(id,target[0]))return;
     } else {
       const target=index+offset;
       if(target<0 || target>=charts.length)return;

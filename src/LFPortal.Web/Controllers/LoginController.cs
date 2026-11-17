@@ -90,7 +90,16 @@ public sealed class LoginController : Controller
 
         if (opts.AuthenticationMode == LaserficheAuthenticationMode.LfdsSso &&
             opts.Sso.IsConfigured && !ssoFailed)
+        {
+            // A browser that last signed in on the password page goes back there, not to LFDS.
+            if (CameFromPasswordPage(returnUrl))
+                return RedirectToAction(nameof(Password), new
+                {
+                    returnUrl,
+                    sessionExpired = HttpContext.Request.Query["sessionExpired"] == "true" ? "true" : null,
+                });
             return RedirectToAction("StartSso", new { returnUrl });
+        }
 
         var repo = await _repositoryContext.GetActiveRepositoryAsync(cancellationToken);
         var vm   = new LoginViewModel
@@ -116,6 +125,38 @@ public sealed class LoginController : Controller
     }
 
     // ------------------------------------------------------------------ //
+    // GET /Login/Password                                                  //
+    // ------------------------------------------------------------------ //
+
+    /// <summary>
+    /// The username / password sign-in page: a second way in for people without the Web Client.
+    /// It never redirects to LFDS. The repository and the account type are lists; the configured
+    /// repository and LFDS are chosen first.
+    /// </summary>
+    [HttpGet("/Login/Password")]
+    public async Task<IActionResult> Password(
+        string? returnUrl = null,
+        string? sessionExpired = null,
+        CancellationToken cancellationToken = default)
+    {
+        var repositories = await SignInRepositoriesAsync(cancellationToken);
+        var repo = await _repositoryContext.GetActiveRepositoryAsync(cancellationToken);
+        return View("Index", new LoginViewModel
+        {
+            PasswordPage         = true,
+            Repositories         = repositories,
+            ActiveRepository     = repo.RepositoryId,
+            AllowRepositoryInput = true,
+            SubmittedRepository  = Pick(repositories, _options.CurrentValue.RepositoryId) ??
+                                   repositories.FirstOrDefault() ?? repo.RepositoryId,
+            SelectedAccountType  = LoginAccountType.DirectoryServer,
+            ErrorMessage         = sessionExpired == "true"
+                ? "انتهت الجلسة. سجّل الدخول للعودة إلى الصفحة التي كنت تعرضها." : null,
+            ReturnUrl            = IsLocalUrl(returnUrl) ? returnUrl : null,
+        });
+    }
+
+    // ------------------------------------------------------------------ //
     // POST /Login                                                          //
     // ------------------------------------------------------------------ //
 
@@ -131,13 +172,23 @@ public sealed class LoginController : Controller
     {
         var repo = await _repositoryContext.GetActiveRepositoryAsync(cancellationToken);
         var opts = _options.CurrentValue;
-        var allowRepoInput = AllowRepositoryInput();
+        var passwordPage = input.PasswordPage;
+        // The password page always offers the repository list, even in a browser that came from
+        // the Web Client before; the posted choice must be one of the server's repositories.
+        IReadOnlyList<string> repositories = passwordPage
+            ? await SignInRepositoriesAsync(cancellationToken)
+            : [];
+        var allowRepoInput = passwordPage || AllowRepositoryInput();
         var repoId = allowRepoInput && !string.IsNullOrWhiteSpace(input.Repository)
             ? input.Repository.Trim()
             : repo.RepositoryId;
+        var listed = Pick(repositories, repoId);
+        if (listed is not null) repoId = listed;
 
         LoginViewModel ViewWithError(string? error) => new()
         {
+            PasswordPage         = passwordPage,
+            Repositories         = repositories,
             ActiveRepository     = repoId,
             AllowRepositoryInput = allowRepoInput,
             SubmittedRepository  = repoId,
@@ -150,7 +201,10 @@ public sealed class LoginController : Controller
         };
 
         if (!ModelState.IsValid)
-            return View(ViewWithError(null));
+            return View("Index", ViewWithError(null));
+
+        if (passwordPage && repositories.Count > 0 && listed is null)
+            return View("Index", ViewWithError("اختر مستودعًا من القائمة."));
 
         // Explicit namespace selection avoids authenticating a migrated LFDS user
         // against a same-named repository account. Never retry another identity.
@@ -222,6 +276,10 @@ public sealed class LoginController : Controller
                     serverUri, _logger, cancellationToken);
             }
 
+            // On the password page a 403 means the account is not one of that repository's users.
+            if (passwordPage && ex is LaserficheException { StatusCode: 403 })
+                return View(ViewWithError(NoAccessToRepository(input.Username, repoId)));
+
             return View(ViewWithError(ClassifyLoginError(ex, repoId)));
         }
 
@@ -229,6 +287,8 @@ public sealed class LoginController : Controller
         {
             _logger.LogInformation(
                 "Login: invalid credentials submitted for repository {RepoId}.", repoId);
+            if (passwordPage)
+                return View(ViewWithError("اسم المستخدم أو كلمة المرور غير صحيحة."));
             return View(ViewWithError(
                 input.AccountType == LoginAccountType.DirectoryServer
                     ? $"تعذر تسجيل الدخول بحساب Directory Server إلى {repoId}. تحقق من بيانات الحساب " +
@@ -253,6 +313,14 @@ public sealed class LoginController : Controller
             loginUsername,
             repoId,
             DashboardAuthenticationDefaults.PasswordAuthenticationMethod);
+
+        if (passwordPage)
+        {
+            // A plain browser session from now on (not a Web Client one), and remember that this
+            // browser uses the password page, so sign-out and an expired session come back here.
+            HttpContext.Session.Remove(RepositorySessionMiddleware.SessionKeySource);
+            RememberPasswordPage();
+        }
 
         _logger.LogInformation(
             "Login: session authenticated for repository {RepoId}.", repoId);
@@ -335,6 +403,9 @@ public sealed class LoginController : Controller
         }
         catch (LaserficheException ex) when (ex.StatusCode is 401 or 403 or 404)
         {
+            if (ex.StatusCode == 403 && arabic &&
+                method == DashboardAuthenticationDefaults.PasswordAuthenticationMethod)
+                return StatusCode(403, new { error = NoAccessToRepository(User.Identity?.Name, repository) });
             return StatusCode(ex.StatusCode, new { error = T("تعذر دخول حسابك إلى المستودع المحدد.", "Could not sign in to the selected repository.") });
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -731,6 +802,8 @@ public sealed class LoginController : Controller
             repositoryId: repo.RepositoryId,
             authenticationMethod: DashboardAuthenticationDefaults.LfdsAuthenticationMethod);
         _oAuthTransactionCookie.Delete(HttpContext);
+        // Signed in through LFDS: this browser goes back to SSO by default.
+        ForgetPasswordPage();
 
         _logger.LogInformation(
             "[SSO] Callback authenticated user {Username} via LFDS for repository {Repo}.",
@@ -799,6 +872,10 @@ public sealed class LoginController : Controller
     {
         var repositoryId = HttpContext.Session.GetString(
             RepositorySessionMiddleware.SessionKeyRepositoryId);
+        // Read before the sign-out below forgets who this was.
+        var signedInWithPassword =
+            User?.FindFirstValue(ClaimTypes.AuthenticationMethod) ==
+                DashboardAuthenticationDefaults.PasswordAuthenticationMethod;
         await _authService.InvalidateCurrentSessionTokensAsync();
 
         await HttpContext.SignOutAsync(DashboardAuthenticationDefaults.Scheme);
@@ -814,6 +891,12 @@ public sealed class LoginController : Controller
         _logger.LogInformation("Login: session authentication cleared (Change Account).");
 
         var options = _options.CurrentValue;
+        // Someone who signed in on the password page signs in there again, never through LFDS.
+        if (options.AuthenticationMode == LaserficheAuthenticationMode.LfdsSso &&
+            options.Sso.IsConfigured &&
+            (signedInWithPassword || HasPasswordPageMark()))
+            return RedirectToAction(nameof(Password));
+
         if (options.AuthenticationMode == LaserficheAuthenticationMode.LfdsSso &&
             options.Sso.IsConfigured &&
             !string.IsNullOrWhiteSpace(repositoryId))
@@ -877,6 +960,65 @@ public sealed class LoginController : Controller
         var source = HttpContext.Session.GetString(
             RepositorySessionMiddleware.SessionKeySource);
         return string.IsNullOrEmpty(source);
+    }
+
+    // ── Password page ─────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Marks a browser that signed in on the password page. It holds no identity, only which
+    /// sign-in page to show next; a sign-in through LFDS removes it.
+    /// </summary>
+    internal const string PasswordPageCookie = ".Dashboard.SignInPage";
+    private const string PasswordPageMark = "password";
+
+    private bool HasPasswordPageMark() =>
+        HttpContext.Request.Cookies[PasswordPageCookie] == PasswordPageMark;
+
+    /// <summary>
+    /// True when /Login should show the password page instead of starting LFDS: the browser
+    /// signed in there last, and this is not a Web Client or Desktop launch.
+    /// </summary>
+    private bool CameFromPasswordPage(string? returnUrl) =>
+        HasPasswordPageMark() &&
+        string.IsNullOrEmpty(HttpContext.Session.GetString(RepositorySessionMiddleware.SessionKeySource)) &&
+        !IsWebClientLaunch(returnUrl);
+
+    private void RememberPasswordPage() =>
+        HttpContext.Response.Cookies.Append(PasswordPageCookie, PasswordPageMark, new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = HttpContext.Request.IsHttps,
+            SameSite = SameSiteMode.Lax,
+            IsEssential = true,
+            Path = "/",
+            Expires = DateTimeOffset.UtcNow.AddDays(30),
+        });
+
+    private void ForgetPasswordPage()
+    {
+        if (HasPasswordPageMark())
+            HttpContext.Response.Cookies.Delete(PasswordPageCookie, new CookieOptions { Path = "/" });
+    }
+
+    /// <summary>The server's repositories for the password page (empty when unreadable).</summary>
+    private async Task<IReadOnlyList<string>> SignInRepositoriesAsync(CancellationToken cancellationToken)
+    {
+        var reader = HttpContext.RequestServices.GetService<ISignInRepositories>();
+        return reader is null ? [] : await reader.ListAsync(cancellationToken);
+    }
+
+    /// <summary>The listed repository with this id, ignoring case, or null.</summary>
+    private static string? Pick(IReadOnlyList<string> repositories, string? id) =>
+        string.IsNullOrWhiteSpace(id)
+            ? null
+            : repositories.FirstOrDefault(r => string.Equals(r, id.Trim(), StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>«الحساب X ليست له صلاحية على مستودع Y.» with the name as typed, without @LFDS.</summary>
+    internal static string NoAccessToRepository(string? username, string repositoryId)
+    {
+        var name = PortalAccountName.FromSignIn(username) ?? username?.Trim() ?? "";
+        return $"الحساب {name} ليست له صلاحية على مستودع {repositoryId}. " +
+               "اختر مستودعًا آخر أو اطلب الصلاحية من مسؤول النظام.";
     }
 
     private bool IsWebClientLaunch(string? returnUrl)
@@ -1138,6 +1280,12 @@ public sealed class LoginViewModel
     public bool IsRepositoryPasswordMode { get; init; }
     public string? ReturnUrl { get; init; }
 
+    /// <summary>True on <c>/Login/Password</c> (and when its form comes back with an error).</summary>
+    public bool PasswordPage { get; init; }
+
+    /// <summary>The repositories offered in the list; empty means a text box instead.</summary>
+    public IReadOnlyList<string> Repositories { get; init; } = [];
+
     /// <summary>Sanitized reason for an unsuccessful SSO callback.</summary>
     public string? SsoFailureReason { get; init; }
 }
@@ -1152,7 +1300,7 @@ public sealed class LoginInputModel
     public LoginAccountType AccountType { get; set; }
 
     /// <summary>Laserfiche username. Required.</summary>
-    [Required(ErrorMessage = "Username is required.")]
+    [Required(ErrorMessage = "اكتب اسم المستخدم.")]
     public string Username { get; set; } = string.Empty;
 
     /// <summary>
@@ -1161,6 +1309,9 @@ public sealed class LoginInputModel
     /// </summary>
     public string? Password { get; set; }
     public string? ReturnUrl { get; set; }
+
+    /// <summary>Posted by the form of <c>/Login/Password</c>.</summary>
+    public bool PasswordPage { get; set; }
 }
 
 /// <summary>Explicit account namespace; existing forms default to repository users.</summary>

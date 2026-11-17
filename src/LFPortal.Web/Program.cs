@@ -213,6 +213,7 @@ try
 
     builder.Services.AddAuthorization();
     builder.Services.AddSingleton<IOAuthTransactionCookie, OAuthTransactionCookie>();
+    builder.Services.AddSingleton<ISignInRepositories, SignInRepositories>();
 
     // ── Laserfiche Infrastructure layer ───────────────────────────────────────
     builder.Services.AddLaserficheInfrastructure(builder.Configuration);

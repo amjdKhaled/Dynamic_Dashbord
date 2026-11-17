@@ -37,7 +37,7 @@ namespace LFPortal.Web.Tests;
 ///  - StartSso falls back to Login (not LFDS) when SSO is not configured
 ///  - session/repository isolation is preserved (no cross-session leakage)
 /// </summary>
-public sealed class LoginControllerSsoDormantTests
+public sealed partial class LoginControllerSsoDormantTests
 {
     [Fact]
     public async Task FailedWebClientLogin_PreservesRepositoryAndInputPolicy()
@@ -158,7 +158,8 @@ public sealed class LoginControllerSsoDormantTests
     // ── Factory ───────────────────────────────────────────────────────────────
 
     private static (LoginController ctrl, SpyAuthService authSpy, SpyOAuthStateStore storeSpy)
-        Build(LaserficheOptions? options = null, bool directBrowser = true)
+        Build(LaserficheOptions? options = null, bool directBrowser = true,
+              ISignInRepositories? signInRepositories = null)
     {
         var opts      = options ?? DefaultOptions();
         var authSpy   = new SpyAuthService();
@@ -174,6 +175,8 @@ public sealed class LoginControllerSsoDormantTests
         services.AddLogging();
         services.AddDataProtection();
         services.AddControllersWithViews();
+        if (signInRepositories is not null)
+            services.AddSingleton(signInRepositories);
         services.AddAuthentication(DashboardAuthenticationDefaults.Scheme)
             .AddCookie(DashboardAuthenticationDefaults.Scheme, options =>
             {
@@ -1065,6 +1068,7 @@ public sealed class LoginControllerSsoDormantTests
         public bool TryAuthenticateResult       { get; set; } = true;
         public string? LastLoginUsername { get; private set; }
         public string? LastLoginPassword { get; private set; }
+        public string? LastLoginRepository { get; private set; }
         public Exception? LoginException { get; set; }
         public int  TryAuthenticateCallCount    { get; private set; }
         public int  ExchangeAuthCodeCallCount   { get; private set; }
@@ -1078,6 +1082,7 @@ public sealed class LoginControllerSsoDormantTests
             TryAuthenticateCallCount++;
             LastLoginUsername = u;
             LastLoginPassword = p;
+            LastLoginRepository = r.RepositoryId;
             if (LoginException is not null) return Task.FromException<bool>(LoginException);
             return Task.FromResult(TryAuthenticateResult);
         }

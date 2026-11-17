@@ -5,12 +5,12 @@
     ViewData["Title"] = "Sign In";
 }
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ar" dir="rtl">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-    <title>Sign In — Dashboard</title>
+    <title>تسجيل الدخول — Dashboard</title>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -133,6 +133,26 @@
         }
         .field input::placeholder { color: #a0aec0; }
 
+        /* ── Lists: the same box as the text fields ── */
+        .field select {
+            width: 100%;
+            padding: 9px 12px;
+            border: 1px solid var(--lfp-border);
+            border-radius: 6px;
+            font-size: .9375rem;
+            color: var(--lfp-text);
+            background: #fff;
+            transition: border-color .15s, box-shadow .15s;
+            outline: none;
+        }
+        .field select:focus {
+            border-color: var(--lfp-accent);
+            box-shadow: 0 0 0 3px rgba(59,130,246,.15);
+        }
+        .login-card .field select { background: var(--isb-field, #fff); border-color: var(--isb-border, var(--lfp-border)); }
+        .login-card .field select:focus { box-shadow: 0 0 0 3px var(--isb-tint, rgba(59,130,246,.15)); }
+        .field-hint { font-size: .75rem; color: var(--lfp-muted); margin-top: 6px; line-height: 1.6; }
+
         /* ── Error message ── */
         .login-error {
             display: flex;
@@ -182,15 +202,15 @@
 
         <div class="login-header">
             <div class="login-header__logo"><img src="~/frontend/isb-logo.jpg" alt="ISB" width="108" height="48" /></div>
-            <div class="login-header__subtitle">Sign in to Laserfiche</div>
+            <div class="login-header__subtitle">تسجيل الدخول إلى Laserfiche</div>
         </div>
 
         <div class="login-body">
 
-            @if (Model.IsRepositoryPasswordMode)
+            @if (Model.IsRepositoryPasswordMode || Model.PasswordPage)
             {
-                <p style="margin-bottom:18px;color:#475569;">
-                    Sign in with your Laserfiche repository username and password.
+                <p style="margin-bottom:18px;color:#475569;font-size:.9rem;">
+                    سجّل الدخول باسم المستخدم وكلمة المرور.
                 </p>
             }
 
@@ -200,9 +220,8 @@
                 <div class="login-error" role="alert" style="background:#fff3cd;border-color:#ffc107;color:#856404;">
                     <span class="login-error__icon">&#9888;&#65039;</span>
                     <span>
-                        Single sign-on was unsuccessful: @(Model.SsoFailureReason ?? "Unknown callback failure")
-                        Start authentication from the Dashboard or Laserfiche Web Client;
-                        do not open the Repository API authorize URL manually.
+                        تعذّر الدخول الموحّد (SSO): <bdi>@(Model.SsoFailureReason ?? "Unknown callback failure")</bdi>
+                        ابدأ الدخول من Dashboard أو من Laserfiche Web Client.
                     </span>
                 </div>
             }
@@ -220,43 +239,59 @@
             <form id="login-form" method="post" asp-controller="Login" asp-action="Index" novalidate>
                 @Html.AntiForgeryToken()
                 <input type="hidden" name="ReturnUrl" value="@Model.ReturnUrl" />
+                @if (Model.PasswordPage)
+                {
+                    <input type="hidden" name="PasswordPage" value="true" />
+                }
 
                 @if (!Model.AllowRepositoryInput)
                 {
-                    <div class="repo-row" aria-label="Active repository: @Model.ActiveRepository">
+                    <div class="repo-row" aria-label="المستودع: @Model.ActiveRepository">
                         <div class="repo-row__icon">&#128193;</div>
-                        <div><div class="repo-row__label">Repository</div><div class="repo-row__name">@Model.ActiveRepository</div></div>
+                        <div><div class="repo-row__label">المستودع</div><div class="repo-row__name"><bdi>@Model.ActiveRepository</bdi></div></div>
+                    </div>
+                }
+                else if (Model.Repositories.Count > 0)
+                {
+                    <div class="field">
+                        <label for="Repository">المستودع</label>
+                        <select id="Repository" name="Repository" required>
+                            @foreach (var repository in Model.Repositories)
+                            {
+                                <option value="@repository" selected="@string.Equals(repository, Model.SubmittedRepository, StringComparison.OrdinalIgnoreCase)">@repository</option>
+                            }
+                        </select>
                     </div>
                 }
                 else
                 {
                     <div class="field">
-                        <label for="Repository">Repository</label>
-                        <input type="text" id="Repository" name="Repository"
+                        <label for="Repository">المستودع</label>
+                        <input type="text" id="Repository" name="Repository" dir="auto"
                                value="@Model.SubmittedRepository" required />
                     </div>
                 }
 
+                @* LFDS first: it is the usual account. The hint and the example follow the choice. *@
                 <div class="field">
-                    <label for="AccountType">نوع الحساب / Account type</label>
-                    <select class="field-input" id="AccountType" name="AccountType">
-                        <option value="Repository" selected="@(Model.SelectedAccountType == LoginAccountType.Repository)">حساب المستودع / Repository account</option>
-                        <option value="DirectoryServer" selected="@(Model.SelectedAccountType == LoginAccountType.DirectoryServer)">Laserfiche Directory Server (LFDS)</option>
-                        <option value="Windows" selected="@(Model.SelectedAccountType == LoginAccountType.Windows)">Windows / Active Directory</option>
+                    <label for="AccountType">نوع الحساب</label>
+                    <select id="AccountType" name="AccountType">
+                        <option value="DirectoryServer" data-hint="اكتب اسم الحساب فقط، مثل amir." data-example="مثل amir"
+                                selected="@(Model.SelectedAccountType == LoginAccountType.DirectoryServer)">Laserfiche Directory Server (LFDS)</option>
+                        <option value="Repository" data-hint="اسم حساب المستودع، مثل ADMIN." data-example="مثل ADMIN"
+                                selected="@(Model.SelectedAccountType == LoginAccountType.Repository)">حساب المستودع</option>
+                        <option value="Windows" data-hint="اكتب DOMAIN\username أو username@@domain." data-example="DOMAIN\username"
+                                selected="@(Model.SelectedAccountType == LoginAccountType.Windows)">Windows / Active Directory</option>
                     </select>
-                    <div style="font-size:.75rem;color:var(--lfp-muted);margin-top:6px;line-height:1.6">
-                        LFDS: اكتب اسم الحساب؛ تُضاف <bdi>@@LFDS</bdi> تلقائيًا لتحديد نوعه.
-                        Windows: <bdi>DOMAIN\username</bdi> أو <bdi>username@@domain</bdi>.
-                    </div>
+                    <div class="field-hint" id="account-hint"></div>
                 </div>
 
                 <div class="field">
-                    <label for="Username">Username</label>
+                    <label for="Username">اسم المستخدم</label>
                     <input type="text"
                            id="Username"
                            name="Username"
                            autocomplete="username"
-                           placeholder="e.g. ADMIN"
                            value="@Model.SubmittedUsername"
                            required />
                     @if (ViewData.ModelState["Username"]?.Errors.Count > 0)
@@ -268,23 +303,36 @@
                 </div>
 
                 <div class="field">
-                    <label for="Password">Password <span style="font-weight:400;color:#94a3b8;">(optional)</span></label>
+                    <label for="Password">كلمة المرور</label>
                     <input type="password"
                            id="Password"
                            name="Password"
-                           autocomplete="current-password"
-                           placeholder="Leave blank if no password" />
+                           autocomplete="current-password" />
                     @*  Password is intentionally NOT marked required.
                         Some Laserfiche accounts have an empty password.
                         No client-side required validation is added here. *@
                 </div>
 
-                <button id="signin-button" type="submit" class="btn-signin">Sign In</button>
+                <button id="signin-button" type="submit" class="btn-signin">تسجيل الدخول</button>
             </form>
 
         </div>
     </div>
     <script>
+        // The hint under «نوع الحساب» and the username example follow the chosen account type.
+        (function () {
+            const type = document.getElementById('AccountType');
+            const hint = document.getElementById('account-hint');
+            const username = document.getElementById('Username');
+            function show() {
+                const option = type.options[type.selectedIndex];
+                hint.textContent = option ? option.getAttribute('data-hint') : '';
+                username.placeholder = option ? option.getAttribute('data-example') : '';
+            }
+            type.addEventListener('change', show);
+            show();
+        })();
+
         // Block double-clicks and Enter-key repeats from creating parallel token
         // requests. Browser validation remains server-owned because empty passwords
         // are valid for some Laserfiche accounts.
@@ -292,7 +340,7 @@
             const button = document.getElementById('signin-button');
             if (button.disabled) return false;
             button.disabled = true;
-            button.textContent = 'Signing in…';
+            button.textContent = 'جارٍ تسجيل الدخول…';
         });
     </script>
 </body>

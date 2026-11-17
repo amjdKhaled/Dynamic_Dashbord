@@ -238,7 +238,10 @@ public sealed class LoginController : Controller
                 "افتح الإعدادات واضبط رابط الـ API والمستودع ثم اختبر الاتصال."));
         }
 
-        var targetRepo = repo with { RepositoryId = repoId, DisplayName = repoId };
+        // Key too: the token is cached under Key, and every later request looks it up under the
+        // repository now stored in the session (repoId). Keeping the old Key (e.g. the configured
+        // "demo" after a sign-out, or "Demo" when isb is chosen) loses the token on the next page.
+        var targetRepo = repo with { Key = repoId, RepositoryId = repoId, DisplayName = repoId };
 
         // Establish a stable per-browser cache scope before acquiring the token.
         // This prevents a direct-login token from ever using the process-wide cache.

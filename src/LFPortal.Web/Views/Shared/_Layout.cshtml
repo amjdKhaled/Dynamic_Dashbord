@@ -448,6 +448,18 @@ textarea {
         }
         .lang-sep { color: rgba(142, 142, 142, 0.3); }
 
+        /* ── Sign out: only for a username / password sign-in ── */
+        .dd-signout {
+            display: inline-flex; align-items: center; gap: 8px; margin-inline-end: 10px;
+            padding: 7px 16px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, .35);
+            color: #fff; text-decoration: none; font-weight: 600; font-size: 14px; white-space: nowrap;
+            background: rgba(255, 255, 255, .06); transition: background .15s, border-color .15s;
+        }
+        .dd-signout:hover { background: rgba(255, 255, 255, .16); border-color: rgba(255, 255, 255, .6); color: #fff; }
+        .dd-signout:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+        .dd-signout svg { width: 17px; height: 17px; flex-shrink: 0; }
+        .dd-signout__who { color: rgba(255, 255, 255, .75); font-weight: 500; }
+
         /* ── RTL layout overrides ──────────────────────────────────────────── */
         @* { flex-direction: row-reverse; } *@
         [dir=rtl] .site-header__nav { margin-left: 0; margin-inline-start: auto; }
@@ -563,6 +575,16 @@ textarea {
             <span class="lang-sep">|</span>
             <a href="/SetCulture?culture=ar&returnUrl=@_returnUrl" class="@(_isRtl ? "lang-active" : "")">@L["LangAr"]</a>
         </div>
+        @* Only a username / password sign-in gets a way out; a Web Client (LFDS) sign-in has none, as before. *@
+        @if (!_externalShareReadOnly &&
+             LFPortal.Web.Authentication.SignOutButton.Shows(Context.User))
+        {
+            var _signOutLabel = _isRtl ? "تسجيل الخروج" : "Sign out";
+            <a class="dd-signout" href="/Login/SignOut" title="@_signOutLabel">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 5 12 10 7"/><line x1="5" y1="12" x2="15" y2="12"/></svg>
+                <span class="dd-signout__who"><bdi>@LFPortal.Web.Authentication.SignOutButton.Name(Context.User)</bdi></span> · @_signOutLabel
+            </a>
+        }
     </header>
 
     <main>

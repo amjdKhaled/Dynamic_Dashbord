@@ -1069,6 +1069,7 @@ public sealed partial class LoginControllerSsoDormantTests
         public string? LastLoginUsername { get; private set; }
         public string? LastLoginPassword { get; private set; }
         public string? LastLoginRepository { get; private set; }
+        public string? LastLoginKey { get; private set; }
         public Exception? LoginException { get; set; }
         public int  TryAuthenticateCallCount    { get; private set; }
         public int  ExchangeAuthCodeCallCount   { get; private set; }
@@ -1083,6 +1084,7 @@ public sealed partial class LoginControllerSsoDormantTests
             LastLoginUsername = u;
             LastLoginPassword = p;
             LastLoginRepository = r.RepositoryId;
+            LastLoginKey = r.Key;
             if (LoginException is not null) return Task.FromException<bool>(LoginException);
             return Task.FromResult(TryAuthenticateResult);
         }

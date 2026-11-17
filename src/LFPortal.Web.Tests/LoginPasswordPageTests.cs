@@ -158,6 +158,8 @@ public sealed partial class LoginControllerSsoDormantTests
 
         Assert.IsType<RedirectToActionResult>(result);
         Assert.Equal("isb", auth.LastLoginRepository);
+        // The token is cached under the key the next requests use: the session's repository.
+        Assert.Equal("isb", auth.LastLoginKey);
         Assert.Equal("isb", ctrl.HttpContext.Session.GetString("AuthenticatedRepositoryId"));
         Assert.Null(ctrl.HttpContext.Session.GetString("ActiveRepositorySource"));
         var cookies = ctrl.Response.Headers.SetCookie.ToString();
@@ -214,6 +216,24 @@ public sealed partial class LoginControllerSsoDormantTests
     public void NoAccessToRepository_NamesTheAccountAsTyped(string username, string repository, string start)
     {
         Assert.StartsWith(start, LoginController.NoAccessToRepository(username, repository));
+    }
+
+    [Fact]
+    public void SignOutButton_ShowsOnlyForAPasswordSignIn()
+    {
+        static ClaimsPrincipal SignedIn(string method, string? name = null)
+        {
+            var claims = new List<Claim> { new(ClaimTypes.AuthenticationMethod, method) };
+            if (name is not null) claims.Add(new Claim(ClaimTypes.Name, name));
+            return new ClaimsPrincipal(new ClaimsIdentity(claims, DashboardAuthenticationDefaults.Scheme));
+        }
+
+        var password = SignedIn(DashboardAuthenticationDefaults.PasswordAuthenticationMethod, "omer@LFDS");
+        Assert.True(SignOutButton.Shows(password));
+        Assert.Equal("omer", SignOutButton.Name(password));
+        Assert.False(SignOutButton.Shows(SignedIn(DashboardAuthenticationDefaults.LfdsAuthenticationMethod)));
+        Assert.False(SignOutButton.Shows(new ClaimsPrincipal(new ClaimsIdentity())));
+        Assert.False(SignOutButton.Shows(null));
     }
 
     [Fact]

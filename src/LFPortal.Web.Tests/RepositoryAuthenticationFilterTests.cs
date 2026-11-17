@@ -67,14 +67,21 @@ public sealed class RepositoryAuthenticationFilterTests
     [Theory]
     [InlineData("https://lf.test/LFRepositoryAPI", "http://lf.test/laserfiche/index.aspx", "http://lf.test")]
     [InlineData("https://lf.test", "https://evil.test/Laserfiche", "https://lf.test")]
-    public void EntryLink_SearchesExactIdAndPreservesOnlyTrustedWebClientOrigin(string api, string referer, string origin)
+    public void EntryLinks_OpenTheEntryAndPreserveOnlyTrustedWebClientOrigin(string api, string referer, string origin)
     {
-        var url = LaserficheWebClientLinks.EntrySearch(api, "Arabic repository", 619, referer);
-        Assert.StartsWith(origin + "/laserfiche/Browse.aspx?db=Arabic%20repository#search=", url);
-        Assert.EndsWith(";view=search", url);
-        Assert.DoesNotContain("#?", url);
-        Assert.EndsWith("{LF:ID=619};view=search", Uri.UnescapeDataString(url));
-        Assert.DoesNotContain("index.aspx", url);
+        // Documents open in the viewer; the id stays in the query so it survives sign-in.
+        Assert.Equal(origin + "/laserfiche/DocView.aspx?db=Arabic%20repository&docid=619",
+            LaserficheWebClientLinks.Document(api, "Arabic repository", 619, referer));
+        // Folders open in the browser, in the "#?id=" form Web Access uses itself.
+        Assert.Equal(origin + "/laserfiche/Browse.aspx?db=Arabic%20repository#?id=619",
+            LaserficheWebClientLinks.Folder(api, "Arabic repository", 619, referer));
+    }
+
+    [Fact]
+    public void EntryLinks_RejectInvalidIds()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => LaserficheWebClientLinks.Document("https://lf.test", "repo", 0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => LaserficheWebClientLinks.Folder("https://lf.test", "repo", -1));
     }
 
     [Theory]
@@ -86,7 +93,8 @@ public sealed class RepositoryAuthenticationFilterTests
     {
         Assert.Equal(expected, LaserficheWebClientLinks.ValidateClientUrl("https://lf.test", candidate));
         if (expected is not null)
-            Assert.StartsWith(expected + "?db=repo#search=", LaserficheWebClientLinks.EntrySearch("https://lf.test", "repo", 445, candidate));
+            Assert.Equal(expected[..^"Browse.aspx".Length] + "DocView.aspx?db=repo&docid=445",
+                LaserficheWebClientLinks.Document("https://lf.test", "repo", 445, candidate));
     }
 
     private static RepositoryAuthenticationFilter Filter(ILaserficheAuthService auth) => new(auth,

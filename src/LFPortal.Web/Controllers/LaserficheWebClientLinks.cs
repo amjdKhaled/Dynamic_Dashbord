@@ -13,13 +13,8 @@ public static class LaserficheWebClientLinks
         return origin.GetLeftPart(UriPartial.Authority);
     }
 
-    public static string BaseUrl(string serverUrl, string repositoryId, string? webClientOrigin = null)
-    {
-        var origin = ValidateOrigin(serverUrl, webClientOrigin)
-            ?? new Uri(serverUrl, UriKind.Absolute).GetLeftPart(UriPartial.Authority);
-        var client = ValidateClientUrl(serverUrl, webClientOrigin) ?? origin + "/laserfiche/Browse.aspx";
-        return $"{client}?db={Uri.EscapeDataString(repositoryId)}#";
-    }
+    public static string BaseUrl(string serverUrl, string repositoryId, string? webClientOrigin = null) =>
+        $"{ClientDirectory(serverUrl, webClientOrigin)}Browse.aspx?db={Uri.EscapeDataString(repositoryId)}#";
 
     public static string? ValidateClientUrl(string serverUrl, string? candidate)
     {
@@ -35,9 +30,30 @@ public static class LaserficheWebClientLinks
         return origin + path[..(slash + 1)] + "Browse.aspx";
     }
 
-    public static string EntrySearch(string serverUrl, string repositoryId, int entryId, string? origin = null)
+    /// <summary>
+    /// Opens the document itself in the Web Client viewer, the same link Laserfiche
+    /// uses. The id is in the query string, so it survives the LFDS sign-in redirect,
+    /// and Laserfiche decides whether the signed-in user may see the document.
+    /// </summary>
+    public static string Document(string serverUrl, string repositoryId, int entryId, string? webClientOrigin = null)
     {
         if (entryId <= 0) throw new ArgumentOutOfRangeException(nameof(entryId));
-        return BaseUrl(serverUrl, repositoryId, origin) + "search=" + Uri.EscapeDataString($"{{LF:ID={entryId}}}") + ";view=search";
+        return $"{ClientDirectory(serverUrl, webClientOrigin)}DocView.aspx?db={Uri.EscapeDataString(repositoryId)}&docid={entryId}";
+    }
+
+    /// <summary>Opens the folder in the Web Client browser (Web Access keeps it as "#?id=").</summary>
+    public static string Folder(string serverUrl, string repositoryId, int entryId, string? webClientOrigin = null)
+    {
+        if (entryId <= 0) throw new ArgumentOutOfRangeException(nameof(entryId));
+        return BaseUrl(serverUrl, repositoryId, webClientOrigin) + "?id=" + entryId;
+    }
+
+    // The Web Client folder, ending in "/", e.g. https://server/laserfiche/.
+    private static string ClientDirectory(string serverUrl, string? webClientOrigin)
+    {
+        var browse = ValidateClientUrl(serverUrl, webClientOrigin) ??
+            (ValidateOrigin(serverUrl, webClientOrigin) ??
+             new Uri(serverUrl, UriKind.Absolute).GetLeftPart(UriPartial.Authority)) + "/laserfiche/Browse.aspx";
+        return browse[..^"Browse.aspx".Length];
     }
 }

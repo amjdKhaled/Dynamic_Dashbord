@@ -312,12 +312,19 @@ public sealed class ArchiveController : Controller
         LaserficheWebClientLinks.BaseUrl(serverUrl, repositoryId,
             HttpContext.Session.GetString(LaserficheWebClientLinks.OriginSessionKey));
 
-    public async Task<IActionResult> OpenInLaserfiche(int entryId, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Sends the browser straight to the entry in the Laserfiche Web Client: a document
+    /// opens in the viewer, a folder opens in the browser. Laserfiche handles sign-in
+    /// and access, so this route needs no Dashboard session.
+    /// </summary>
+    public async Task<IActionResult> OpenInLaserfiche(int entryId, bool folder = false, CancellationToken cancellationToken = default)
     {
         if (entryId <= 0) return BadRequest();
         var repository = await _repositoryContext.GetActiveRepositoryAsync(cancellationToken);
-        return Redirect(LaserficheWebClientLinks.EntrySearch(repository.ServerUrl, repository.RepositoryId,
-            entryId, HttpContext.Session.GetString(LaserficheWebClientLinks.OriginSessionKey)));
+        var origin = HttpContext.Session.GetString(LaserficheWebClientLinks.OriginSessionKey);
+        return Redirect(folder
+            ? LaserficheWebClientLinks.Folder(repository.ServerUrl, repository.RepositoryId, entryId, origin)
+            : LaserficheWebClientLinks.Document(repository.ServerUrl, repository.RepositoryId, entryId, origin));
     }
 
     private static LFEntry MapSearchEntry(LFSearchResult item) => new()

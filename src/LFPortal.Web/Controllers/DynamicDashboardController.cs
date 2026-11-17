@@ -8,6 +8,7 @@ using LFPortal.Domain.Entities;
 using LFPortal.Domain.Exceptions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace LFPortal.Web.Controllers;
 
@@ -361,7 +362,8 @@ public sealed class DynamicDashboardController : Controller
     /// «المستندات حسب نشاط المستخدم»): grouping by «المستخدم / المنشئ» shows only them.
     /// </summary>
     [HttpGet]
-    public async Task<IActionResult> Rows([FromServices] IPortalPeopleClient people, CancellationToken cancellationToken)
+    public async Task<IActionResult> Rows([FromServices] IPortalPeopleClient people, [FromServices] IMemoryCache cache,
+        CancellationToken cancellationToken)
     {
         try
         {
@@ -385,70 +387,14 @@ public sealed class DynamicDashboardController : Controller
                 // The catalog can be unavailable even when entry metadata is readable.
             }
             var rootId = await _entries.GetRootEntryIdAsync(cancellationToken);
-            var folders = new Queue<int>();
-            var seenFolders = new HashSet<int>();
-            var seenDocuments = new HashSet<int>();
-            var documents = new List<LFEntry>();
-            folders.Enqueue(rootId);
-
-            while (folders.Count > 0)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                var folderId = folders.Dequeue();
-                if (!seenFolders.Add(folderId)) continue;
-
-                IReadOnlyList<LFEntry> children;
-                try
-                {
-                    children = await _entries.GetAllFolderChildrenAsync(folderId, cancellationToken);
-                }
-                catch (LaserficheException ex) when (folderId != rootId && (ex.StatusCode == 403 || ex.StatusCode == 404))
-                {
-                    // A hidden subtree must not be traversed or disclosed to the caller.
-                    continue;
-                }
-
-                foreach (var child in children)
-                {
-                    if (child.EntryType is LFEntryType.Folder or LFEntryType.RecordSeries)
-                        folders.Enqueue(child.Id);
-                    else if (child.EntryType == LFEntryType.Document && seenDocuments.Add(child.Id))
-                        documents.Add(child);
-                }
-            }
+            var scan = await new RowsScan(_entries, cache).ScanAsync(rootId, scope,
+                (entryId, ex) => _logger.LogWarning(ex, "Could not decode metadata for entry {EntryId}.", entryId),
+                cancellationToken);
+            var rows = scan.Rows;
+            _logger.LogInformation("Dynamic dashboard rows: {Documents} documents, {Reused} remembered, {Visible} visible.",
+                scan.Examined, scan.Reused, rows.Count);
 
             var results = new List<object>();
-            var rows = new (LFEntry? Entry, IReadOnlyList<LFFieldValue>? Fields)[documents.Count];
-            await Parallel.ForEachAsync(Enumerable.Range(0, documents.Count),
-                new ParallelOptions { MaxDegreeOfParallelism = 6, CancellationToken = cancellationToken },
-                async (index, token) =>
-                {
-                    var entry = documents[index];
-                    try
-                    {
-                        var visibleEntry = await _entries.GetEntryAsync(entry.Id, token);
-                        if (visibleEntry.Id != entry.Id)
-                            throw new InvalidOperationException("Laserfiche returned an unexpected entry identifier.");
-                        rows[index] = (visibleEntry, null);
-                        try
-                        {
-                            rows[index] = (visibleEntry, await _entries.GetEntryFieldsAsync(entry.Id, token));
-                        }
-                        catch (LaserficheException ex) when (ex.StatusCode is 403 or 404)
-                        {
-                            // Read access to the entry and to its metadata are separate.
-                        }
-                        catch (JsonException ex)
-                        {
-                            _logger.LogWarning(ex, "Could not decode metadata for entry {EntryId}.", entry.Id);
-                        }
-                    }
-                    catch (LaserficheException ex) when (ex.StatusCode is 403 or 404)
-                    {
-                        // An unreadable document is excluded entirely.
-                    }
-                });
-
             // Add fields returned by actual entries, even if the definition catalog omitted them.
             foreach (var field in rows.Where(row => row.Fields is not null).SelectMany(row => row.Fields!))
             {
@@ -465,7 +411,6 @@ public sealed class DynamicDashboardController : Controller
             var fieldDataIncomplete = false;
             foreach (var row in rows)
             {
-                if (row.Entry is null) continue;
                 var values = row.Fields is null ? null : new Dictionary<string, HashSet<string>>();
                 if (row.Fields is null) fieldDataIncomplete = true;
                 foreach (var field in row.Fields ?? Array.Empty<LFFieldValue>())
@@ -507,7 +452,7 @@ public sealed class DynamicDashboardController : Controller
                 people = seen?.People.Select(person => person.Name).Distinct(StringComparer.Ordinal).ToArray(),
                 fields = catalog.Values.OrderBy(field => field.Name).ThenBy(field => field.Id),
                 fieldDataIncomplete,
-                examined = documents.Count,
+                examined = scan.Examined,
                 visible = results.Count
             });
 

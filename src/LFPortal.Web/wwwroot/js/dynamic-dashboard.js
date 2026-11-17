@@ -347,15 +347,8 @@
     closeEditor();
     activeBoard={...board,visibility:visibilityOf(board)};
     if(!editable())editMode=false;
+    // Empty rows saved by older versions are dropped: cards always move up into free space.
     vacantRows.clear();
-    if(Array.isArray(board.layout?.vacantRows)) {
-      for(const entry of board.layout.vacantRows) {
-        if(!Array.isArray(entry))continue;
-        const [row,height]=entry;
-        if(Number.isInteger(row) && row>=0 && row<160 && Number.isFinite(height) && height>0 && height<=12000)
-          vacantRows.set(row,height);
-      }
-    }
     revision=0;
     savedRevision=0;
     clearSavedFlash();
@@ -846,7 +839,25 @@
       place(chart,Math.floor(cursor/desktopColumns),cursor%desktopColumns,width);
       cursor+=width;
     }
-    return placements;
+    return compactDesktop(placements);
+  }
+
+  // Gravity: every card moves up, keeping its column, while the row above has room for it,
+  // so a deleted, hidden or moved card never leaves an empty gap. Cards keep their order:
+  // a card never jumps over another one, and rows left empty disappear.
+  function compactDesktop(placements) {
+    const occupied=[];
+    const compacted=new Map();
+    const free=(row,column,width)=>!occupied[row]?.slice(column,column+width).some(Boolean);
+    const ordered=[...placements].sort(([,a],[,b])=>a.row-b.row || a.column-b.column);
+    for(const [id,slot] of ordered) {
+      let row=Math.min(slot.row,occupied.length);
+      while(row>0 && free(row-1,slot.column,slot.width))row--;
+      occupied[row]??=Array(desktopColumns).fill(false);
+      occupied[row].fill(true,slot.column,slot.column+slot.width);
+      compacted.set(id,{row,column:slot.column,width:slot.width});
+    }
+    return compacted;
   }
 
   function gridPosition(element,{row,column,width}) {
@@ -1241,11 +1252,8 @@
         visibilityButton(ghost,
           ()=>{chart.hidden=!chart.hidden;markChanged();render();}),
         ...(activeBoard.id==="default" && overview.has(chart.id)?[]:[iconButton(T("حذف الجدول","Delete widget"),"×",async()=>{if(await confirmDialog(T("حذف الجدول","Delete widget"),T("حذف هذا الجدول من لوحتك؟","Delete this widget from your dashboard?"),T("حذف الجدول","Delete widget"))){
-          const position=desktopLayout.get(chart.id);
-          if(position && desktopGrid()) {
-            freezeSlots();
-            vacantRows.set(position.row,Math.min(12000,el.getBoundingClientRect().height));
-          }
+          // The cards below move up into the space it leaves (arrangeDesktop compacts).
+          if(desktopLayout.has(chart.id) && desktopGrid())freezeSlots();
           tablePages.delete(chart.id);charts=charts.filter(c=>c.id!==chart.id);markChanged();render();}})])
       );
     }

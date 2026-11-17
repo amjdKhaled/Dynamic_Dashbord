@@ -52,6 +52,8 @@ public sealed class DynamicDashboardController : Controller
         // «تخصيص اللوحة» shows the customize button; a new board starts empty, so creating needs it too.
         ViewBag.CanCustomize = access?.Has(DashboardSections.Customize) ?? true;
         ViewBag.CanCreate = (access?.Has(DashboardSections.Create) ?? true) && (bool)ViewBag.CanCustomize;
+        // Without «يختار أن تكون اللوحة عامة أو خاصة» every new board is private and nothing says so.
+        ViewBag.ChoosesVisibility = (access?.Has(DashboardSections.Public) ?? true) && (bool)ViewBag.CanCreate;
         // The main board uses the same permission-scoped statistics as the existing overview.
         DashboardStatsDto stats;
         try
@@ -275,6 +277,10 @@ public sealed class DynamicDashboardController : Controller
                                chosen.GetString() == DynamicBoardOwners.PrivateBoard;
             if (boardId != DashboardSections.MainBoard && DynamicBoardOwners.ChangesVisibility(path, wantsPrivate))
                 return BadRequest(new { error = "لا يمكن تغيير من يرى اللوحة بعد إنشائها." });
+            // A new public board needs «يختار أن تكون اللوحة عامة أو خاصة».
+            if (DynamicBoardOwners.WhyNotPublic(PortalAccessView.Current(HttpContext), boardId,
+                    ownsIt: System.IO.File.Exists(path), wantsPrivate) is { } notPublic)
+                return StatusCode(403, new { error = notPublic });
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
             await System.IO.File.WriteAllTextAsync(temp, json, cancellationToken);

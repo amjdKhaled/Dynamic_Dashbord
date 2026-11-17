@@ -178,6 +178,16 @@ internal static class DynamicBoardOwners
             ? null : "ليست لديك صلاحية تخصيص اللوحات.";
 
     /// <summary>
+    /// Why a new board may not be public (no «يختار أن تكون اللوحة عامة أو خاصة»), or <c>null</c>.
+    /// A saved board keeps what it was given when created; a board with no "visibility" is public.
+    /// </summary>
+    internal static string? WhyNotPublic(
+        LFPortal.Web.Authentication.DashboardAccess? access, string boardId, bool ownsIt, bool wantsPrivate) =>
+        access is null || wantsPrivate || ownsIt || boardId == LFPortal.Web.Authentication.DashboardSections.MainBoard ||
+        access.Has(LFPortal.Web.Authentication.DashboardSections.Public)
+            ? null : "ليست لديك صلاحية إنشاء لوحات عامة.";
+
+    /// <summary>
     /// True when saving <paramref name="wantsPrivate"/> over the board saved at <paramref name="path"/>
     /// would change who sees it. That is chosen once, when the board is created (a board saved
     /// before the choice existed counts as public).

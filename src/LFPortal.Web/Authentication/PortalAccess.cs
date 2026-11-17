@@ -54,6 +54,11 @@ public static class DashboardSections
     /// </summary>
     public const string Customize = "customize";
     /// <summary>
+    /// «يختار أن تكون اللوحة عامة أو خاصة»: the «من يرى هذه اللوحة؟» question when creating a board.
+    /// Without it every new board is private (its creator's only) and the question never shows.
+    /// </summary>
+    public const string Public = "public";
+    /// <summary>
     /// The archive browser and document viewer (الأرشيف). Since 2026-11-16 it is no permission:
     /// every account that holds the Dynamic Dashboard opens it, and Laserfiche decides which
     /// documents it sees.

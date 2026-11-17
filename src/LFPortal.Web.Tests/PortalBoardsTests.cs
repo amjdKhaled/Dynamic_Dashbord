@@ -300,6 +300,24 @@ public sealed class PortalBoardsTests : IDisposable
         Assert.Equal(expected, DynamicBoardOwners.WhyNotSave(access, boardId, ownsIt, someoneElses));
     }
 
+    [Theory]
+    // Without the portal, a new board may be public as before.
+    [InlineData(false, "", New, false, false, null)]
+    // A private board needs nothing more; a public one needs «يختار أن تكون اللوحة عامة أو خاصة».
+    [InlineData(true, "overview,customize,create", Hr, false, true, null)]
+    [InlineData(true, "overview,customize,create", Hr, false, false, "ليست لديك صلاحية إنشاء لوحات عامة.")]
+    [InlineData(true, "overview,customize,create,public", Hr, false, false, null)]
+    // A saved board keeps what it was given when created (a board from before the choice is public).
+    [InlineData(true, "overview,customize,create", New, true, false, null)]
+    // The main board has no visibility.
+    [InlineData(true, "overview,overview/default,customize", "default", false, false, null)]
+    public void WhyNotPublic_NeedsThePublicChoice(
+        bool portal, string sections, string boardId, bool ownsIt, bool wantsPrivate, string? expected)
+    {
+        var access = portal ? Access(sections.Split(',', StringSplitOptions.RemoveEmptyEntries)) : null;
+        Assert.Equal(expected, DynamicBoardOwners.WhyNotPublic(access, boardId, ownsIt, wantsPrivate));
+    }
+
     [Fact]
     public void WhyNotChange_NeedsCustomizeOnlyWithThePortal()
     {

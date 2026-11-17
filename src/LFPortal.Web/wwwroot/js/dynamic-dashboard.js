@@ -123,6 +123,9 @@
   // settings and delete buttons of one's own boards). A new board starts empty, so creating needs it.
   const canCustomize = root.dataset.canCustomize !== "false";
   const canCreate = canCustomize && root.dataset.canCreate !== "false";
+  // «يختار أن تكون اللوحة عامة أو خاصة». Without it every new board is private, and nothing on the
+  // page speaks of public or private: no question when creating, no «خاصة» tag in the list.
+  const choosesVisibility = canCreate && root.dataset.choosesVisibility !== "false";
   const noBoard = {id:"",name:T("لا توجد لوحات","No dashboards"),layout:{version:3,charts:[]},none:true};
   const locked = () => Boolean(activeBoard.readOnly || activeBoard.none);
   const editable = () => canCustomize && !locked();
@@ -318,7 +321,7 @@
       text.className="dd-board-option-name";
       text.textContent=name(board);
       button.append(icon,text);
-      if(visibilityOf(board)==="private") {
+      if(choosesVisibility && visibilityOf(board)==="private") {
         const chip=document.createElement("span");
         chip.className="dd-board-private";
         chip.innerHTML=lockIcon;
@@ -2320,7 +2323,7 @@
       $("dd-board-error").textContent="";
       name.value=create?"":activeBoard.name;
       // Who sees a board is picked once, by its creator, with no ready answer. Renaming keeps it.
-      visibility.hidden=!create;
+      visibility.hidden=!create || !choosesVisibility;
       for(const input of choices())input.checked=false;
       dialog.showModal();
       name.focus();
@@ -2379,7 +2382,7 @@
         const id=Array.from(crypto.getRandomValues(new Uint8Array(16)),
           byte=>byte.toString(16).padStart(2,"0")).join("");
         editMode=true;
-        activateBoard({id,name:value,visibility:choice,layout:{version:3,charts:[]}});
+        activateBoard({id,name:value,visibility:choosesVisibility?choice:"private",layout:{version:3,charts:[]}});
         clearSavedFlash();
       } else activeBoard.name=value;
       syncBoardPicker();

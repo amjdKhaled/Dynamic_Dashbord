@@ -286,7 +286,7 @@ internal sealed class CompleteLaserficheEntryService : ILaserficheEntryService
             allEntries.AddRange(parsed.Entries);
             nextUrl = ResolveNextLink(nextUrl, parsed.NextLink);
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "Complete folder listing. EntryId={EntryId}; Page={Page}; PageEntries={PageEntries}; RunningTotal={RunningTotal}; HasNext={HasNext}.",
                 entryId, pageNumber, parsed.Entries.Count, allEntries.Count, nextUrl is not null);
         }
@@ -299,7 +299,7 @@ internal sealed class CompleteLaserficheEntryService : ILaserficheEntryService
             .ToList()
             .AsReadOnly();
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "Complete folder listing finished. EntryId={EntryId}; Pages={Pages}; UniqueEntries={Count}.",
             entryId, pageNumber, unique.Count);
 

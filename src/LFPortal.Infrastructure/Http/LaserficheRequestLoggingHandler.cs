@@ -7,11 +7,16 @@ using Microsoft.Extensions.Options;
 namespace LFPortal.Infrastructure.Http;
 
 /// <summary>
-/// Logs the URL inputs immediately before each Laserfiche HTTP request is sent.
+/// Writes one short line per Laserfiche request: method, URL, HTTP status and time taken.
+/// The response body is written only when Laserfiche answers with an error (shortened to
+/// <see cref="MaxLoggedBodyLength"/> characters, tokens and passwords redacted). Successful
+/// bodies hold document names and field values, so they are never written to the log.
 /// No credentials or authorization headers are logged.
 /// </summary>
 internal sealed class LaserficheRequestLoggingHandler : DelegatingHandler
 {
+    internal const int MaxLoggedBodyLength = 4000;
+
     private readonly IOptionsMonitor<LaserficheOptions> _optionsMonitor;
     private readonly ILogger<LaserficheRequestLoggingHandler> _logger;
 
@@ -27,36 +32,48 @@ internal sealed class LaserficheRequestLoggingHandler : DelegatingHandler
         HttpRequestMessage request,
         CancellationToken cancellationToken)
     {
-        var options = _optionsMonitor.CurrentValue;
-
-        _logger.LogInformation(
-            "Laserfiche request: ServerUrl={ServerUrl}, ApiBasePath={ApiBasePath}, " +
-            "Final Request URL={FinalRequestUrl}",
-            options.ServerUrl,
-            options.ApiBasePath,
-            request.RequestUri);
-
-        var response = await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        var mediaType = response.Content.Headers.ContentType?.MediaType;
-        var isJson = mediaType is not null &&
-            (mediaType.Equals("application/json", StringComparison.OrdinalIgnoreCase) ||
-             mediaType.EndsWith("+json", StringComparison.OrdinalIgnoreCase));
-        if (isJson)
+        if (_logger.IsEnabled(LogLevel.Debug))
         {
-            // ReadAsStringAsync buffers HttpContent; it does not require replacing
-            // the body. Keep its original bytes, encoding, disposition and length.
-            var responseBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            var options = _optionsMonitor.CurrentValue;
+            _logger.LogDebug(
+                "Laserfiche request: ServerUrl={ServerUrl}, ApiBasePath={ApiBasePath}, Final Request URL={FinalRequestUrl}",
+                options.ServerUrl, options.ApiBasePath, request.RequestUri);
+        }
+
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
+        var response = await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        var elapsed = System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+
+        if (response.IsSuccessStatusCode)
+        {
             _logger.LogInformation(
-                "Laserfiche response: HTTP {StatusCode} {ReasonPhrase} for {Method} {RequestUrl}. Response body: {ResponseBody}",
-                (int)response.StatusCode, response.ReasonPhrase, request.Method, request.RequestUri,
-                RedactSensitiveJson(responseBody));
+                "Laserfiche {Method} {RequestUrl} -> HTTP {StatusCode} in {ElapsedMs:0} ms",
+                request.Method, request.RequestUri, (int)response.StatusCode, elapsed);
+            return response;
+        }
+
+        var mediaType = response.Content.Headers.ContentType?.MediaType;
+        var isText = mediaType is not null &&
+            (mediaType.Equals("application/json", StringComparison.OrdinalIgnoreCase) ||
+             mediaType.EndsWith("+json", StringComparison.OrdinalIgnoreCase) ||
+             mediaType.StartsWith("text/", StringComparison.OrdinalIgnoreCase));
+        if (isText)
+        {
+            // ReadAsStringAsync buffers HttpContent; the caller can still read the body.
+            var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            body = RedactSensitiveJson(body);
+            if (body.Length > MaxLoggedBodyLength)
+                body = body[..MaxLoggedBodyLength] + $"... [{body.Length - MaxLoggedBodyLength} more characters]";
+            _logger.LogWarning(
+                "Laserfiche {Method} {RequestUrl} -> HTTP {StatusCode} {ReasonPhrase} in {ElapsedMs:0} ms. Response body: {ResponseBody}",
+                request.Method, request.RequestUri, (int)response.StatusCode, response.ReasonPhrase, elapsed, body);
         }
         else
         {
-            // PDF/TIFF/JPEG and unknown content MUST remain binary and streamed.
-            _logger.LogInformation(
-                "Laserfiche response: HTTP {StatusCode} {ReasonPhrase} for {Method} {RequestUrl}. Content-Type={ContentType}; Content-Length={ContentLength}.",
-                (int)response.StatusCode, response.ReasonPhrase, request.Method, request.RequestUri,
+            // PDF/TIFF/JPEG and unknown content stay binary and streamed.
+            _logger.LogWarning(
+                "Laserfiche {Method} {RequestUrl} -> HTTP {StatusCode} {ReasonPhrase} in {ElapsedMs:0} ms. Content-Type={ContentType}; Content-Length={ContentLength}.",
+                request.Method, request.RequestUri, (int)response.StatusCode, response.ReasonPhrase, elapsed,
                 mediaType, response.Content.Headers.ContentLength);
         }
 

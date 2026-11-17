@@ -148,18 +148,7 @@ footer.site-footer { background: #F7F8FD !important; }
 .arc-tbl th.arc-lf-head { width:1%; cursor:default; }
 .arc-tbl td.arc-lf-cell { width:1%; text-align:end; white-space:nowrap; }
 .arc-sr-only { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
-.arc-lf-btn { display:inline-flex; align-items:center; gap:8px; height:36px; padding-block:0; padding-inline:4px 10px;
-              box-sizing:border-box; border-radius:999px; border:1px solid #D4DEE6; background:#FFFFFF; color:#142633;
-              font-size:13px; font-weight:600; text-decoration:none; white-space:nowrap;
-              transition:border-color .12s ease-out, background .12s ease-out, box-shadow .12s ease-out; }
-.arc-lf-btn:hover { border-color:#14618A; background:#F5F9FC; color:#142633; text-decoration:none;
-                    box-shadow:0 4px 12px -8px rgba(11,57,84,.6); }
-.arc-lf-btn:focus-visible { outline:2px solid #14618A; outline-offset:2px; }
-.arc-lf-mark { flex:none; width:28px; height:28px; border-radius:999px; display:flex; align-items:center; justify-content:center;
-               background-color:#0B3954; background-image:linear-gradient(135deg, #0B3954 40%, #14618A); color:#FFFFFF;
-               font-size:11px; font-weight:700; box-shadow:inset 0 -2px 0 #C29A2E; }
-.arc-lf-arrow { color:#14618A; transition:transform .12s ease-out; }
-.arc-lf-btn:hover .arc-lf-arrow { transform:translate(-2px,-2px); }
+/* the pill itself (.lf-open-btn) lives in isb-theme.css */
 .arc-detail-title { color:var(--a-text); font-size:.9rem; font-weight:600; margin-bottom:14px;
                      padding-bottom:10px; border-bottom:1px solid var(--a-border);
                      display:flex; align-items:center; justify-content:space-between; }
@@ -214,8 +203,11 @@ footer.site-footer { background: #F7F8FD !important; }
         }
         @if (Model.IsDrillDown && !string.IsNullOrWhiteSpace(Model.LaserficheWebClientUrl))
         {
-            <a class="arc-open-lf" href="@Model.LaserficheWebClientUrl">
-                Open in Laserfiche
+            <a class="lf-open-btn" href="@Model.LaserficheWebClientUrl"
+               title="فتح في Laserfiche" aria-label="فتح في Laserfiche">
+                <span class="lf-open-btn__mark" aria-hidden="true" dir="ltr">LF</span>
+                <span dir="ltr">Laserfiche</span>
+                <svg class="lf-open-btn__arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 16L16 8"/><path d="M9 8h7v7"/></svg>
             </a>
         }
         <span style="font-size:.75rem;color:var(--a-muted)">
@@ -426,11 +418,11 @@ footer.site-footer { background: #F7F8FD !important; }
                                     <!-- Open in Laserfiche -->
                                     <td class="arc-lf-cell">
                                         <a href="@(isFolder ? Url.Action("OpenInLaserfiche", "Archive", new { entryId = entry.Id, folder = true }) : Url.Action("OpenInLaserfiche", "Archive", new { entryId = entry.Id }))"
-                                           class="arc-lf-btn" target="_blank" rel="noopener"
+                                           class="lf-open-btn" target="_blank" rel="noopener"
                                            title="فتح في Laserfiche" aria-label="فتح @entry.Name في Laserfiche">
-                                            <span class="arc-lf-mark" aria-hidden="true" dir="ltr">LF</span>
+                                            <span class="lf-open-btn__mark" aria-hidden="true" dir="ltr">LF</span>
                                             <span dir="ltr">Laserfiche</span>
-                                            <svg class="arc-lf-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 16L16 8"/><path d="M9 8h7v7"/></svg>
+                                            <svg class="lf-open-btn__arrow"width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 16L16 8"/><path d="M9 8h7v7"/></svg>
                                         </a>
                                     </td>
                                 }

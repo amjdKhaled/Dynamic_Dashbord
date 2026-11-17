@@ -136,8 +136,12 @@ else if (Model.Entry is {} entry)
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12Z"/><circle cx="12" cy="12" r="3"/></svg>
                 @L["ViewDocument"]
             </a>
-            <a class="det-action" asp-controller="Archive" asp-action="OpenInLaserfiche" asp-route-entryId="@entry.Id"
-               rel="noopener">فتح في Laserfiche ↗</a>
+            <a class="lf-open-btn" asp-controller="Archive" asp-action="OpenInLaserfiche" asp-route-entryId="@entry.Id"
+               target="_blank" rel="noopener" title="فتح في Laserfiche" aria-label="فتح @entry.Name في Laserfiche">
+                <span class="lf-open-btn__mark" aria-hidden="true" dir="ltr">LF</span>
+                <span dir="ltr">Laserfiche</span>
+                <svg class="lf-open-btn__arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 16L16 8"/><path d="M9 8h7v7"/></svg>
+            </a>
         </div>
 
     }

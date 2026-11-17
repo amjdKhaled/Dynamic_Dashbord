@@ -1,9 +1,6 @@
-@inject LFPortal.Application.Interfaces.IRepositoryContext RepositoryContext
 @model LFPortal.Web.Controllers.DocumentViewModel
 @using System.Text.Json
-@using Microsoft.AspNetCore.Http
 @{
-    var webClientRepository = Model.Entry is null ? null : await RepositoryContext.GetActiveRepositoryAsync();
     ViewData["Title"] = Model.Entry?.Name ?? L["ViewDocument"].Value;
     var ar = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "ar";
     string T(string arabic, string english) => ar ? arabic : english;
@@ -71,8 +68,13 @@ else if (Model.Entry is {} entry)
             {
                 <a class="dv-btn dv-btn-primary" asp-action="Download" asp-route-entryId="@entry.Id">@L["DownloadOriginal"]</a>
             }
-            <a class="dv-btn" asp-controller="Archive" asp-action="OpenInLaserfiche" asp-route-entryId="@entry.Id"
-               data-laserfiche-url="@(LFPortal.Web.Controllers.LaserficheWebClientLinks.EntrySearch(webClientRepository!.ServerUrl, webClientRepository.RepositoryId, entry.Id, Context.Session.GetString(LFPortal.Web.Controllers.LaserficheWebClientLinks.OriginSessionKey)))">@T("فتح في Laserfiche", "Open in Laserfiche") ↗</a>
+            <a class="lf-open-btn" asp-controller="Archive" asp-action="OpenInLaserfiche" asp-route-entryId="@entry.Id"
+               target="_blank" rel="noopener" title="@T("فتح في Laserfiche", "Open in Laserfiche")"
+               aria-label="@T($"فتح {entry.Name} في Laserfiche", $"Open {entry.Name} in Laserfiche")">
+                <span class="lf-open-btn__mark" aria-hidden="true" dir="ltr">LF</span>
+                <span dir="ltr">Laserfiche</span>
+                <svg class="lf-open-btn__arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 16L16 8"/><path d="M9 8h7v7"/></svg>
+            </a>
             <a class="dv-btn" href="@Model.ReturnUrl">@T("إغلاق", "Close")</a>
         </div>
     </header>

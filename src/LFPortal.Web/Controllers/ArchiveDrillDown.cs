@@ -1,5 +1,6 @@
 using System.Globalization;
 using LFPortal.Application.DTOs;
+using LFPortal.Application.Helpers;
 using LFPortal.Domain.Entities;
 
 namespace LFPortal.Web.Controllers;
@@ -55,13 +56,14 @@ public static class ArchiveDrillDown
                     item => item.Count,
                     StringComparer.OrdinalIgnoreCase);
                 templates = stats.TemplateDefinitions
-                    .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
-                    .Select(item => new ArchiveTemplateResult
+                    .GroupBy(item => SasoTemplateGrouping.Normalize(item.Name), StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
+                    .Select(group => new ArchiveTemplateResult
                     {
-                        Id = item.Id,
-                        Name = item.Name,
-                        Description = item.Description,
-                        DocumentCount = counts.GetValueOrDefault(item.Name)
+                        Id = group.First().Id,
+                        Name = group.Key,
+                        Description = group.First().Description,
+                        DocumentCount = counts.GetValueOrDefault(group.Key)
                     })
                     .ToList()
                     .AsReadOnly();
@@ -84,7 +86,8 @@ public static class ArchiveDrillDown
             case "template":
                 var templateName = (template ?? string.Empty).Trim();
                 entries = SortDocuments(stats.AllDocs.Where(entry =>
-                    string.Equals(GetTemplateKey(entry), templateName, StringComparison.OrdinalIgnoreCase)));
+                    string.Equals(SasoTemplateGrouping.Normalize(GetTemplateKey(entry)),
+                        SasoTemplateGrouping.Normalize(templateName), StringComparison.OrdinalIgnoreCase)));
                 title = string.IsNullOrWhiteSpace(templateName)
                     ? "Template documents"
                     : $"Template: {templateName}";
@@ -259,7 +262,10 @@ public sealed record LaserficheArchiveQuery
                 "Documents counted in the no-template KPI", "{LF:Name=\"*\",Type=\"B\"}"),
             "template" => Create(normalized, $"Template: {(template ?? string.Empty).Trim()}",
                 "Documents counted for this template",
-                $"{{LF:TemplateName=\"{Escape(template)}\"}}"),
+                SasoTemplateGrouping.IsSasoFamily(template)
+                    ? "(" + string.Join(" | ", SasoTemplateGrouping.SearchNames.Select(name =>
+                        $"{{LF:TemplateName=\"{Escape(name)}\"}}")) + ")"
+                    : $"{{LF:TemplateName=\"{Escape(template)}\"}}"),
             "root-folder" when entryId > 0 => Create(normalized,
                 $"Folder: {(folder ?? string.Empty).Trim()}", "Documents counted below this top-level folder",
                 $"{{LF:LookIn=\"{entryId}\",Subfolders=y}} & {documents}"),

@@ -146,6 +146,50 @@ public sealed class ArchiveDrillDownTests
         Assert.Contains("DOMAIN\\\\a\\\"user", query.Expression);
     }
 
+    [Theory]
+    [InlineData("SASO", "SASO")]
+    [InlineData("SASO (1)", "SASO")]
+    [InlineData("SASO (6)", "SASO")]
+    [InlineData("saso 2", "SASO")]
+    [InlineData("SASO 7", "SASO 7")]
+    [InlineData("SASO archive", "SASO archive")]
+    public void ColorTemplateNames_NormalizeOnlyTheSixExpectedVariants(string actual, string expected)
+    {
+        Assert.Equal(expected, LFPortal.Application.Helpers.SasoTemplateGrouping.Normalize(actual));
+    }
+
+    [Fact]
+    public void SasoDrillDown_IncludesAllPhysicalVariantsAndPreservesIndividualEntries()
+    {
+        var stats = Stats() with
+        {
+            AllDocs =
+            [
+                Doc(10, "Green", "SASO (2)", "USER", Day, Day),
+                Doc(11, "Red", "SASO (1)", "USER", Day, Day),
+                Doc(12, "Base", "SASO", "USER", Day, Day),
+                Doc(13, "Other", "Finance", "USER", Day, Day)
+            ],
+            TemplateStats =
+            [
+                new TemplateStatDto { Name = "SASO", Count = 3 },
+                new TemplateStatDto { Name = "Finance", Count = 1 }
+            ]
+        };
+
+        var entries = ArchiveDrillDown.Apply(stats, "template", template: "SASO").Entries;
+        Assert.Equal(new[] { 10, 11, 12 }, entries.Select(entry => entry.Id).OrderBy(id => id));
+        Assert.Equal(3, ArchiveController.ResolveDashboardCount(
+            stats, "template", "SASO", null, null, null, 0));
+
+        var expression = LaserficheArchiveQuery.Build(
+            "template", "SASO", null, null, null, null, 0, 1).Expression;
+        Assert.Contains("{LF:TemplateName=\"SASO\"}", expression);
+        Assert.Contains("{LF:TemplateName=\"SASO (1)\"}", expression);
+        Assert.Contains("{LF:TemplateName=\"SASO (6)\"}", expression);
+        Assert.Contains(" | ", expression);
+    }
+
     private static LFEntry Doc(
         int id,
         string name,

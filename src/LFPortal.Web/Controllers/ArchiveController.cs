@@ -1,4 +1,5 @@
 using LFPortal.Application.Interfaces;
+using LFPortal.Application.Helpers;
 using LFPortal.Application.DTOs;
 using LFPortal.Domain.Entities;
 using LFPortal.Domain.Exceptions;
@@ -167,10 +168,18 @@ public sealed class ArchiveController : Controller
                 if (query.IsTemplateCatalog)
                 {
                     var definitions = await _templateService.GetTemplateDefinitionsAsync(cancellationToken).ConfigureAwait(false);
-                    var rows = definitions.Skip((page - 1) * 10).Take(10)
-                        .Select(item => new ArchiveTemplateResult { Id = item.Id, Name = item.Name, Description = item.Description })
-                        .ToList().AsReadOnly();
-                    return View(BuildDrillDownModel(query, repo, rows, [], page, definitions.Count));
+                    var grouped = definitions
+                        .GroupBy(item => SasoTemplateGrouping.Normalize(item.Name), StringComparer.OrdinalIgnoreCase)
+                        .Select(group => new ArchiveTemplateResult
+                        {
+                            Id = group.First().Id,
+                            Name = group.Key,
+                            Description = group.First().Description
+                        })
+                        .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+                    var rows = grouped.Skip((page - 1) * 10).Take(10).ToList().AsReadOnly();
+                    return View(BuildDrillDownModel(query, repo, rows, [], page, grouped.Count));
                 }
 
                 if (query.OpenEntryId > 0)

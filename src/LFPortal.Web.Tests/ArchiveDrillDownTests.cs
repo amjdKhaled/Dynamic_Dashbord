@@ -182,12 +182,13 @@ public sealed class ArchiveDrillDownTests
         Assert.Equal(3, ArchiveController.ResolveDashboardCount(
             stats, "template", "SASO", null, null, null, 0));
 
-        var expression = LaserficheArchiveQuery.Build(
-            "template", "SASO", null, null, null, null, 0, 1).Expression;
-        Assert.Contains("{LF:TemplateName=\"SASO\"}", expression);
-        Assert.Contains("{LF:TemplateName=\"SASO (1)\"}", expression);
-        Assert.Contains("{LF:TemplateName=\"SASO (6)\"}", expression);
-        Assert.Contains(" | ", expression);
+        var query = LaserficheArchiveQuery.Build(
+            "template", "SASO", null, null, null, null, 0, 1);
+        Assert.True(query.IsGroupedTemplateAlias);
+        Assert.False(query.IsTemplateCatalog);
+        // The grouped archive uses the permission-scoped dashboard snapshot,
+        // not a synthetic search that might omit colored templates.
+        Assert.Equal("{LF:Name=\"*\",Type=\"D\"}", query.Expression);
     }
 
     private static LFEntry Doc(

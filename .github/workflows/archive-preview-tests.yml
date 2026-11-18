@@ -30,3 +30,5 @@ jobs:
         run: node scripts/test-webclient-return.mjs
       - name: Test archive drilldowns
         run: dotnet test src/LFPortal.Web.Tests/LFPortal.Web.Tests.csproj --configuration Release
+      - name: Test SASO logical template field aliases
+        run: node --test scripts/test-saso-logical-fields.cjs

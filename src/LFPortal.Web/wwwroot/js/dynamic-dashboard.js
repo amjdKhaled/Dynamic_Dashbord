@@ -6,6 +6,9 @@
   const arabic = root.dataset.language === "ar";
   const locale = arabic ? "ar-SA" : "en";
   const T = (ar,en) => arabic ? ar : en;
+  // Match the server-side SASO display alias. Physical metadata names remain unchanged.
+  const groupedTemplateName = value => /^SASO(?:\s*\(\s*[1-6]\s*\)|\s+[1-6])?$/i.test(String(value ?? "").trim())
+    ? "SASO" : String(value ?? "").trim();
   const $ = id => document.getElementById(id);
   const requestHeaders = {"X-Dashboard-Repository":root.dataset.repository,"X-Dashboard-Layout-Scope":root.dataset.scope,"X-Requested-With":"XMLHttpRequest"};
   const BUILTIN = [
@@ -184,7 +187,8 @@
     for(const item of templateFields) {
       if(typeof item?.template!=="string" || !Array.isArray(item.fields))continue;
       const valid=item.fields.filter(field=>typeof field==="string" && isFieldDimension(field));
-      fieldsByTemplate.set(item.template,unique([...(fieldsByTemplate.get(item.template)??[]),...valid]));
+      const template=groupedTemplateName(item.template);
+      fieldsByTemplate.set(template,unique([...(fieldsByTemplate.get(template)??[]),...valid]));
     }
     const title = chart.type==="audit" ? T("نشاط المستندات الأخير","Recent document activity") : String(chart.title ?? (overview.has(chart.id)?"":T("جدول","Table")));
     return {
@@ -202,13 +206,13 @@
       hidden:Boolean(chart.hidden),
       accent:chart.accent===undefined ? chart.id==="overview-folders-total" : Boolean(chart.accent),
       templateValueFilters:Array.isArray(chart.templateValueFilters)?chart.templateValueFilters
-        .filter(rule=>fieldsByTemplate.get(rule?.template)?.includes(rule.field) && Array.isArray(rule.values))
-        .map(rule=>({template:rule.template,field:rule.field,values:unique(rule.values.filter(value=>typeof value==="string"))})):[],
+        .filter(rule=>fieldsByTemplate.get(groupedTemplateName(rule?.template))?.includes(rule.field) && Array.isArray(rule.values))
+        .map(rule=>({template:groupedTemplateName(rule.template),field:rule.field,values:unique(rule.values.filter(value=>typeof value==="string"))})):[],
       templateFields:[...fieldsByTemplate].filter(([,fields])=>fields.length).map(([template,fields])=>({template,fields})),
       colors:Object.fromEntries(Object.entries(chart.colors ?? {}).filter(([,color])=>palette.includes(color)).slice(0,500)),
       allValues:!legacy && Boolean(chart.allValues),
-      selectedValues:legacy?unique(templateFields.map(item=>item?.template)):!oldName && Array.isArray(chart.selectedValues)
-        ? [...new Set(chart.selectedValues.filter(v=>typeof v==="string"))].slice(0,500) : []
+      selectedValues:legacy?unique(templateFields.map(item=>groupedTemplateName(item?.template))):!oldName && Array.isArray(chart.selectedValues)
+        ? [...new Set(chart.selectedValues.filter(v=>typeof v==="string").map(value=>chart.dimension==="__template"?groupedTemplateName(value):value))].slice(0,500) : []
     };
   }
   function loadConfig(config) {
@@ -2102,12 +2106,26 @@
         :T("تعذر إكمال قراءة الوثائق والحقول من Laserfiche.","Could not finish reading documents and fields from Laserfiche."));
       const result=await records.json();
       if(!Array.isArray(result.fields)||!Array.isArray(result.rows))throw new Error(T("استجابة غير متوقعة من Laserfiche.","Unexpected response from Laserfiche."));
-      fields=result.fields;rows=result.rows;partial=Boolean(result.fieldDataIncomplete);rowsVersion++;
+      // Keep physical Laserfiche metadata untouched; alias only compatible SASO
+      // field definitions in the already permission-scoped dashboard response.
+      const logical=window.SasoDashboardFields?.enrichRows(result.rows,result.fields);
+      fields=result.fields;
+      rows=logical?.rows ?? result.rows;
+      const ambiguousSasoFields=logical?.conflicts ?? [];
+      partial=Boolean(result.fieldDataIncomplete || ambiguousSasoFields.length);
+      rowsVersion++;
       people=Array.isArray(result.people)?new Set(result.people):null;
       // The overview's «المستندات حسب نشاط المستخدم» counts these live documents (_Overview.cshtml).
       document.dispatchEvent(new CustomEvent("dd:rows",{detail:rows}));
       if(partial){
-        $("dd-warning").textContent=T("بعض بيانات الحقول لم ترجع كاملة من Laserfiche. تعرض الجداول القيم المتاحة فقط.","Laserfiche returned incomplete field data. Widgets show available values only.");
+        const notices=[];
+        if(result.fieldDataIncomplete)notices.push(T(
+          "بعض بيانات الحقول لم ترجع كاملة من Laserfiche. تعرض الجداول القيم المتاحة فقط.",
+          "Laserfiche returned incomplete field data. Widgets show available values only."));
+        if(ambiguousSasoFields.length)notices.push(T(
+          "بعض الحقول المتشابهة في قوالب SASO لها تعريفات مختلفة أو غير واضحة؛ لم يتم دمجها لتجنب نتائج خاطئة.",
+          "Some same-named SASO fields have incompatible or ambiguous definitions. They were not merged to avoid inaccurate results."));
+        $("dd-warning").textContent=notices.join(" ");
         $("dd-warning").classList.remove("dd-hidden");
       }
       render();

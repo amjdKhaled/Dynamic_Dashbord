@@ -182,6 +182,18 @@ public sealed class ArchiveController : Controller
                     return View(BuildDrillDownModel(query, repo, rows, [], page, grouped.Count));
                 }
 
+                // Logical SASO grouping must use the exact permission-scoped document set
+                // that produced the dashboard total, not an unverified multi-template search.
+                if (query.IsGroupedTemplateAlias)
+                {
+                    var stats = await _dashboardService.GetDashboardStatsAsync(cancellationToken).ConfigureAwait(false);
+                    if (!stats.IsConnected)
+                        return View(ArchiveViewModel.Error("تعذر قراءة وثائق SASO من المستودع. لم يتم عرض نتائج جزئية."));
+                    var matches = ArchiveDrillDown.Apply(stats, scope, template).Entries;
+                    var selected = matches.Skip((page - 1) * 10).Take(10).ToList().AsReadOnly();
+                    return View(BuildDrillDownModel(query, repo, [], selected, page, matches.Count));
+                }
+
                 if (query.OpenEntryId > 0)
                 {
                     var entry = await _entryService.GetEntryAsync(query.OpenEntryId, cancellationToken).ConfigureAwait(false);
@@ -310,8 +322,8 @@ public sealed class ArchiveController : Controller
             PageNumber = page,
             PageSize = 10,
             TotalCount = totalCount,
-            LaserficheWebClientUrl = query.IsTemplateCatalog
-                ? baseUrl
+            LaserficheWebClientUrl = query.IsTemplateCatalog || query.IsGroupedTemplateAlias
+                ? baseUrl // No misleading synthetic search URL for the logical SASO group
                 : $"{baseUrl}search={Uri.EscapeDataString(query.Expression)};view=search",
             LaserficheWebClientEntryUrlPrefix = $"{baseUrl}id="
         };

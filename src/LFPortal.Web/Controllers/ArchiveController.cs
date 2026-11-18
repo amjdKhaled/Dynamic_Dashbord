@@ -186,10 +186,10 @@ public sealed class ArchiveController : Controller
                 // that produced the dashboard total, not an unverified multi-template search.
                 if (query.IsGroupedTemplateAlias)
                 {
-                    var stats = await _dashboardService.GetDashboardStatsAsync(cancellationToken).ConfigureAwait(false);
-                    if (!stats.IsConnected)
+                    var groupedStats = await _dashboardService.GetDashboardStatsAsync(cancellationToken).ConfigureAwait(false);
+                    if (!groupedStats.IsConnected)
                         return View(ArchiveViewModel.Error("تعذر قراءة وثائق SASO من المستودع. لم يتم عرض نتائج جزئية."));
-                    var matches = ArchiveDrillDown.Apply(stats, scope, template).Entries;
+                    var matches = ArchiveDrillDown.Apply(groupedStats, scope, template).Entries;
                     var selected = matches.Skip((page - 1) * 10).Take(10).ToList().AsReadOnly();
                     return View(BuildDrillDownModel(query, repo, [], selected, page, matches.Count));
                 }

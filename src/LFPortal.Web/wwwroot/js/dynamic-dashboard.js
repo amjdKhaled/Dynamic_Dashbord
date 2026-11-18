@@ -2106,12 +2106,26 @@
         :T("تعذر إكمال قراءة الوثائق والحقول من Laserfiche.","Could not finish reading documents and fields from Laserfiche."));
       const result=await records.json();
       if(!Array.isArray(result.fields)||!Array.isArray(result.rows))throw new Error(T("استجابة غير متوقعة من Laserfiche.","Unexpected response from Laserfiche."));
-      fields=result.fields;rows=result.rows;partial=Boolean(result.fieldDataIncomplete);rowsVersion++;
+      // Keep physical Laserfiche metadata untouched; alias only compatible SASO
+      // field definitions in the already permission-scoped dashboard response.
+      const logical=window.SasoDashboardFields?.enrichRows(result.rows,result.fields);
+      fields=result.fields;
+      rows=logical?.rows ?? result.rows;
+      const ambiguousSasoFields=logical?.conflicts ?? [];
+      partial=Boolean(result.fieldDataIncomplete || ambiguousSasoFields.length);
+      rowsVersion++;
       people=Array.isArray(result.people)?new Set(result.people):null;
       // The overview's «المستندات حسب نشاط المستخدم» counts these live documents (_Overview.cshtml).
       document.dispatchEvent(new CustomEvent("dd:rows",{detail:rows}));
       if(partial){
-        $("dd-warning").textContent=T("بعض بيانات الحقول لم ترجع كاملة من Laserfiche. تعرض الجداول القيم المتاحة فقط.","Laserfiche returned incomplete field data. Widgets show available values only.");
+        const notices=[];
+        if(result.fieldDataIncomplete)notices.push(T(
+          "بعض بيانات الحقول لم ترجع كاملة من Laserfiche. تعرض الجداول القيم المتاحة فقط.",
+          "Laserfiche returned incomplete field data. Widgets show available values only."));
+        if(ambiguousSasoFields.length)notices.push(T(
+          "بعض الحقول المتشابهة في قوالب SASO لها تعريفات مختلفة أو غير واضحة؛ لم يتم دمجها لتجنب نتائج خاطئة.",
+          "Some same-named SASO fields have incompatible or ambiguous definitions. They were not merged to avoid inaccurate results."));
+        $("dd-warning").textContent=notices.join(" ");
         $("dd-warning").classList.remove("dd-hidden");
       }
       render();

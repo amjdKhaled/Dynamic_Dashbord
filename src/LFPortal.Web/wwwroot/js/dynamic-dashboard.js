@@ -6,9 +6,11 @@
   const arabic = root.dataset.language === "ar";
   const locale = arabic ? "ar-SA" : "en";
   const T = (ar,en) => arabic ? ar : en;
-  // Match the server-side SASO display alias. Physical metadata names remain unchanged.
-  const groupedTemplateName = value => /^SASO(?:\s*\(\s*[1-6]\s*\)|\s+[1-6])?$/i.test(String(value ?? "").trim())
-    ? "SASO" : String(value ?? "").trim();
+  let templateGroups=[];
+  let templateFieldAliases={};
+  const groupedTemplateName = value => window.SasoDashboardFields.groupName(value,templateGroups);
+  const logicalFieldId=(template,id)=>(templateFieldAliases[groupedTemplateName(template)] ?? [])
+    .find(ids=>ids.includes(String(id)))?.[0] ?? String(id);
   const $ = id => document.getElementById(id);
   const requestHeaders = {"X-Dashboard-Repository":root.dataset.repository,"X-Dashboard-Layout-Scope":root.dataset.scope,"X-Requested-With":"XMLHttpRequest"};
   const BUILTIN = [
@@ -186,9 +188,20 @@
     const fieldsByTemplate=new Map();
     for(const item of templateFields) {
       if(typeof item?.template!=="string" || !Array.isArray(item.fields))continue;
-      const valid=item.fields.filter(field=>typeof field==="string" && isFieldDimension(field));
+      const valid=item.fields.filter(field=>typeof field==="string" && isFieldDimension(field))
+        .map(field=>logicalFieldId(item.template,field));
       const template=groupedTemplateName(item.template);
       fieldsByTemplate.set(template,unique([...(fieldsByTemplate.get(template)??[]),...valid]));
+    }
+    const valueFilters=new Map();
+    for(const rule of Array.isArray(chart.templateValueFilters)?chart.templateValueFilters:[]) {
+      const template=groupedTemplateName(rule?.template);
+      const field=logicalFieldId(template,rule?.field);
+      if(!fieldsByTemplate.get(template)?.includes(field) || !Array.isArray(rule?.values))continue;
+      const key=JSON.stringify([template,field]);
+      const values=unique([...(valueFilters.get(key)?.values ?? []),
+        ...rule.values.filter(value=>typeof value==="string")]);
+      valueFilters.set(key,{template,field,values});
     }
     const title = chart.type==="audit" ? T("نشاط المستندات الأخير","Recent document activity") : String(chart.title ?? (overview.has(chart.id)?"":T("جدول","Table")));
     return {
@@ -205,9 +218,7 @@
       pages:pageCount(chart.pages),
       hidden:Boolean(chart.hidden),
       accent:chart.accent===undefined ? chart.id==="overview-folders-total" : Boolean(chart.accent),
-      templateValueFilters:Array.isArray(chart.templateValueFilters)?chart.templateValueFilters
-        .filter(rule=>fieldsByTemplate.get(groupedTemplateName(rule?.template))?.includes(rule.field) && Array.isArray(rule.values))
-        .map(rule=>({template:groupedTemplateName(rule.template),field:rule.field,values:unique(rule.values.filter(value=>typeof value==="string"))})):[],
+      templateValueFilters:[...valueFilters.values()],
       templateFields:[...fieldsByTemplate].filter(([,fields])=>fields.length).map(([template,fields])=>({template,fields})),
       colors:Object.fromEntries(Object.entries(chart.colors ?? {}).filter(([,color])=>palette.includes(color)).slice(0,500)),
       allValues:!legacy && Boolean(chart.allValues),
@@ -1921,8 +1932,16 @@
       const details=document.createElement("details");
       details.className="dd-template-field-group";
       const caption=document.createElement("summary");
-      const choices=fields.filter(field=>available.get(template.value).has(String(field.id)));
-      const picked=selectedFields.get(template.value) ?? new Set();
+      const canonicalId=id=>logicalFieldId(template.value,id);
+      const seen=new Set();
+      const choices=fields.filter(field=>{
+        if(!available.get(template.value).has(String(field.id)))return false;
+        const id=canonicalId(field.id);
+        if(seen.has(id))return false;
+        seen.add(id);
+        return true;
+      }).map(field=>fields.find(candidate=>String(candidate.id)===canonicalId(field.id)) ?? field);
+      const picked=new Set([...(selectedFields.get(template.value) ?? [])].map(canonicalId));
       const updateCaption=()=>{caption.textContent=template.label+(picked.size?" · "+picked.size.toLocaleString(locale):"");};
       updateCaption();
       details.open=true;
@@ -1938,7 +1957,7 @@
         label.className="dd-value-option";
         const checkbox=document.createElement("input");
         checkbox.type="checkbox";
-        const id=String(field.id);
+        const id=canonicalId(field.id);
         checkbox.checked=picked.has(id);
         const values=document.createElement("div");
         values.className="dd-template-value-picker";
@@ -1955,7 +1974,8 @@
           renderColorChoices();
           updateEditorSave();
         });
-        label.append(checkbox,document.createTextNode(field.name));
+        const duplicateName=choices.filter(item=>item.name===field.name).length>1;
+        label.append(checkbox,document.createTextNode(field.name+(duplicateName?" · "+id:"")));
         details.append(label,values);
       }
       target.appendChild(details);
@@ -2108,8 +2128,17 @@
       if(!Array.isArray(result.fields)||!Array.isArray(result.rows))throw new Error(T("استجابة غير متوقعة من Laserfiche.","Unexpected response from Laserfiche."));
       // Keep physical Laserfiche metadata untouched; alias only compatible SASO
       // field definitions in the already permission-scoped dashboard response.
-      const logical=window.SasoDashboardFields?.enrichRows(result.rows,result.fields);
-      fields=result.fields;
+      templateGroups=Array.isArray(result.templateGroups)?result.templateGroups:[];
+      const logical=window.SasoDashboardFields?.enrichRows(result.rows,result.fields,templateGroups);
+      templateFieldAliases=logical?.aliasesByTemplate ?? {};
+      const aliasSets=Object.values(templateFieldAliases).flat();
+      fields=result.fields.map(field=>{
+        const related=new Set(aliasSets.filter(ids=>ids.includes(String(field.id))).flat());
+        const listValues=unique(result.fields.filter(item=>related.has(String(item.id)))
+          .flatMap(item=>item.listValues ?? []).map(listValue).filter(Boolean));
+        return listValues.length?{...field,listValues}:field;
+      });
+      charts=charts.map(normalChart);
       rows=logical?.rows ?? result.rows;
       const ambiguousSasoFields=logical?.conflicts ?? [];
       partial=Boolean(result.fieldDataIncomplete || ambiguousSasoFields.length);
@@ -2123,8 +2152,8 @@
           "بعض بيانات الحقول لم ترجع كاملة من Laserfiche. تعرض الجداول القيم المتاحة فقط.",
           "Laserfiche returned incomplete field data. Widgets show available values only."));
         if(ambiguousSasoFields.length)notices.push(T(
-          "بعض الحقول المتشابهة في قوالب SASO لها تعريفات مختلفة أو غير واضحة؛ لم يتم دمجها لتجنب نتائج خاطئة.",
-          "Some same-named SASO fields have incompatible or ambiguous definitions. They were not merged to avoid inaccurate results."));
+          "تعذر تجميع بعض الحقول لاختلاف تعريفاتها: ",
+          "Some fields have incompatible definitions: ")+ambiguousSasoFields.join("، "));
         $("dd-warning").textContent=notices.join(" ");
         $("dd-warning").classList.remove("dd-hidden");
       }

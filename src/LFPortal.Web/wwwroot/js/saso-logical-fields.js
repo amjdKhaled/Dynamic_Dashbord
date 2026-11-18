@@ -16,7 +16,44 @@
   const canonicalType = field => String(field?.type ?? "").trim().toLowerCase() +
     "|" + String(Boolean(field?.multi));
 
-  function enrichRows(rows, fields) {
+  function groupName(name, definitions = []) {
+    const normalized = String(name ?? "").trim();
+    for (const group of definitions)
+      if ([group.name, ...(group.templates ?? [])].some(value =>
+        String(value ?? "").trim().toLowerCase() === normalized.toLowerCase())) return group.name;
+    return isSaso(normalized) ? "SASO" : normalized;
+  }
+
+  function enrichRows(rows, fields, definitions = []) {
+    if (!Array.isArray(rows) || !Array.isArray(fields))
+      return { rows, aliasCount: 0, conflicts: [], aliasesByTemplate: {} };
+    const grouped = new Map();
+    for (const row of rows ?? []) {
+      const physical = row?.originalTemplate ?? row?.template;
+      const name = groupName(physical, definitions);
+      if (!isSaso(physical) && !definitions.some(group => canonicalName(group.name) === canonicalName(name)))
+        continue;
+      if (!grouped.has(name)) grouped.set(name, []);
+      grouped.get(name).push(row);
+    }
+    const aliasesByTemplate = Object.create(null);
+    const replacements = new Map();
+    let aliasCount = 0;
+    const conflicts = [];
+    for (const [name, family] of grouped) {
+      const result = enrichFamily(family, fields);
+      aliasCount += result.aliasCount;
+      conflicts.push(...result.conflicts.map(field => name + " · " + field));
+      aliasesByTemplate[name] = result.aliases;
+      family.forEach((row, index) => replacements.set(row, result.rows[index]));
+    }
+    return {
+      rows: (rows ?? []).map(row => replacements.get(row) ?? row),
+      aliasCount, conflicts, aliasesByTemplate
+    };
+  }
+
+  function enrichFamily(rows, fields) {
     if (!Array.isArray(rows) || !Array.isArray(fields))
       return { rows, aliasCount: 0, conflicts: [] };
 
@@ -29,7 +66,7 @@
       typeKnown: Boolean(String(field.type ?? "").trim())
     }]));
 
-    const family = rows.filter(row => isSaso(row?.originalTemplate ?? row?.template));
+    const family = rows;
     const groups = new Map();
     const perTemplate = new Map();
     const blocked = new Set();
@@ -50,8 +87,10 @@
         groups.get(meta.name).add(id);
 
         if (!templateFields.has(meta.name)) templateFields.set(meta.name, new Set());
-        templateFields.get(meta.name).add(id);
-        inDocument.set(meta.name, (inDocument.get(meta.name) ?? 0) + 1);
+        if (hasValue(row.fields[id])) templateFields.get(meta.name).add(id);
+        // Empty alternate IDs returned with metadata do not make a field ambiguous.
+        if (hasValue(row.fields[id]))
+          inDocument.set(meta.name, (inDocument.get(meta.name) ?? 0) + 1);
       }
       for (const [name, count] of inDocument)
         if (count > 1) blocked.add(name);
@@ -77,17 +116,16 @@
 
     let aliasCount = 0;
     const enriched = rows.map(row => {
-      if (!isSaso(row?.originalTemplate ?? row?.template) ||
-          !row.fields || typeof row.fields !== "object" || Array.isArray(row.fields))
+      if (!row.fields || typeof row.fields !== "object" || Array.isArray(row.fields))
         return row;
 
       let next;
       for (const ids of aliases) {
-        const present = ids.filter(id => Object.hasOwn(row.fields, id));
+        const present = ids.filter(id => hasValue(row.fields[id]));
         if (present.length !== 1) continue;
         const value = row.fields[present[0]];
         for (const id of ids) {
-          if (Object.hasOwn(row.fields, id)) continue;
+          if (hasValue(row.fields[id])) continue;
           next ??= { ...row.fields };
           next[id] = Array.isArray(value) ? [...value] : value;
           aliasCount++;
@@ -96,10 +134,15 @@
       return next ? { ...row, fields: next } : row;
     });
 
-    return { rows: enriched, aliasCount, conflicts: [...blocked].sort() };
+    return { rows: enriched, aliasCount, conflicts: [...blocked].sort(), aliases };
   }
 
-  const api = Object.freeze({ enrichRows, isSaso });
+  function hasValue(value) {
+    return Array.isArray(value) ? value.some(item => String(item ?? "").trim()) :
+      value !== null && value !== undefined && String(value).trim() !== "";
+  }
+
+  const api = Object.freeze({ enrichRows, isSaso, groupName });
   if (host) host.SasoDashboardFields = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof window !== "undefined" ? window : null);

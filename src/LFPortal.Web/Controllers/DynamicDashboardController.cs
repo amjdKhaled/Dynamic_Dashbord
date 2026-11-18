@@ -454,9 +454,19 @@ public sealed class DynamicDashboardController : Controller
             }
 
             var seen = await PeopleSeenAsync(people, repo.RepositoryId, cancellationToken);
+            var readableTemplates = rows.Select(row => row.Entry.TemplateName ?? "")
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var templateGroups = SasoTemplateGrouping.Groups
+                .Select(group => new
+                {
+                    name = group.Name,
+                    templates = group.Templates.Where(readableTemplates.Contains).ToArray()
+                })
+                .Where(group => group.templates.Length > 0);
             return Json(new
             {
                 rows = results,
+                templateGroups,
                 people = seen?.People.Select(person => person.Name).Distinct(StringComparer.Ordinal).ToArray(),
                 fields = catalog.Values.OrderBy(field => field.Name).ThenBy(field => field.Id),
                 fieldDataIncomplete,

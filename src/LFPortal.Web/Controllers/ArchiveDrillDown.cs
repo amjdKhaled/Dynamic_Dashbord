@@ -262,10 +262,10 @@ public sealed record LaserficheArchiveQuery
                 $"{documents} - {{LF:Name=\"*\",Type=\"B\"}}"),
             "without-template" => Create(normalized, "Documents without a template",
                 "Documents counted in the no-template KPI", "{LF:Name=\"*\",Type=\"B\"}"),
-            "template" when SasoTemplateGrouping.IsSasoFamily(template) => new LaserficheArchiveQuery
+            "template" when SasoTemplateGrouping.IsGroupedTemplate(template) => new LaserficheArchiveQuery
             {
-                Scope = normalized, Title = "Template: SASO",
-                Description = "Documents across the SASO color-template family",
+                Scope = normalized, Title = $"Template: {SasoTemplateGrouping.Normalize(template)}",
+                Description = "Documents across the selected template group",
                 Expression = documents, IsGroupedTemplateAlias = true
             },
             "template" => Create(normalized, $"Template: {(template ?? string.Empty).Trim()}",

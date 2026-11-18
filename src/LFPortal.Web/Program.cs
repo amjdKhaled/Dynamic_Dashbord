@@ -77,6 +77,11 @@ try
     // Explicit run arguments (for example --urls) override persisted settings.
     builder.Configuration.AddCommandLine(args);
 
+    LFPortal.Application.Helpers.SasoTemplateGrouping.ConfigureGroups(
+        builder.Configuration.GetSection("TemplateGroups")
+            .Get<LFPortal.Application.Helpers.TemplateGroupDefinition[]>() ?? []);
+
+
     // ── Serilog — replace the default ASP.NET Core logging pipeline ──────────
     builder.Host.UseSerilog((context, services, loggerConfig) =>
     {

@@ -2,30 +2,8 @@ name: Windows Installer
 
 on:
   workflow_dispatch:
-  pull_request:
-    paths:
-      - "build/**"
-      - "config/**"
-      - "installer/**"
-      - "src/**"
-      - "!src/LFPortal.Web/wwwroot/css/dynamic-dashboard.css"
-      - "!src/LFPortal.Web/wwwroot/js/dynamic-dashboard.js"
-      - "!src/LFPortal.Web/Views/DynamicDashboard/**"
-      - "Directory.Build.props"
-      - "LFPortal.sln"
-      - ".config/dotnet-tools.json"
-      - ".github/workflows/windows-installer.yml"
   push:
-    branches: [main]
     tags: ["v*"]
-    paths:
-      - "**"
-      - "!Release/**"
-      - "!src/LFPortal.Web/wwwroot/css/dynamic-dashboard.css"
-      - "!src/LFPortal.Web/wwwroot/js/dynamic-dashboard.js"
-      - "!src/LFPortal.Web/Views/DynamicDashboard/**"
-      - "!scripts/test-dynamic-dashboard-placement.mjs"
-      - "!.github/workflows/windows-installer.yml"
 
 permissions:
   contents: write

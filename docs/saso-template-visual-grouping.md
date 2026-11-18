@@ -33,3 +33,33 @@ Template-picker options in the **original** Laserfiche Web Client cannot be filt
 7. Deploy the Dashboard application only after build, automated tests and a real Laserfiche test-user check pass. Use the extension separately on a test Edge profile first.
 
 No changes to repository data, source definitions, permissions, Workflow, Web Client installation, or Installer projects. The branch does not change the currently deployed application until separately deployed.
+
+## Additional dashboard template groups
+
+The dashboard can group templates directly using `TemplateGroups` in
+`src/LFPortal.Web/appsettings.json` or the existing runtime configuration file.
+Restart the dashboard after editing this setting. SASO and its six numbered
+variants are grouped by default.
+
+```json
+"TemplateGroups": [
+  {
+    "Name": "Contracts",
+    "Templates": ["Green contract", "Red contract"]
+  }
+]
+```
+
+Each physical template can belong to one group. Selecting the group includes
+the readable documents of every member. The archive uses the same grouped
+snapshot for its results. Field values from compatible definitions are combined
+within their group. Empty alternate field IDs do not hide populated values.
+The template field picker displays one choice per compatible field.
+Incompatible definitions retain separate choices identified by field ID.
+
+This configuration is independent of the browser extension. Extension edits
+must also be added here to apply to the dashboard.
+
+Archive and document action buttons use the existing pill radius without
+additional icons. MSI packaging runs on manual dispatch or version tags.
+The ordinary web validation workflow builds and tests application changes.

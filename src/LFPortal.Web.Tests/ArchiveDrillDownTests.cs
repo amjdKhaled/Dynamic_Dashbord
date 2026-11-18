@@ -191,6 +191,24 @@ public sealed class ArchiveDrillDownTests
         Assert.Equal("{LF:Name=\"*\",Type=\"D\"}", query.Expression);
     }
 
+    [Fact]
+    public void CustomTemplateGroups_MergeExplicitMembersAndRejectOverlaps()
+    {
+        var groups = new LFPortal.Application.Helpers.TemplateGroupMap(
+        [
+            new() { Name = "Contracts", Templates = ["Green contract", "Red contract"] }
+        ]);
+        Assert.Equal("Contracts", groups.Normalize("Red contract"));
+        Assert.Equal("Contracts", groups.Normalize("contracts"));
+        Assert.Equal("Other", groups.Normalize("Other"));
+        Assert.True(groups.Contains("Green contract"));
+        Assert.Throws<ArgumentException>(() => new LFPortal.Application.Helpers.TemplateGroupMap(
+        [
+            new() { Name = "Contracts", Templates = ["Shared"] },
+            new() { Name = "Requests", Templates = ["Shared"] }
+        ]));
+    }
+
     private static LFEntry Doc(
         int id,
         string name,

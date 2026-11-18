@@ -1,5 +1,12 @@
 name: Archive preview tests
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'scripts/test-*.mjs'
+      - 'scripts/test-saso-logical-fields.cjs'
+      - '.github/workflows/archive-preview-tests.yml'
   pull_request:
     paths:
       - 'src/**'

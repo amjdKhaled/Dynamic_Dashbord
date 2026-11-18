@@ -188,7 +188,7 @@ public sealed class ArchiveController : Controller
                 {
                     var groupedStats = await _dashboardService.GetDashboardStatsAsync(cancellationToken).ConfigureAwait(false);
                     if (!groupedStats.IsConnected)
-                        return View(ArchiveViewModel.Error("تعذر قراءة وثائق SASO من المستودع. لم يتم عرض نتائج جزئية."));
+                        return View(ArchiveViewModel.Error("تعذر قراءة وثائق مجموعة القوالب من المستودع. أعد المحاولة."));
                     var matches = ArchiveDrillDown.Apply(groupedStats, scope, template).Entries;
                     var selected = matches.Skip((page - 1) * 10).Take(10).ToList().AsReadOnly();
                     return View(BuildDrillDownModel(query, repo, [], selected, page, matches.Count));

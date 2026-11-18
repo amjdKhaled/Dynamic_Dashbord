@@ -3,6 +3,7 @@ using System.Security.Claims;
 using LFPortal.Web.Authentication;
 using LFPortal.Application.DTOs;
 using LFPortal.Application.Interfaces;
+using LFPortal.Application.Helpers;
 using LFPortal.Infrastructure.Configuration;
 using LFPortal.Domain.Entities;
 using LFPortal.Domain.Exceptions;
@@ -441,7 +442,8 @@ public sealed class DynamicDashboardController : Controller
                 {
                     id = row.Entry.Id,
                     name = row.Entry.Name,
-                    template = row.Entry.TemplateName ?? "",
+                    template = SasoTemplateGrouping.Normalize(row.Entry.TemplateName),
+                    originalTemplate = row.Entry.TemplateName ?? "",
                     creator = row.Entry.Creator ?? "",
                     folder = row.Entry.FolderPath ?? "",
                     pages = row.Entry.PageCount,

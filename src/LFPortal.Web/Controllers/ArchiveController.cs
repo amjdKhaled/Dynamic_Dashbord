@@ -1,5 +1,4 @@
 using LFPortal.Application.Interfaces;
-using LFPortal.Application.Helpers;
 using LFPortal.Application.DTOs;
 using LFPortal.Domain.Entities;
 using LFPortal.Domain.Exceptions;
@@ -168,30 +167,10 @@ public sealed class ArchiveController : Controller
                 if (query.IsTemplateCatalog)
                 {
                     var definitions = await _templateService.GetTemplateDefinitionsAsync(cancellationToken).ConfigureAwait(false);
-                    var grouped = definitions
-                        .GroupBy(item => SasoTemplateGrouping.Normalize(item.Name), StringComparer.OrdinalIgnoreCase)
-                        .Select(group => new ArchiveTemplateResult
-                        {
-                            Id = group.First().Id,
-                            Name = group.Key,
-                            Description = group.First().Description
-                        })
-                        .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
-                        .ToList();
-                    var rows = grouped.Skip((page - 1) * 10).Take(10).ToList().AsReadOnly();
-                    return View(BuildDrillDownModel(query, repo, rows, [], page, grouped.Count));
-                }
-
-                // Logical SASO grouping must use the exact permission-scoped document set
-                // that produced the dashboard total, not an unverified multi-template search.
-                if (query.IsGroupedTemplateAlias)
-                {
-                    var groupedStats = await _dashboardService.GetDashboardStatsAsync(cancellationToken).ConfigureAwait(false);
-                    if (!groupedStats.IsConnected)
-                        return View(ArchiveViewModel.Error("تعذر قراءة وثائق مجموعة القوالب من المستودع. أعد المحاولة."));
-                    var matches = ArchiveDrillDown.Apply(groupedStats, scope, template).Entries;
-                    var selected = matches.Skip((page - 1) * 10).Take(10).ToList().AsReadOnly();
-                    return View(BuildDrillDownModel(query, repo, [], selected, page, matches.Count));
+                    var rows = definitions.Skip((page - 1) * 10).Take(10)
+                        .Select(item => new ArchiveTemplateResult { Id = item.Id, Name = item.Name, Description = item.Description })
+                        .ToList().AsReadOnly();
+                    return View(BuildDrillDownModel(query, repo, rows, [], page, definitions.Count));
                 }
 
                 if (query.OpenEntryId > 0)
@@ -322,8 +301,8 @@ public sealed class ArchiveController : Controller
             PageNumber = page,
             PageSize = 10,
             TotalCount = totalCount,
-            LaserficheWebClientUrl = query.IsTemplateCatalog || query.IsGroupedTemplateAlias
-                ? baseUrl // No misleading synthetic search URL for the logical SASO group
+            LaserficheWebClientUrl = query.IsTemplateCatalog
+                ? baseUrl
                 : $"{baseUrl}search={Uri.EscapeDataString(query.Expression)};view=search",
             LaserficheWebClientEntryUrlPrefix = $"{baseUrl}id="
         };

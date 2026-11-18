@@ -2,7 +2,6 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using LFPortal.Application.DTOs;
 using LFPortal.Application.Interfaces;
-using LFPortal.Application.Helpers;
 using LFPortal.Domain.Entities;
 using Microsoft.AspNetCore.Http;
 using System.Security.Claims;
@@ -294,8 +293,7 @@ internal sealed class LaserficheDashboardService : ILaserficheDashboardService
                 AuthenticationMode       = authenticationMode,
                 TotalDocuments           = totalDocuments,
                 TotalFolders             = totalFolders,
-                TotalTemplates           = templateDefs.Select(t => SasoTemplateGrouping.Normalize(t.Name))
-                    .Distinct(StringComparer.OrdinalIgnoreCase).Count(),
+                TotalTemplates           = templateDefs.Count,
                 DocsWithTemplate         = docsWithTemplate,
                 DocsWithoutTemplate      = docsWithoutTemplate,
                 TemplateStats            = templateStats,
@@ -518,7 +516,7 @@ internal sealed class LaserficheDashboardService : ILaserficheDashboardService
 
     private static string GetTemplateKey(LFEntry entry) =>
         !string.IsNullOrWhiteSpace(entry.TemplateName)
-            ? SasoTemplateGrouping.Normalize(entry.TemplateName)
+            ? entry.TemplateName.Trim()
             : $"Template #{entry.TemplateId}";
 
     /// <summary>

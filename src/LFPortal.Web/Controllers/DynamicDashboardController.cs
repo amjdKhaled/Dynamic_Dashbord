@@ -3,7 +3,6 @@ using System.Security.Claims;
 using LFPortal.Web.Authentication;
 using LFPortal.Application.DTOs;
 using LFPortal.Application.Interfaces;
-using LFPortal.Application.Helpers;
 using LFPortal.Infrastructure.Configuration;
 using LFPortal.Domain.Entities;
 using LFPortal.Domain.Exceptions;
@@ -442,8 +441,7 @@ public sealed class DynamicDashboardController : Controller
                 {
                     id = row.Entry.Id,
                     name = row.Entry.Name,
-                    template = SasoTemplateGrouping.Normalize(row.Entry.TemplateName),
-                    originalTemplate = row.Entry.TemplateName ?? "",
+                    template = row.Entry.TemplateName ?? "",
                     creator = row.Entry.Creator ?? "",
                     folder = row.Entry.FolderPath ?? "",
                     pages = row.Entry.PageCount,
@@ -454,19 +452,9 @@ public sealed class DynamicDashboardController : Controller
             }
 
             var seen = await PeopleSeenAsync(people, repo.RepositoryId, cancellationToken);
-            var readableTemplates = rows.Select(row => row.Entry.TemplateName ?? "")
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var templateGroups = SasoTemplateGrouping.Groups
-                .Select(group => new
-                {
-                    name = group.Name,
-                    templates = group.Templates.Where(readableTemplates.Contains).ToArray()
-                })
-                .Where(group => group.templates.Length > 0);
             return Json(new
             {
                 rows = results,
-                templateGroups,
                 people = seen?.People.Select(person => person.Name).Distinct(StringComparer.Ordinal).ToArray(),
                 fields = catalog.Values.OrderBy(field => field.Name).ThenBy(field => field.Id),
                 fieldDataIncomplete,

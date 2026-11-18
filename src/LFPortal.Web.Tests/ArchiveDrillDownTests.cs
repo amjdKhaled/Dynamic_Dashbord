@@ -146,69 +146,6 @@ public sealed class ArchiveDrillDownTests
         Assert.Contains("DOMAIN\\\\a\\\"user", query.Expression);
     }
 
-    [Theory]
-    [InlineData("SASO", "SASO")]
-    [InlineData("SASO (1)", "SASO")]
-    [InlineData("SASO (6)", "SASO")]
-    [InlineData("saso 2", "SASO")]
-    [InlineData("SASO 7", "SASO 7")]
-    [InlineData("SASO archive", "SASO archive")]
-    public void ColorTemplateNames_NormalizeOnlyTheSixExpectedVariants(string actual, string expected)
-    {
-        Assert.Equal(expected, LFPortal.Application.Helpers.SasoTemplateGrouping.Normalize(actual));
-    }
-
-    [Fact]
-    public void SasoDrillDown_IncludesAllPhysicalVariantsAndPreservesIndividualEntries()
-    {
-        var stats = Stats() with
-        {
-            AllDocs =
-            [
-                Doc(10, "Green", "SASO (2)", "USER", Day, Day),
-                Doc(11, "Red", "SASO (1)", "USER", Day, Day),
-                Doc(12, "Base", "SASO", "USER", Day, Day),
-                Doc(13, "Other", "Finance", "USER", Day, Day)
-            ],
-            TemplateStats =
-            [
-                new TemplateStatDto { Name = "SASO", Count = 3 },
-                new TemplateStatDto { Name = "Finance", Count = 1 }
-            ]
-        };
-
-        var entries = ArchiveDrillDown.Apply(stats, "template", template: "SASO").Entries;
-        Assert.Equal(new[] { 10, 11, 12 }, entries.Select(entry => entry.Id).OrderBy(id => id));
-        Assert.Equal(3, ArchiveController.ResolveDashboardCount(
-            stats, "template", "SASO", null, null, null, 0));
-
-        var query = LaserficheArchiveQuery.Build(
-            "template", "SASO", null, null, null, null, 0, 1);
-        Assert.True(query.IsGroupedTemplateAlias);
-        Assert.False(query.IsTemplateCatalog);
-        // The grouped archive uses the permission-scoped dashboard snapshot,
-        // not a synthetic search that might omit colored templates.
-        Assert.Equal("{LF:Name=\"*\",Type=\"D\"}", query.Expression);
-    }
-
-    [Fact]
-    public void CustomTemplateGroups_MergeExplicitMembersAndRejectOverlaps()
-    {
-        var groups = new LFPortal.Application.Helpers.TemplateGroupMap(
-        [
-            new() { Name = "Contracts", Templates = ["Green contract", "Red contract"] }
-        ]);
-        Assert.Equal("Contracts", groups.Normalize("Red contract"));
-        Assert.Equal("Contracts", groups.Normalize("contracts"));
-        Assert.Equal("Other", groups.Normalize("Other"));
-        Assert.True(groups.Contains("Green contract"));
-        Assert.Throws<ArgumentException>(() => new LFPortal.Application.Helpers.TemplateGroupMap(
-        [
-            new() { Name = "Contracts", Templates = ["Shared"] },
-            new() { Name = "Requests", Templates = ["Shared"] }
-        ]));
-    }
-
     private static LFEntry Doc(
         int id,
         string name,

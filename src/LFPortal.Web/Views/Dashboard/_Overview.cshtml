@@ -454,7 +454,7 @@
                         <tr class="dashboard-drilldown-row" tabindex="0" role="link"
                             data-archive-url="@Url.Action("Index", "Archive", new { scope = "document", entryId = d.Id })">
                             <td style="font-weight:500;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="@d.Name">@d.Name</td>
-                            <td style="color:var(--d-muted)">@(string.IsNullOrWhiteSpace(d.TemplateName) ? "-" : LFPortal.Application.Helpers.SasoTemplateGrouping.Normalize(d.TemplateName))</td>
+                            <td style="color:var(--d-muted)">@(d.TemplateName ?? "-")</td>
                             <td style="color:var(--d-muted);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="@FolderFromPath(d.FullPath)">@FolderFromPath(d.FullPath)</td>
                             <td style="color:var(--d-muted);white-space:nowrap">@FmtDate(d.CreationTime)</td>
                             <td style="color:var(--d-muted)">@(d.Creator ?? "-")</td>
@@ -489,7 +489,7 @@
                             data-archive-url="@Url.Action("Index", "Archive", new { scope = "document", entryId = d.Id })">
                             <td style="font-weight:500;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="@d.Name">@d.Name</td>
                             <td style="color:var(--d-muted);max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="@FolderFromPath(d.FullPath)">@FolderFromPath(d.FullPath)</td>
-                            <td style="color:var(--d-muted)">@(string.IsNullOrWhiteSpace(d.TemplateName) ? "-" : LFPortal.Application.Helpers.SasoTemplateGrouping.Normalize(d.TemplateName))</td>
+                            <td style="color:var(--d-muted)">@(d.TemplateName ?? "-")</td>
                             <td style="color:var(--d-muted);white-space:nowrap">@FmtDateShort(d.CreationTime)</td>
                             <td style="color:var(--d-accent);white-space:nowrap">@FmtAgo(d.LastModifiedTime)</td>
                             @if (recentActivity.Any(x => !string.IsNullOrWhiteSpace(x.Creator))) { <td style="color:var(--d-muted)">@(d.Creator ?? "-")</td> }

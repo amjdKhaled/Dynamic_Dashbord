@@ -226,6 +226,8 @@ public sealed record LaserficheArchiveQuery
     public string Description { get; init; } = string.Empty;
     public string Expression { get; init; } = "{LF:Name=\"*\",Type=\"D\"}";
     public bool IsTemplateCatalog { get; init; }
+    /// <summary>Uses the same permission-scoped snapshot as the dashboard instead of a physical-template search.</summary>
+    public bool IsGroupedTemplateAlias { get; init; }
     public int OpenEntryId { get; init; }
 
     public static LaserficheArchiveQuery Build(
@@ -260,12 +262,15 @@ public sealed record LaserficheArchiveQuery
                 $"{documents} - {{LF:Name=\"*\",Type=\"B\"}}"),
             "without-template" => Create(normalized, "Documents without a template",
                 "Documents counted in the no-template KPI", "{LF:Name=\"*\",Type=\"B\"}"),
+            "template" when SasoTemplateGrouping.IsSasoFamily(template) => new LaserficheArchiveQuery
+            {
+                Scope = normalized, Title = "Template: SASO",
+                Description = "Documents across the SASO color-template family",
+                Expression = documents, IsGroupedTemplateAlias = true
+            },
             "template" => Create(normalized, $"Template: {(template ?? string.Empty).Trim()}",
                 "Documents counted for this template",
-                SasoTemplateGrouping.IsSasoFamily(template)
-                    ? "(" + string.Join(" | ", SasoTemplateGrouping.SearchNames.Select(name =>
-                        $"{{LF:TemplateName=\"{Escape(name)}\"}}")) + ")"
-                    : $"{{LF:TemplateName=\"{Escape(template)}\"}}"),
+                $"{{LF:TemplateName=\"{Escape(template)}\"}}"),
             "root-folder" when entryId > 0 => Create(normalized,
                 $"Folder: {(folder ?? string.Empty).Trim()}", "Documents counted below this top-level folder",
                 $"{{LF:LookIn=\"{entryId}\",Subfolders=y}} & {documents}"),
